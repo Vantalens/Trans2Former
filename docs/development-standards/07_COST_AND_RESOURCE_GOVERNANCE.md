@@ -27,10 +27,10 @@ format-basic
   Markdown / HTML / TXT / JSON / CSV / XML / PNG input / PDF-print
 
 format-plugin
-  PDF input / DOCX / PPTX / XLSX / EPUB / ZIP / advanced image formats
+  PDF input / DOCX / PPTX / XLSX / EPUB / advanced image formats / OFD research
 
 optional-plugin
-  OCR / audio transcription / local AI / cloud enhancement
+  local OCR / local layout analysis / local table recovery / local model plugins
 ```
 
 ## 基础包热门格式原则
@@ -56,7 +56,7 @@ optional-plugin
 - 不需要默认网络访问
 - 有样例、快照、warnings 和安全测试
 
-DOCX、PPTX、XLSX、PDF input、EPUB、ZIP 等即使热门，也先以 `format-plugin` 进入；只有在不破坏核心预算和安全边界时，才允许评估是否晋升为基础能力。
+DOCX、PPTX、XLSX、PDF input、EPUB 等即使热门，也先以 `format-plugin` 进入；只有在不破坏核心预算和安全边界时，才允许评估是否晋升为基础能力。OFD 归为 P4+ 远期政务格式研究。
 
 ## 插件 manifest 必填字段
 
@@ -83,6 +83,8 @@ DOCX、PPTX、XLSX、PDF input、EPUB、ZIP 等即使热门，也先以 `format-
 - `format-plugin` 默认按需加载。
 - `optional-plugin` 默认关闭，必须用户显式启用。
 - 插件下载必须由用户操作触发，UI 必须说明大小、用途和安全模式。
+- 插件安装模式可以联网下载代码和资源，但不能接触用户文档。
+- 文档处理模式可以接触用户文档，但必须禁联网。
 - 插件加载失败不能破坏核心转换流程。
 - 插件更新不能改变已缓存转换结果的含义。
 

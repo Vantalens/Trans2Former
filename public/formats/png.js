@@ -12,8 +12,9 @@ export function readPng({ content, title = "image", fileName = "", format = "png
   }
 
   const assetStore = createAssetStore();
+  const fallbackName = String(title || "image").toLowerCase().endsWith(".png") ? title : `${title}.png`;
   const asset = assetStore.add({
-    name: fileName || `${title}.png`,
+    name: fileName || fallbackName,
     mime: "image/png",
     data,
     size: data.length,

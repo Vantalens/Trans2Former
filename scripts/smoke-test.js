@@ -8,6 +8,11 @@ import {
   renderPreviewHtml,
   toDocumentModel,
 } from "../public/browser-transformer.js";
+import {
+  chunkTextByLines,
+  compareDocumentModelsForEquivalence,
+  mergePartialDocumentModels,
+} from "../public/core/chunking.js";
 import { ConversionError, normalizeConversionError } from "../public/core/conversion-error.js";
 import { assertValidDocumentModel, validateDocumentModel } from "../public/core/document-schema.js";
 
@@ -88,6 +93,65 @@ test("DocumentModel validation accepts generated models and rejects invalid mode
   assert.throws(() => assertValidDocumentModel({ schemaVersion: "bad", blocks: [] }), /schema validation failed/);
 });
 
+test("DocumentModel audit layer adds stable ids, source spans, metadata, and quality report", () => {
+  const markdown = "# Title\n\nHello **Trans2Former**.\n\n- One\n- Two";
+  const model = toDocumentModel(markdown, "md", "audit.md");
+
+  assert.equal(model.blocks.every((block) => /^block-[0-9]+-[a-z0-9]{8}$/.test(block.id)), true);
+  assert.equal(model.blocks.every((block) => block.sourceSpan && Number.isInteger(block.sourceSpan.startLine)), true);
+  assert.equal(model.blocks.every((block) => Array.isArray(block.warnings)), true);
+  assert.equal(model.metadata.conversion.reader, "md");
+  assert.equal(model.metadata.conversion.schemaVersion, "trans2former.document.v1");
+  assert.equal(model.metadata.qualityReport.warningCount, 0);
+  assert.equal(model.metadata.qualityReport.structureFidelity, "high");
+});
+
+test("DocumentModel records block warnings, asset provenance, and conversion metadata", () => {
+  const markdown = "Footnote reference[^safe].\n\n[^safe]: Footnote body";
+  const model = toDocumentModel(markdown, "md", "warnings.md");
+
+  assert.equal(model.metadata.warnings.some((warning) => warning.code === "MARKDOWN_FOOTNOTE"), true);
+  assert.equal(model.blocks.some((block) => block.warnings.some((warning) => warning.code === "MARKDOWN_FOOTNOTE")), true);
+  assert.equal(model.metadata.qualityReport.warningCount > 0, true);
+
+  const pngData = "data:image/png;base64,iVBORw0KGgo=";
+  const pngModel = toDocumentModel(pngData, "png", "tiny.png");
+  assert.equal(pngModel.assets[0].provenance.sourceFormat, "png");
+  assert.equal(pngModel.assets[0].provenance.fileName, "tiny.png");
+});
+
+test("chunked DocumentModel merge is equivalent to direct conversion for markdown", () => {
+  const markdown = "# A\n\nFirst paragraph.\n\n## B\n\nSecond paragraph.";
+  const direct = toDocumentModel(markdown, "md", "chunked.md");
+  const chunks = chunkTextByLines(markdown, { maxLines: 3 });
+  const partials = chunks.map((chunk, index) => toDocumentModel(chunk.content, "md", `chunk-${index + 1}.md`));
+  const merged = mergePartialDocumentModels(partials, {
+    title: "chunked.md",
+    sourceFormat: "md",
+    originalContent: markdown,
+  });
+
+  const comparison = compareDocumentModelsForEquivalence(direct, merged);
+  assert.deepEqual(comparison, { ok: true, differences: [] });
+});
+
+test("chunked DocumentModel merge has baseline fixtures for CSV and XML", () => {
+  for (const { content, format } of [
+    { format: "csv", content: "Name,Value\nA,1\nB,2" },
+    { format: "xml", content: "<root>\n  <item>A</item>\n  <item>B</item>\n</root>" },
+  ]) {
+    const direct = toDocumentModel(content, format, `chunked.${format}`);
+    const chunks = chunkTextByLines(content, { maxLines: 100 });
+    const partials = chunks.map((chunk, index) => toDocumentModel(chunk.content, format, `chunk-${index + 1}.${format}`));
+    const merged = mergePartialDocumentModels(partials, {
+      title: `chunked.${format}`,
+      sourceFormat: format,
+      originalContent: content,
+    });
+    assert.deepEqual(compareDocumentModelsForEquivalence(direct, merged), { ok: true, differences: [] });
+  }
+});
+
 test("ConversionError normalizes parse, validate, and convert failures", () => {
   assert.throws(
     () => convertContent({ content: "{", from: "json", to: "md", title: "invalid" }),
@@ -141,6 +205,38 @@ test("Markdown preview and core conversions preserve common document structure",
   assert.equal(json.data.includes("```json"), true);
 });
 
+test("Markdown advanced syntax keeps ordered lists, nesting hints, alignment, and footnotes", () => {
+  const markdown = [
+    "# Advanced",
+    "",
+    "1. First item",
+    "   - Nested item",
+    "2. Second item with `code` and [link](https://example.com)",
+    "",
+    "| Left | Center | Right |",
+    "| :--- | :---: | ---: |",
+    "| A | B | C |",
+    "",
+    "Footnote reference[^safe].",
+    "",
+    "[^safe]: Footnote body",
+  ].join("\n");
+
+  const model = toDocumentModel(markdown, "md", "advanced");
+  const ordered = model.blocks.find((block) => block.type === "list" && block.ordered);
+  const table = model.blocks.find((block) => block.type === "table");
+
+  assert.deepEqual(ordered.items, ["First item", "Nested item", "Second item with `code` and [link](https://example.com)"]);
+  assert.deepEqual(ordered.itemMeta.map((item) => item.depth), [0, 1, 0]);
+  assert.deepEqual(table.alignments, ["left", "center", "right"]);
+  assert.equal(model.metadata.warnings.some((warning) => warning.severity === "info" && warning.code === "MARKDOWN_FOOTNOTE"), true);
+
+  const preview = renderPreviewHtml(markdown, "md", "advanced");
+  assert.equal(preview.includes("<ol>"), true);
+  assert.equal(preview.includes('data-depth="1"'), true);
+  assert.equal(preview.includes('<sup id="fnref-safe">'), true);
+});
+
 test("JSON output wraps a DocumentModel with markdown and plain text projections", () => {
   const markdown = "# Title\n\nHello **Trans2Former**.";
   const jsonDocument = convertContent({ content: markdown, from: "md", to: "json", title: "sample" });
@@ -182,6 +278,17 @@ test("table conversions round-trip through Markdown, CSV, and HTML", () => {
   assert.equal(markdownToCsv.data.includes("Name,Value"), true);
 });
 
+test("CSV parser handles BOM, quoted commas, multiline cells, empty cells, and CRLF", () => {
+  const csvContent = "\uFEFFName,Note,Empty\r\n\"A, one\",\"line 1\r\nline 2\",\r\nB,\"quoted \"\"value\"\"\",";
+  const csvModel = toDocumentModel(csvContent, "csv", "csv-edge");
+  const table = csvModel.blocks[0];
+
+  assert.deepEqual(table.headers, ["Name", "Note", "Empty"]);
+  assert.deepEqual(table.rows[0], ["A, one", "line 1\nline 2", ""]);
+  assert.deepEqual(table.rows[1], ["B", "quoted \"value\"", ""]);
+  assert.equal(csvModel.metadata.warnings.some((warning) => warning.severity === "info" && warning.code === "CSV_MULTILINE_FIELD"), true);
+});
+
 test("XML and PNG inputs convert through the DocumentModel pipeline", () => {
   const xmlContent = "<root><item>A</item><item>B</item></root>";
   const xmlModel = toDocumentModel(xmlContent, "xml", "xml");
@@ -205,6 +312,26 @@ test("XML and PNG inputs convert through the DocumentModel pipeline", () => {
 
   const pdf = convertContent({ content: markdown, from: "md", to: "pdf", title: "sample" });
   assertValidOutput(pdf, "pdf", "markdown to pdf-print");
+});
+
+test("XML parser reports namespaces, attributes, and parser errors without DOMParser", () => {
+  const xmlContent = '<doc xmlns:ofd="urn:ofd" id="root"><ofd:item type="a">A</ofd:item></doc>';
+  const xmlModel = toDocumentModel(xmlContent, "xml", "xml-edge");
+  const readable = xmlModel.blocks.find((block) => block.type === "paragraph").text;
+
+  assert.equal(xmlModel.metadata.rootElement, "doc");
+  assert.deepEqual(xmlModel.metadata.namespaces, [{ prefix: "ofd", uri: "urn:ofd" }]);
+  assert.equal(xmlModel.metadata.attributes.doc.id, "root");
+  assert.equal(readable.includes('<ofd:item type="a">'), true);
+  assert.equal(xmlModel.metadata.warnings.some((warning) => warning.severity === "info" && warning.code === "XML_ATTRIBUTES_EXTRACTED"), true);
+
+  assert.throws(
+    () => toDocumentModel("<root><item></root>", "xml", "broken"),
+    (error) => error instanceof ConversionError
+      && error.category === "parse"
+      && error.code === "XML_PARSE_ERROR"
+      && error.format === "xml"
+  );
 });
 
 test("sample fixtures exist and parse into valid DocumentModels", async () => {
@@ -246,7 +373,7 @@ test("machine-readable DocumentModel schema mirrors the runtime block and asset 
   assert.equal(schema.$id, "https://vantalens.github.io/trans2former/document-model.schema.json");
   assert.equal(schema.properties.schemaVersion.const, "trans2former.document.v1");
   assert.deepEqual(schema.properties.blocks.items.oneOf.map((entry) => entry.properties.type.const), EXPECTED_BLOCK_TYPES);
-  assert.deepEqual(Object.keys(schema.properties.assets.items.properties), ["id", "name", "mime", "data", "size", "role"]);
+  assert.deepEqual(Object.keys(schema.properties.assets.items.properties), ["id", "name", "mime", "data", "size", "role", "provenance"]);
 });
 
 await runTests();

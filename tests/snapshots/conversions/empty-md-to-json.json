@@ -4,6 +4,23 @@
   "from": "md",
   "blocks": [],
   "assets": [],
+  "metadata": {
+    "conversion": {
+      "reader": "md",
+      "writer": "json",
+      "targetFormat": "json",
+      "schemaVersion": "trans2former.document.v1",
+      "options": {}
+    },
+    "qualityReport": {
+      "structureFidelity": "high",
+      "tableFidelity": "not-applicable",
+      "assetFidelity": "not-applicable",
+      "warningCount": 0,
+      "warningsBySeverity": {},
+      "downgradeCount": 0
+    }
+  },
   "plainText": "",
   "markdown": ""
 }

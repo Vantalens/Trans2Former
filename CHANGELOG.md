@@ -23,11 +23,30 @@
 - 新增开发文档总目录 `docs/README.md`、产品策略文档 `docs/PRODUCT_STRATEGY.md` 和格式路线文档 `docs/FORMAT_ROADMAP.md`。
 - 新增 `docs/development-standards/` 开发规范体系，覆盖文档规则、开发流程、AI 协作、质量门禁、安全和模块插件治理。
 - 新增热门基础格式免下载原则：`format-basic` 必须保持小而可用，覆盖高频轻量格式。
+- 新增 OFD 远期研究文档 `docs/OFD_RESEARCH.md`，定位为 P4+ 政务格式和本地插件研究。
+- 新增专业工作台 v1 前端界面：local-only 顶部工具栏、三栏生产面板、基础格式 chips、专业上传区和输出空态。
+- 新增 P0 基础格式质量说明 `docs/BASIC_FORMAT_QUALITY.md`，覆盖 before/after、保真范围和降级说明。
+- 新增 warnings 工具，统一 `info / lossy / unsupported / security / performance` 分级。
+- 新增 P1 DocumentModel 审计层：block id、source span、block-level warnings、asset provenance、conversion metadata 和 quality report。
+- 新增动态分块基础工具和 direct vs chunked equivalence smoke test。
+- 新增结构化编辑状态模型文档 `docs/STRUCTURED_EDITING_MODEL.md` 和 AI-ready Markdown 准则 `docs/AI_READY_MARKDOWN.md`。
+- 新增项目评估文档 `docs/PROJECT_ASSESSMENT_2026-04-30.md`。
+- 新增 release 准备文档 `docs/RELEASE_PREP.md`、`scripts/prepare-release.js` 和 release readiness test。
 
 ### 变更
 
 - 确定开发方向为模块化插件设计：基础热门格式免下载，重格式和可选能力按用户需求下载或加载对应模块插件。
-- `npm test` 现在运行核心 smoke、转换快照、浏览器自检静态服务检查、本地安全 smoke test 和资源预算 smoke test。
+- 安全路线收紧为零云端文档处理：不提供远程转换、云端 OCR、云端转写或云端 AI 增强。
+- 格式路线删除 URL / YouTube / Audio transcription 主线，ZIP 降级为容器基础设施。
+- 浏览器主界面从 demo 风格调整为专业转换工作台风格。
+- 前端字体栈调整为 Claude 风格优先级，保持现有配色不变。
+- Markdown 解析增强：支持有序列表、嵌套层级提示、表格对齐、脚注引用和脚注降级 warning。
+- CSV 解析增强：支持 BOM、引号内逗号、引号内换行、空单元格、CRLF/LF 混合换行。
+- XML 解析增强：支持命名空间、属性提取、嵌套结构摘要和 Node 环境 parsererror。
+- 浏览器预览改为 idle callback 调度，文本文件入口改为分片读取，大文件默认进入手动预览。
+- JSON 输出现在包含 `metadata`，用于保留转换审计和质量报告。
+- PNG asset fallback 命名避免重复 `.png` 扩展名，并由审计层补齐 provenance。
+- `npm test` 现在运行核心 smoke、转换快照、浏览器自检静态服务检查、本地安全 smoke test、资源预算 smoke test 和 release readiness test。
 - `DEVELOPMENT_TASKS.md` 已整理为任务看板，长期原则和格式矩阵移入 `docs/` 专题文档。
 - Worker 错误现在透传结构化错误字段，便于 UI 渲染。
 

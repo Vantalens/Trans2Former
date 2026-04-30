@@ -8,6 +8,7 @@ import {
   createQuote,
   createTable,
 } from "../core/document-model.js";
+import { createWarning, withWarnings } from "../core/warnings.js";
 import { escapeHtml, normalizeNewlines } from "./text-utils.js";
 
 function inlineMarkdownToHtml(text) {
@@ -15,6 +16,7 @@ function inlineMarkdownToHtml(text) {
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\[\^([^\]]+)\]/g, '<sup id="fnref-$1"><a href="#fn-$1">[$1]</a></sup>')
     .replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" />')
     .replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
 }
@@ -36,14 +38,32 @@ function isTableSeparator(line) {
   return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
 }
 
+function parseTableAlignments(line) {
+  return splitTableRow(line).map((cell) => {
+    const trimmed = cell.trim();
+    if (trimmed.startsWith(":") && trimmed.endsWith(":")) return "center";
+    if (trimmed.endsWith(":")) return "right";
+    if (trimmed.startsWith(":")) return "left";
+    return "";
+  });
+}
+
+function getListDepth(rawIndent) {
+  const spaces = rawIndent.replaceAll("\t", "    ").length;
+  return Math.floor(spaces / 2);
+}
+
 export function readMarkdown({ content, title = "document", format = "md" }) {
   const lines = normalizeNewlines(content).split("\n");
   const blocks = [];
   let paragraph = [];
   let listItems = [];
+  let listMeta = [];
+  let listOrdered = false;
   let codeLines = [];
   let inCode = false;
   let codeLanguage = "";
+  const warnings = [];
 
   function flushParagraph() {
     if (paragraph.length > 0) {
@@ -54,8 +74,10 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
 
   function flushList() {
     if (listItems.length > 0) {
-      blocks.push(createList(listItems));
+      blocks.push(createList(listItems, listOrdered, listMeta));
       listItems = [];
+      listMeta = [];
+      listOrdered = false;
     }
   }
 
@@ -92,11 +114,29 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
       continue;
     }
 
+    const footnoteDefinition = line.match(/^\[\^([^\]]+)\]:\s+(.+)$/);
+    if (footnoteDefinition) {
+      flushParagraph();
+      flushList();
+      const warning = createWarning(
+        "info",
+        "MARKDOWN_FOOTNOTE",
+        "Markdown footnote was preserved as a readable quote and inline reference."
+      );
+      blocks.push({
+        ...createQuote(`[${footnoteDefinition[1]}] ${footnoteDefinition[2]}`),
+        warnings: [warning],
+      });
+      warnings.push(warning);
+      continue;
+    }
+
     const nextLine = lines[lineIndex + 1] || "";
     if (line.includes("|") && isTableSeparator(nextLine)) {
       flushParagraph();
       flushList();
       const headers = splitTableRow(line);
+      const alignments = parseTableAlignments(nextLine);
       const rows = [];
       lineIndex += 2;
       while (lineIndex < lines.length && lines[lineIndex].includes("|") && lines[lineIndex].trim()) {
@@ -104,7 +144,7 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
         lineIndex += 1;
       }
       lineIndex -= 1;
-      blocks.push(createTable(headers, rows));
+      blocks.push(createTable(headers, rows, alignments));
       continue;
     }
 
@@ -124,10 +164,15 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
       continue;
     }
 
-    const list = line.match(/^\s*[-*+]\s+(.+)$/);
+    const list = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.+)$/);
     if (list) {
       flushParagraph();
-      listItems.push(list[1]);
+      const marker = list[2];
+      if (listItems.length === 0) {
+        listOrdered = /^\d+[.)]$/.test(marker);
+      }
+      listItems.push(list[3]);
+      listMeta.push({ depth: getListDepth(list[1]), marker });
       continue;
     }
 
@@ -148,7 +193,12 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
     flushCode();
   }
 
-  return createDocumentModel({ title, sourceFormat: format, blocks });
+  return createDocumentModel({
+    title,
+    sourceFormat: format,
+    blocks,
+    metadata: withWarnings({}, warnings),
+  });
 }
 
 export function writeMarkdown({ model }) {
@@ -164,14 +214,25 @@ export function writeMarkdown({ model }) {
         return `> ${markdownInlineFromText(block.text)}`;
       }
       if (block.type === "list") {
-        return block.items.map((item) => `- ${markdownInlineFromText(item)}`).join("\n");
+        return block.items.map((item, index) => {
+          const depth = Math.max(0, Number(block.itemMeta?.[index]?.depth) || 0);
+          const indent = "  ".repeat(depth);
+          const marker = block.ordered && depth === 0 ? `${index + 1}.` : "-";
+          return `${indent}${marker} ${markdownInlineFromText(item)}`;
+        }).join("\n");
       }
       if (block.type === "code") {
         return `\`\`\`${block.language || ""}\n${block.code}\n\`\`\``;
       }
       if (block.type === "table") {
         const headers = `| ${block.headers.join(" | ")} |`;
-        const separator = `| ${block.headers.map(() => "---").join(" | ")} |`;
+        const separator = `| ${block.headers.map((_, index) => {
+          const alignment = block.alignments?.[index] || "";
+          if (alignment === "left") return ":---";
+          if (alignment === "center") return ":---:";
+          if (alignment === "right") return "---:";
+          return "---";
+        }).join(" | ")} |`;
         const rows = block.rows.map((row) => `| ${row.join(" | ")} |`);
         return [headers, separator, ...rows].join("\n");
       }
@@ -182,6 +243,9 @@ export function writeMarkdown({ model }) {
         return `![${block.alt || block.title || "asset"}](asset:${block.assetId})`;
       }
       if (block.type === "raw") {
+        if (block.format !== "md" && block.format !== "markdown") {
+          return "";
+        }
         return block.content;
       }
       return "";
@@ -209,15 +273,22 @@ export function blockToHtml(block) {
   }
   if (block.type === "list") {
     const tag = block.ordered ? "ol" : "ul";
-    return `<${tag}>${block.items.map((item) => `<li>${inlineMarkdownToHtml(item)}</li>`).join("")}</${tag}>`;
+    return `<${tag}>${block.items.map((item, index) => {
+      const depth = Math.max(0, Number(block.itemMeta?.[index]?.depth) || 0);
+      return `<li data-depth="${depth}">${inlineMarkdownToHtml(item)}</li>`;
+    }).join("")}</${tag}>`;
   }
   if (block.type === "code") {
     const language = block.language ? ` class="language-${escapeHtml(block.language)}"` : "";
     return `<pre><code${language}>${escapeHtml(block.code)}</code></pre>`;
   }
   if (block.type === "table") {
-    const head = `<thead><tr>${block.headers.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>`;
-    const body = `<tbody>${block.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>`;
+    const alignAttr = (index) => {
+      const alignment = block.alignments?.[index] || "";
+      return alignment ? ` style="text-align:${alignment}"` : "";
+    };
+    const head = `<thead><tr>${block.headers.map((cell, index) => `<th${alignAttr(index)}>${escapeHtml(cell)}</th>`).join("")}</tr></thead>`;
+    const body = `<tbody>${block.rows.map((row) => `<tr>${row.map((cell, index) => `<td${alignAttr(index)}>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>`;
     return `<table>${head}${body}</table>`;
   }
   if (block.type === "image") {

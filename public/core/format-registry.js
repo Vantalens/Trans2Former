@@ -1,4 +1,5 @@
 import { ConversionError } from "./conversion-error.js";
+import { ensureDocumentAudit } from "./document-audit.js";
 
 const FORMAT_ALIASES = {
   markdown: "md",
@@ -81,7 +82,12 @@ export class ConverterRegistry {
         format: fromFormat,
       });
     }
-    return reader({ content, title, fileName, format: fromFormat });
+    const model = reader({ content, title, fileName, format: fromFormat });
+    return ensureDocumentAudit(model, {
+      content,
+      reader: fromFormat,
+      fileName,
+    });
   }
 
   write({ model, to, title = model?.title || "document" }) {
@@ -94,7 +100,11 @@ export class ConverterRegistry {
         format: toFormat,
       });
     }
-    return writer({ model, title, format: toFormat });
+    const auditedModel = ensureDocumentAudit(model, {
+      writer: toFormat,
+      targetFormat: toFormat,
+    });
+    return writer({ model: auditedModel, title, format: toFormat });
   }
 
   convert({ content, from, to, title = "document", fileName = "" }) {

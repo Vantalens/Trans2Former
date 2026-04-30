@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "web": "node src/server.js",
-    "test": "node scripts/smoke-test.js && node scripts/conversion-snapshot-test.js && node scripts/browser-smoke-test.js && node scripts/local-security-test.js && node scripts/resource-budget-test.js"
+    "release:prepare": "node scripts/prepare-release.js",
+    "test": "node scripts/smoke-test.js && node scripts/conversion-snapshot-test.js && node scripts/browser-smoke-test.js && node scripts/local-security-test.js && node scripts/resource-budget-test.js && node scripts/release-readiness-test.js"
   },
   "keywords": [
     "converter",

@@ -42,6 +42,7 @@ export function writeJson({ model, title = model.title }) {
       from: model.sourceFormat,
       blocks: model.blocks,
       assets: model.assets,
+      metadata: model.metadata,
       plainText: getPlainText(model),
       markdown,
     }, null, 2)}\n`,

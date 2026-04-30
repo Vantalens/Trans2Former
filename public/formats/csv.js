@@ -1,13 +1,28 @@
 import { createDocumentModel, createTable } from "../core/document-model.js";
 import { getPlainText } from "../core/document-model.js";
+import { createWarning, withWarnings } from "../core/warnings.js";
 
-function parseCsvLine(line) {
-  const cells = [];
+function parseCsvRecords(content) {
+  const source = String(content ?? "").replace(/^\uFEFF/, "");
+  const records = [];
+  let row = [];
   let current = "";
   let inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    const next = line[i + 1];
+  let sawQuotedNewline = false;
+
+  function pushCell() {
+    row.push(current);
+    current = "";
+  }
+
+  function pushRow() {
+    records.push(row);
+    row = [];
+  }
+
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    const next = source[i + 1];
     if (char === '"' && inQuotes && next === '"') {
       current += '"';
       i += 1;
@@ -18,14 +33,40 @@ function parseCsvLine(line) {
       continue;
     }
     if (char === "," && !inQuotes) {
-      cells.push(current);
-      current = "";
+      pushCell();
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      pushCell();
+      pushRow();
+      if (char === "\r" && next === "\n") {
+        i += 1;
+      }
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && inQuotes) {
+      current += "\n";
+      sawQuotedNewline = true;
+      if (char === "\r" && next === "\n") {
+        i += 1;
+      }
       continue;
     }
     current += char;
   }
-  cells.push(current);
-  return cells.map((cell) => cell.trim());
+
+  if (current.length > 0 || row.length > 0 || source.endsWith(",")) {
+    pushCell();
+    pushRow();
+  }
+
+  return {
+    rows: records.filter((record, index) => {
+      const isFinalEmpty = index === records.length - 1 && record.length === 1 && record[0] === "" && /[\r\n]$/.test(source);
+      return !isFinalEmpty;
+    }),
+    sawQuotedNewline,
+  };
 }
 
 function escapeCsvCell(value) {
@@ -37,18 +78,18 @@ function escapeCsvCell(value) {
 }
 
 export function readCsv({ content, title = "table", format = "csv" }) {
-  const lines = String(content ?? "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .filter((line) => line.trim().length > 0);
-
-  const rows = lines.map(parseCsvLine);
+  const parsed = parseCsvRecords(content);
+  const rows = parsed.rows;
   const headers = rows.shift() || [];
+  const warnings = [];
+  if (parsed.sawQuotedNewline) {
+    warnings.push(createWarning("info", "CSV_MULTILINE_FIELD", "CSV quoted multiline fields were normalized to LF newlines."));
+  }
   return createDocumentModel({
     title,
     sourceFormat: format,
     blocks: [createTable(headers, rows)],
+    metadata: withWarnings({}, warnings),
   });
 }
 

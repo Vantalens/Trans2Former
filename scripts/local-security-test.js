@@ -70,7 +70,10 @@ async function assertSecurityPolicyIsDocumented() {
   const policy = await readFile(SECURITY_POLICY_PATH, "utf8");
   for (const expectedText of [
     "local-only",
+    "不提供云端文档处理",
     "默认不得调用远程转换 API",
+    "插件安装模式",
+    "文档处理模式",
     "错误详情默认只展示",
     "复制诊断信息不得默认复制用户文档内容",
     "fetch",

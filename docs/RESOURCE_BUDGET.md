@@ -20,10 +20,10 @@ format-basic
   Markdown / HTML / TXT / JSON / CSV / XML / PNG input / PDF-print
 
 format-plugin
-  PDF input / DOCX / PPTX / XLSX / EPUB / ZIP / advanced image formats
+  PDF input / DOCX / PPTX / XLSX / EPUB / advanced image formats / OFD research
 
 optional-plugin
-  OCR / audio transcription / local AI / cloud enhancement
+  local OCR / local layout analysis / local table recovery / local model plugins
 ```
 
 ## 默认包规则
@@ -32,9 +32,10 @@ optional-plugin
 - `format-basic` 必须保持小而可用，内置热门轻量格式，不能退化为空壳。
 - `format-plugin` 必须插件化或按需加载。
 - `optional-plugin` 必须默认关闭。
-- 远程增强必须显式 opt-in。
+- 云端文档处理、远程转换、远程 OCR、远程转写、远程 AI 增强不提供。
 - 插件下载必须由用户操作或明确需求触发，不能在首屏默认下载所有格式能力。
 - 插件必须提供 manifest，声明体积、依赖、安全模式、加载方式和失败降级路径。
+- 插件安装模式可以联网，文档处理模式必须禁联网。
 
 ## 当前预算
 

@@ -2,7 +2,7 @@
 
 Trans2Former 当前是浏览器优先的 Web 应用。贡献代码时请保持这个方向：不要新增 Electron、Playwright、Office、LibreOffice、Pandoc 或其他本地转换软件作为运行依赖。
 
-核心底线：用户数据默认本地处理。不要在默认路径中上传文档、转换结果、错误详情或用户编辑内容。
+核心底线：用户数据本地处理、零上传。不要上传文档、文件名、文档片段、转换结果、错误详情或用户编辑内容；不要接入云端文档处理、远程转换、远程 OCR、远程转写或远程 AI 增强。
 
 ## 开发
 
@@ -24,8 +24,11 @@ http://localhost:3000
 - [docs/README.md](docs/README.md)：开发文档总目录。
 - [docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md)：产品原则、市场路线和安全底线。
 - [docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)：格式覆盖矩阵和新增格式准入规则。
-- [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)：本地优先和远程增强规则。
+- [docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)：P0 基础格式质量、before/after 和降级说明。
+- [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)：本地优先、零云端处理和插件隔离规则。
 - [docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)：核心包体积和依赖预算。
+- [docs/PROJECT_ASSESSMENT_2026-04-30.md](docs/PROJECT_ASSESSMENT_2026-04-30.md)：项目评估和修复记录。
+- [docs/RELEASE_PREP.md](docs/RELEASE_PREP.md)：GitHub release 准备流程。
 - [docs/development-standards/00_README.md](docs/development-standards/00_README.md)：开发规范体系。
 - [docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md](docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md)：成本、资源、热门基础格式和模块插件治理规则。
 
@@ -54,14 +57,16 @@ src/
 - 不提交生成产物、缓存、日志或本地构建输出。
 - 修改 UI 后要验证上传、预览、转换、下载、PDF 打印路径和错误详情面板。
 - 修改任务、定位、安全策略、测试命令或支持格式后，必须同步更新 `README.md`、`DEVELOPMENT_TASKS.md`、`INSTALL.md`、`COMMIT_CHECKLIST.md` 和必要的 `docs/` 专题文档。
+- 涉及发布准备或 GitHub 上传前检查时，必须同步 `docs/RELEASE_PREP.md` 并运行 `npm run release:prepare`。
 - 不把长期产品原则、格式矩阵或架构说明继续堆入 `DEVELOPMENT_TASKS.md`；这些内容应放入 `docs/PRODUCT_STRATEGY.md`、`docs/FORMAT_ROADMAP.md` 或对应专题文档。
 - 每次开发结束必须更新 `DEVELOPMENT_TASKS.md`。
 
 ## 数据安全要求
 
-- 默认不得引入 `fetch`、`XMLHttpRequest`、`sendBeacon`、`WebSocket`、远程转换 API、遥测 SDK 或分析 SDK。
+- 默认不得引入 `fetch`、`XMLHttpRequest`、`sendBeacon`、`WebSocket`、远程转换 API、云端 OCR、云端 AI、遥测 SDK 或分析 SDK。
 - 默认不得把文档正文、转换结果、错误原文写入 localStorage、IndexedDB 或日志。
-- 远程 OCR、转写、AI 增强只能作为显式 opt-in 能力，且默认关闭。
+- 插件安装可以联网下载插件代码；文档处理阶段必须禁联网。
+- 远程 OCR、远程转写、远程 AI 增强明确不做。
 - 错误详情复制必须脱敏，只包含 category/code/format/message/warnings。
 - 任何违反本地优先路线的改动都必须先更新安全策略并增加测试。
 
@@ -80,6 +85,7 @@ src/
 - 每个 chunk 应转换为 partial `DocumentModel`，再由 merge planner 合并为全局 `DocumentModel`。
 - 分块转换必须提供与直接转换的等价性测试，至少比较 blocks、assets、warnings 和输出快照。
 - 拆 format adapter 时，同步维护 samples、snapshots、capability note 和 warnings。
+- 修改基础格式解析时，同步更新 [docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md) 和对应 smoke/snapshot。
 - 拆 Worker 或 pipeline 时，保持 read / parse / validate / convert / render / package 阶段语义。
 - 拆 UI 时，上传、预览、输出、错误详情、进度条和下载路径必须继续通过 browser smoke test。
 - 不允许为了模块化或分块转换绕过 `DocumentModel`、破坏语义结构或删除降级说明。

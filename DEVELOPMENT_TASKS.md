@@ -1,248 +1,205 @@
 # Trans2Former Development Tasks
 
-最后更新：2026-04-26  
+最后更新：2026-04-30
 
 维护规则：
 
-- 每次开发结束后必须更新本文件，标记已完成项并补充新发现任务。
-- 必须做到任务细化、可执行、可验证，且与项目目标和原则保持一致。
-- 可以按阶段（P0/P1/P2）和优先级（A/B/C）分类，但不要求严格执行顺序，重要的是保持整体路线清晰和可追踪。
-- 可以添加新的任务分类，例如“技术债务”、“研究探索”、“社区贡献”等，但核心开发任务必须明确标记为 P0/P1/P2。
-- 可以在每个任务后面添加状态标签，例如 `[ ]`（未开始）、`[x]`（已完成）、`[~]`（进行中）等，方便快速识别当前进展。
-- 可以添加尚未进入开发计划但需要记录的未来任务或想法，但必须清晰标记为“未来任务”或“待评估”，避免混淆当前开发路线。
-- 可以添加尚未解决的问题或风险，并标记为“问题”或“风险”，以便后续跟踪和管理。
-- 定期（例如每月）回顾和更新本文件，确保它始终反映当前的开发状态和未来计划。
+- 每次开发结束必须更新本文件。
+- 本文件只放阶段状态、任务拆分和下一步执行顺序。
+- 长期原则、格式矩阵、架构说明放入 `docs/` 专题文档，不继续堆在任务看板里。
+- 修改定位、安全边界、支持格式、测试命令或运行方式时，同步更新 README、CONTRIBUTING、INSTALL、COMMIT_CHECKLIST、CHANGELOG 和相关 docs。
 
-## 目标原则
+## 当前状态
 
-- 用户数据绝对安全：默认本地处理，默认不上传、不遥测、不留存文档内容；任何远程能力都必须显式 opt-in、可关闭、可解释。
-- 浏览器端优先：不依赖 Microsoft Office、LibreOffice、Pandoc、Electron、Playwright 或其他本地转换软件。
-- 本地化处理优先：优先使用浏览器 File API、Web Worker、WASM、Canvas、IndexedDB、ZIP/XML 解析完成转换；后期 GUI 也必须保留本地优先路线。
-- 任意格式互转：所有输入先进入 `DocumentModel`，再输出到目标格式。
-- 市场路径优先：优先服务 `Office/PDF/HTML/Data -> Markdown/HTML/JSON`，其次再扩展高保真反向生成。
-- 产品壁垒优先：网页端动态编辑、实时预览、行业顶尖转换质量、超广格式覆盖必须作为核心路线，而不是附属功能。
-- 大文件不阻塞界面：解析、转换、压缩和图片处理默认放入 Web Worker 或空闲调度。
-- 上传文件大小无限制目标：产品不设置人为固定上限；通过分片读取、流式解析、Worker、渐进预览和磁盘/IndexedDB 缓存适配超大文件，实际上限只受用户设备和浏览器能力约束。
-- 动态分块转换优先但不破坏转换效果：单个超大文件可按语义边界拆成子模块并行/分步转换，再结构化合并；合并结果必须与直接转换在语义和输出质量上等价。
-- 代码水平拆分可作为工程手段：格式适配器、Worker、渲染、UI、测试可独立拆分，但不得绕过 `DocumentModel` 或牺牲转换效果。
-- 格式能力透明：UI 必须展示输入/输出限制、降级策略和预计损失。
-- 可验证交付：每个阶段都要有样例、自动化测试和浏览器端 smoke test。
+Trans2Former 当前定位为：
 
-## 市场调研结论
+> 专业级、本地优先、零上传、多格式、高质量、可解释的格式转换处理器。
 
-调研记录见 [docs/MARKET_RESEARCH_2026-04-26.md](docs/MARKET_RESEARCH_2026-04-26.md)。
+已完成基线：
 
-- AI/RAG 需求正在推动“多格式转干净 Markdown”：MarkItDown、GetMarkdown、RawMark、Markitdown Online 都以 Office/PDF/HTML/Data 转 Markdown 为核心卖点。
-- PDF/Office 互转是成熟市场高频需求，但高保真 PDF to DOCX/PPTX/XLSX 难度高；浏览器优先路线应先做结构提取、可解释降级和 Markdown/HTML 输出。
-- 隐私、本地转换、多文件批量、ZIP 下载是浏览器端产品的差异化方向，应进入中期优先级。
-
-## 产品差异化定位
-
-市场需求只决定切入顺序，Trans2Former 自身壁垒必须来自以下四点：
-
-- **用户数据绝对安全**：所有核心转换默认在用户设备上执行，文档内容不离开本机；远程 OCR、转写、AI 增强只能作为明确可选能力。
-- **网页端动态编辑**：用户不是只上传、转换、下载，而是能在浏览器中编辑标准化后的文档结构、块内容、表格、图片引用和输出参数。
-- **实时预览**：输入编辑、格式选择、转换 warnings、输出预览应尽量实时反馈；大文档通过 Worker、idle callback、增量渲染避免卡顿。
-- **上传文件大小无限制**：不做固定 MB/GB 上限，用分片、流式、渐进处理支撑超大文件；遇到设备资源瓶颈时给出可解释提示，而不是提前拒绝。
-- **行业顶尖质量**：每个格式适配器必须有样例集、快照、降级说明、性能基准和人工可读质量准则；不能只做到“能跑”。
-- **超广格式覆盖**：长期目标继续保持超多格式支持，包括 Office、PDF、EPUB、图片、压缩包、数据格式、音频/视频元数据和可选 OCR/转写能力。
-- **后期 GUI 产品化**：Web 端先打磨核心体验，后期提供 GUI/桌面外壳或 PWA 形态，但 GUI 不得牺牲本地优先和数据安全底线。
-
-## 数据安全底线
-
-- 默认不上传文档、图片、音频、转换结果、错误详情或用户编辑内容。
-- 默认不接入第三方转换 API、OCR API、转写 API、分析 SDK 或遥测 SDK。
-- 错误详情面板必须区分“可复制诊断信息”和“可能包含用户内容的原始片段”，默认不自动复制用户内容。
-- IndexedDB/localStorage 只能保存用户明确允许的历史、偏好和临时缓存，并提供清除入口。
-- 远程增强能力必须满足：显式开关、用途说明、发送内容预览、可取消、可审计、默认关闭。
-- 安全测试必须覆盖：无网络转换路径、敏感内容不进入日志、导出文件不泄漏额外 metadata、取消后释放 Blob URL 和 Worker。
-
-## 动态分块与合并原则
-
-设计记录见 [docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md](docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md)。
-
-- 单个超大文件优先按语义边界动态拆分，例如章节、段落、表格、页、幻灯片、工作表、XML/HTML 节点、ZIP entry。
-- 每个 chunk 独立转换为 partial `DocumentModel`，并携带顺序、来源范围、上下文摘要、资源引用和 warnings。
-- 合并阶段必须恢复全局结构：标题层级、列表连续性、表格连续性、脚注/链接、asset 去重、metadata 和 warnings。
-- 合并后的 `DocumentModel` 与直接整文件转换结果必须语义等价；差异必须有登记原因和快照覆盖。
-- 不允许为了分块速度破坏表格、代码块、XML/HTML 节点、图片资源或压缩包 entry。
-- 直接转换与分块转换要共用 reader/writer 语义，避免两套逻辑产生质量漂移。
-
-## 代码水平拆分原则
-
-- 可以按格式、执行层、UI 能力和质量测试拆分代码模块。
-- 代码拆分必须保持 `input -> DocumentModel -> output` 语义一致，并通过现有快照和样例测试。
-- 不允许绕过 `DocumentModel` 做格式之间的私有直连，除非该直连只是性能优化且输出仍能回写/解释为 `DocumentModel`。
-- 拆分前先补边界测试，拆分后比较快照、warnings、资源引用和错误分类，确认转换效果没有退化。
-
-## 当前基线
-
-- [x] 项目标识统一为 Trans2Former。
-- [x] 仓库地址迁移到 `https://github.com/Vantalens/Trans2Former`。
-- [x] 移除 Electron、Playwright、CLI 和服务端转换 API。
+- [x] 浏览器 Web 应用路线已确立，Electron、Playwright、CLI 和服务端转换 API 已移除。
 - [x] Express 仅保留静态资源托管和 `/api/health`。
-- [x] 转换链路改为 `input -> DocumentModel -> output`。
-- [x] `DocumentModel`、`AssetStore`、`ConverterRegistry` 已建立。
-- [x] 转换任务已移入 Web Worker，支持基础进度、用户可读错误和取消按钮。
-- [x] `npm test` smoke test 已建立。
-- [x] `.gitignore` 已覆盖依赖、构建产物、导出文件、日志缓存、本地环境和测试截图。
+- [x] 转换链路统一为 `input -> DocumentModel -> output`。
+- [x] 当前免下载基础格式：Markdown、HTML、TXT、JSON、CSV、XML、PNG input、PDF-print。
+- [x] P0 专业转换基础盘已完成：基础格式质量、warnings、预览调度、大文件入口和质量文档已落地。
+- [x] P1 DocumentModel 与质量审计层已完成：block id、source span、block warnings、asset provenance、conversion metadata、quality report 和 chunked equivalence 已落地。
+- [x] 前端已升级为专业三栏工作台 v1，字体栈调整为 Claude 风格优先级且未改变既有配色。
+- [x] `npm test` 覆盖核心转换、快照、浏览器静态入口、本地安全、资源预算和 release readiness。
+- [x] 本地 release 包已可通过 `npm run release:prepare` 生成到 `release/trans2former-2.0.0/`。
+- [x] 开发文档已分层，`docs/development-standards/` 已建立。
 
-## P0：近期优先任务
+## 下一步执行顺序
 
-目标：先把现有 7 种输入、7 种输出的质量基线做稳，避免在 DOCX/PPTX/EPUB 之前继续堆不可靠能力。
+1. P2-A：设计 plugin manifest schema 和 permission model。
+2. P2-B：实现插件安装模式 / 文档处理模式隔离，以及 processing mode no-network policy。
+3. P2-C：建立插件资源预算测试和基础格式晋升评审。
+4. P3-A：建立 ZIP/OOXML 容器基础设施，再进入 DOCX input MVP。
+5. P3-B：DOCX input MVP。
+6. P3-C：XLSX / EPUB input MVP。
 
-### P0-A：样例与自动化基线
+当前建议优先级：P1 已完成，下一步先 P2，再 P3。原因是 Office/EPUB/PDF 等重格式进入前，必须先把插件安全边界固定下来。
 
-阶段状态：已完成。当前 `npm test` 会覆盖核心转换 smoke test、固定转换快照、浏览器端自检页面和静态服务入口。
+## 文档入口
 
-- [x] 建立 `samples/` 样例集：每种当前支持输入格式至少 3 个样例，覆盖中文、图片、表格、列表、代码和异常输入。
-- [x] 将 `scripts/smoke-test.js` 拆分为可维护测试用例，覆盖 Markdown/HTML/TXT/JSON/CSV/XML/PNG 的解析、输出和降级说明。
-- [x] 扩展转换快照测试，覆盖当前可输出格式的 round-trip、不可逆降级、错误输入和空文档边界。
-- [x] 添加浏览器端 smoke test：上传样例、选择格式、执行转换、下载结果、刷新预览。
+- 产品定位和零上传原则：[docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md)
+- 格式路线：[docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)
+- 基础格式质量：[docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)
+- DocumentModel：[docs/DOCUMENT_MODEL_SCHEMA.md](docs/DOCUMENT_MODEL_SCHEMA.md)
+- 转换降级策略：[docs/CONVERSION_POLICY.md](docs/CONVERSION_POLICY.md)
+- 安全策略：[docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)
+- 资源预算：[docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)
+- 动态分块合并：[docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md](docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md)
+- OFD 研究：[docs/OFD_RESEARCH.md](docs/OFD_RESEARCH.md)
+- 项目评估：[docs/PROJECT_ASSESSMENT_2026-04-30.md](docs/PROJECT_ASSESSMENT_2026-04-30.md)
+- 发布准备：[docs/RELEASE_PREP.md](docs/RELEASE_PREP.md)
+- 开发规范：[docs/development-standards/00_README.md](docs/development-standards/00_README.md)
 
-### P0-B：错误、进度与大文档体验
+## P0：专业转换基础盘
 
-阶段状态：进行中。统一错误结构已完成，下一步让 UI/Worker 展示可读诊断和真实阶段进度。
+状态：已完成。
 
-- [x] 定义统一 `ConversionError` 结构，分类为 parse / validate / convert / render / download。
-- [x] 错误详情面板 UI：展示 category / code / format / message / warnings，不默认展示 stack 或 raw snippet。
-- [x] 错误详情脱敏复制：复制诊断时只复制 category/code/format/message/warnings，不包含用户文档正文、title、stack。
-- [x] Worker 错误透传：Worker error message 保留 `ConversionError.toJSON()` 字段，主线程可直接渲染。
-- [x] Worker 阶段进度：progress 从固定 20%/100% 改为 read / parse / validate / convert / render / package。
-- [x] 可视化进度条：显示阶段、百分比、忙碌状态和取消状态。
-- [ ] 取消清理：取消转换后清理 active worker、旧下载 Blob URL、旧输出状态，避免留下可下载的旧结果。
-- [ ] 预览迁移：将预览渲染迁移到 Worker 或 idle callback，避免大文档输入卡顿。
-- [ ] 大文件入口策略：UI 不设置固定文件大小上限，文件读取改为按格式支持分片/流式路径，并在资源不足时返回可解释错误。
-- [x] 添加本地安全 smoke test：验证核心转换不触发网络请求、不写入远程端点、不在日志输出用户文档内容。
+目标：稳定当前基础格式质量、错误体验、warnings、资源生命周期和可解释输出。
 
-### P0-C：当前格式质量补齐
+- [x] 建立 `samples/` 样例集，覆盖当前基础输入格式。
+- [x] 建立核心转换 smoke test、转换快照、浏览器自检、本地安全和资源预算测试。
+- [x] 定义统一 `ConversionError`，覆盖 parse / validate / convert / render / download 分类。
+- [x] 错误详情面板不默认展示 stack、raw snippet 或用户内容。
+- [x] 取消转换后清理 active worker、旧 Blob URL、旧输出状态。
+- [x] 优化浏览器前端页面：从 demo 毛坯布局升级为专业三栏工作台视觉。
+- [x] 调整前端字体栈为 Claude 风格优先级，不改变现有配色。
+- [x] 完善 Markdown 脚注、链接、图片、表格对齐、嵌套列表和高级内联语法支持。
+- [x] 强化 CSV 解析：引号、换行、逗号、空单元格、BOM、不同换行符。
+- [x] 强化 XML 解析：命名空间、属性、嵌套结构、parsererror。
+- [x] 建立 warnings 分级：info / lossy / unsupported / security / performance。
+- [x] 为每个基础格式补 before/after 对比样例和降级说明。
+- [x] 预览迁移到 idle callback，避免大文档输入卡顿。
+- [x] 大文件入口策略：文本文件分片读取、手动预览降载、资源不足通过结构化错误和状态提示解释。
 
-- [ ] 完善 Markdown 脚注、链接、图片、表格对齐、嵌套列表和高级内联语法支持。
-- [ ] 强化 CSV 解析，覆盖引号、换行、逗号、空单元格、BOM 和不同换行符。
-- [ ] 强化 XML 解析，覆盖命名空间、属性、嵌套结构和 parsererror 展示。
-- [ ] 为 PNG 输出设计 Canvas 渲染入口、分页策略、长图策略和下载命名规则。
-- [x] 将 JSON schema 增加机器可读版本，例如 `docs/document-model.schema.json`，并让测试引用同一份 schema。
+验收证据：
 
-## P1：核心架构增强
+- [x] `npm test` 通过。
+- [x] `git diff --check` 通过。
+- [x] 基础格式质量说明已写入 `docs/BASIC_FORMAT_QUALITY.md`。
 
-目标：为 ZIP/EPUB/OOXML 这类容器格式铺路，先补清楚编排、资源、适配器边界，并优先支持市场需要的 AI-ready Markdown 输出。
+## P1：DocumentModel 与质量审计层
 
-- [x] 建立安全策略文档：本地处理边界、远程能力 opt-in 规则、缓存/历史保留规则、敏感数据日志规则。
-- [ ] 增加安全模式开关：默认 `local-only`，禁止远程适配器、遥测、外部资源抓取。
-- [ ] 将 `DocumentModel` 扩展为可编辑结构：稳定 block id、selection metadata、source span、warnings、format-specific metadata。
-- [ ] 设计网页端编辑状态模型：输入编辑、标准化结构编辑、输出选项编辑、预览状态和下载状态分离。
-- [ ] 设计动态分块转换架构：chunk planner、chunk reader、partial DocumentModel、merge planner、merged DocumentModel、output writer。
-- [ ] 建立直接转换 vs 分块转换等价测试：比较 blocks、assets、warnings、metadata、Markdown/HTML/JSON 快照。
-- [ ] 建立合并算法：恢复标题层级、连续列表、连续表格、代码块、脚注/链接、资源去重和 chunk provenance。
-- [ ] 建立代码水平拆分边界：format adapter、conversion pipeline、render pipeline、worker protocol、UI panels、quality fixtures。
-- [ ] 支持转换链路编排，例如 `docx -> DocumentModel -> html -> png`。
-- [ ] 设计转换任务上下文 `ConversionContext`，统一传递 signal、progress、warnings、assets 和 options。
-- [ ] 设计超大文件处理架构：chunk reader、stream parser、backpressure、临时资源释放、分阶段快照和可恢复取消。
-- [ ] 设计可选格式适配器加载策略，避免核心包膨胀。
-- [ ] 扩展 format adapter 安全边界说明，尤其是 HTML、ZIP、DOCX、PPTX、EPUB 输入。
-- [ ] 完善 `AssetStore` 的资源去重、大小限制、MIME 校验和导出策略。
-- [ ] 建立 AI-ready Markdown 输出准则：标题层级、表格、列表、链接、图片占位、页/幻灯片/工作表边界、降级说明。
-- [ ] 为 Markdown/HTML/JSON 输出增加 `warnings`，让用户知道哪些样式、布局、动画、扫描图像或公式被降级。
-- [ ] 建立行业顶尖质量基准：语义保真、表格保真、资源保真、版面降级可解释、输出可读性、性能和稳定性。
-- [ ] 添加性能基准：1MB、10MB、50MB 文档转换时间、内存占用和 UI 阻塞时间。
-- [ ] 添加超大文件基准：100MB、500MB、1GB+ 样例的读取、预览、转换、取消和内存峰值记录。
-- [ ] 设计 GUI/PWA/桌面外壳路线：Web 核心复用、离线可用、文件系统权限最小化、本地处理不回退。
+状态：已完成。
 
-## P2：新格式与产品能力
+目标：让 `DocumentModel` 成为统一格式中间层、质量审计层和可解释转换层。
 
-目标：在 P0/P1 基线稳定后再扩展格式，按市场需求优先做 Office/PDF/EPUB 到 Markdown/HTML/JSON 的提取能力，再做高保真反向生成。
+### P1-A：稳定结构标识
 
-- [ ] 实现 PWA 离线模式：核心 JS、Worker、样式和自检页可离线使用。
-- [ ] 实现隐私控制中心：本地缓存清理、历史开关、远程增强总开关、导出诊断检查。
-- [ ] 实现结构化编辑器：按 block 编辑标题、段落、列表、代码、表格、图片/asset 引用。
-- [ ] 实现实时预览 v2：编辑输入、编辑结构、切换输出格式时自动刷新预览，并显示 debounce/worker 状态。
-- [ ] 实现预览对照模式：输入原文、标准化 DocumentModel、目标输出三栏/标签页对照。
-- [ ] 支持批量转换和 ZIP 下载。
-- [ ] 添加转换历史，默认只保存在浏览器本地，不上传文档内容。
-- [ ] 针对移动端和小屏幕优化文件区、格式选择区、预览区。
-- [ ] 发布包名称和图标资产彻底迁移到 Trans2Former。
-- [ ] 发布为静态 Web 应用，可部署到 GitHub Pages、Cloudflare Pages 或任意静态服务器。
-- [ ] 实现 DOCX 输入 MVP：段落、标题、列表、表格、图片引用、链接，优先输出 Markdown/HTML/JSON。
-- [ ] 实现 PPTX 输入 MVP：幻灯片标题、文本框、表格、图片 alt/占位、演讲者备注，优先输出 Markdown/HTML/JSON。
-- [ ] 实现 XLSX 输入 MVP：多工作表、单元格文本、基础表格映射，优先输出 Markdown/CSV/JSON。
-- [ ] 实现 EPUB 输入 MVP：ZIP + OPF + XHTML 解析，优先输出 Markdown/HTML/JSON。
-- [ ] 实现 PDF 输入评估版：先支持文本型 PDF 到 Markdown/HTML；扫描 PDF/OCR 作为可选能力，不进入核心包默认路径。
-- [ ] 实现图片元数据和 OCR 预留接口：先支持 JPEG/WebP/SVG/PNG 作为 AssetStore 输入，OCR 后续按可选插件或外部 API 评估。
-- [ ] 实现 DOCX 输出 MVP：只承诺由 DocumentModel 生成基础段落、标题、列表、表格、图片，不承诺复杂版式还原。
-- [ ] 实现 PPTX 输出前先设计 `PresentationModel`，不要直接塞进 `DocumentModel`。
-- [ ] 扩展超广格式路线：RTF、ODT、YAML、TOML、LaTeX、IPYNB、SVG、JPEG、WebP、GIF、BMP、TIFF 进入评估矩阵。
-- [ ] 后期 GUI：基于同一 Web 核心提供桌面 GUI/PWA 安装体验，支持拖拽、多窗口、批量队列、本地文件系统权限最小化。
+- [x] `docs/document-model.schema.json` 已建立。
+- [x] 增加稳定 block id。
+- [x] 增加 source span，记录块来源范围。
+- [x] 增加 asset provenance，记录图片、附件、字体等来源。
+- [x] 更新 runtime validator、JSON Schema、schema 文档和 smoke tests。
 
-## 建议执行顺序
+### P1-B：质量审计结构
 
-1. 先做 `samples/` 和测试拆分，让每个格式后续改动都有回归保护。
-2. 再做统一错误结构和详情面板，因为它会影响解析器、Worker、UI 三层接口。
-3. 同步建立本地安全 smoke test 和安全策略文档，保证后续功能不突破数据安全底线。
-4. 接着做 Worker 阶段化进度和预览迁移，解决大文档卡顿与进度不可解释的问题。
-5. 同步建立大文件无限制架构：不设人为上限，改造读取、解析、预览、取消和资源释放。
-6. 设计动态分块转换与合并算法，并建立直接转换 vs 分块转换等价测试。
-7. 设计代码水平拆分边界，保证后续扩展格式时不牺牲转换效果。
-8. 然后补 AI-ready Markdown 输出准则、warnings 和质量评分维度，让降级结果可解释。
-9. 再设计可编辑 `DocumentModel` 与结构化编辑器，形成网页端动态编辑和实时预览壁垒。
-10. 进入 ZIP/OOXML 基础设施，优先做 DOCX/PPTX/XLSX 输入到 Markdown/HTML/JSON。
-11. 随后做 EPUB 和 PDF 文本提取；扫描 PDF/OCR、音频、YouTube 放到可选能力，不进入核心 MVP。
-12. 长期扩展超广格式矩阵，并为每个新增格式建立质量基准、样例集和快照测试。
-13. 后期推进 GUI/PWA/桌面外壳，但必须复用 Web 核心并保持本地优先处理。
+- [x] 将 P0 `metadata.warnings` 升级为 schema 级质量审计结构。
+- [x] 增加 block-level warnings。
+- [x] 增加 conversion metadata：reader、writer、版本、选项、warnings 汇总。
+- [x] 增加 quality report：结构保真、表格保真、资源保真、降级原因、可读性。
+- [x] 将质量摘要接入 JSON 输出和 release/test 验收；UI 详情面板后续在 P2/P3 前端迭代中展示 quality report。
 
-## 格式覆盖矩阵
+### P1-C：超大文件质量基线
 
-| 格式 | 输入 | 输出 | 当前状态 | 下一步 |
-| --- | --- | --- | --- | --- |
-| Markdown | [x] | [x] | 支持标题、段落、列表、引用、代码、图片、表格 | 补 AI-ready Markdown 输出准则、脚注、高级内联、更多 round-trip 测试 |
-| HTML | [x] | [x] | DOMParser 安全抽取，输出自包含 HTML | 扩展复杂表格/链接/图片降级测试，补 HTML -> Markdown 市场样例 |
-| TXT | [x] | [x] | 支持段落、空行、简单标题推断 | 增加大文本性能测试 |
-| JSON | [x] | [x] | 输出 Trans2Former DocumentModel JSON；schema 校验已接入 | 生成机器可读 JSON schema |
-| CSV | [x] | [x] | 第一行表头映射为 table block | 增加引号、换行、逗号边界样例 |
-| XML | [x] | [x] | raw XML + 可读文本结构；标准 XML 输出 | 完善命名空间、属性、嵌套结构映射 |
-| PNG | [x] | [ ] | 输入进入 AssetStore，可转 HTML/MD/JSON/TXT/PDF-print | Canvas PNG 输出、多页/长图策略 |
-| PDF | [ ] | [~] | 当前输出为浏览器打印/另存 PDF | 市场需求高；先做文本型 PDF -> Markdown/HTML 评估，不承诺高保真 PDF -> Office |
-| ZIP | [ ] | [ ] | 未做 | 浏览器 ZIP 解包/打包，支撑批量转换、EPUB、DOCX、PPTX、XLSX |
-| DOCX | [ ] | [ ] | 未做 | 市场优先级最高；先做输入到 Markdown/HTML/JSON，再做基础 DOCX 输出 |
-| PPTX | [ ] | [ ] | 未做 | 市场优先级高；先做输入到 Markdown/HTML/JSON，输出前设计 `PresentationModel` |
-| XLSX | [ ] | [ ] | 未做 | 市场优先级高；先做多工作表到 Markdown/CSV/JSON |
-| EPUB | [ ] | [ ] | 未做 | 市场优先级中；ZIP + OPF + XHTML 解析，优先输出 Markdown/HTML/JSON |
-| JPEG/WebP/SVG | [ ] | [ ] | 未做 | 扩展 AssetStore 图片输入与输出策略，OCR 作为可选能力 |
-| Audio | [ ] | [ ] | 未做 | 市场存在但偏 AI 附加能力；先做 metadata，转写作为可选能力评估 |
-| YouTube URL | [ ] | [ ] | 未做 | 浏览器环境限制较大，作为可选远程提取能力评估 |
+- [x] 建立 direct vs chunked equivalence tests。
+- [x] 定义 partial DocumentModel merge contract。
+- [x] 设计 merge 后 blocks、assets、warnings、metadata 的等价性比较规则。
+- [x] 为 Markdown 先建立小规模 chunked fixture。
+- [x] 为 CSV / XML 增加 chunked fixture。
 
-说明：`[~]` 表示已有过渡方案，但不是最终程序化输出能力。
+### P1-D：结构化编辑准备
+
+- [x] 设计网页端结构化编辑状态模型：P1 先固定 block id / source span / warnings 作为编辑状态基础。
+- [x] 设计 block selection / block edit / preview sync 基础接口：见 `docs/STRUCTURED_EDITING_MODEL.md`。
+- [x] 建立 AI-ready Markdown 输出准则：见 `docs/AI_READY_MARKDOWN.md`。
+
+## P2：安全插件系统与资源治理
+
+状态：P1 之后进入实现。
+
+目标：建立可下载但不可上传、安装和处理隔离的插件系统。
+
+### P2-A：插件声明与权限模型
+
+- [x] 开发方向确定为模块化插件设计：热门基础格式免下载，重格式和可选能力按需下载或加载。
+- [x] 安全策略收紧为零云端文档处理。
+- [x] 明确插件安装模式 / 文档处理模式隔离。
+- [x] 资源预算 smoke test 已加入 `npm test`。
+- [ ] 设计 plugin manifest schema：权限、格式能力、依赖、体积、完整性、安全模式、失败降级。
+- [ ] 设计 permission model：install-network、process-document、read-assets、write-output、cache-plugin。
+- [ ] 建立插件 capability note 展示规则。
+
+### P2-B：隔离与完整性
+
+- [ ] 实现 install mode / processing mode 隔离。
+- [ ] 实现 no-network processing policy。
+- [ ] 增加 hash / integrity 校验。
+- [ ] 插件处理文档时禁止联网，安装插件时禁止接触用户文档。
+- [ ] 错误详情和诊断复制不得泄漏插件处理过的文档片段。
+
+### P2-C：资源预算与格式晋升
+
+- [ ] 建立插件资源预算测试：验证 `format-plugin` / `optional-plugin` 不进入默认核心包。
+- [ ] 建立基础格式晋升评审：体积、安全、质量、使用频率、免下载体验收益。
+- [ ] 本地模型插件规则：手动安装、手动启用、可删除、不得上传数据、不得进入核心包。
+
+## P3：Office / EPUB / PDF 文本提取
+
+状态：P1/P2 稳定后进入。
+
+目标：优先做主战场格式到 Markdown/HTML/JSON 的本地提取能力。
+
+建议执行顺序：
+
+1. ZIP/OOXML 容器基础设施。
+2. DOCX input MVP。
+3. XLSX input MVP。
+4. EPUB input MVP。
+5. PDF text extraction MVP。
+6. PPTX input MVP。
+
+任务：
+
+- [ ] 建立 ZIP/OOXML 容器基础设施：解包、读取 entry、资源索引、打包，不作为用户-facing ZIP 转换格式。
+- [ ] DOCX input MVP：段落、标题、列表、表格、图片引用、链接，输出 Markdown/HTML/JSON。
+- [ ] XLSX input MVP：多工作表、单元格文本、基础表格映射，输出 Markdown/CSV/JSON。
+- [ ] EPUB input MVP：ZIP + OPF + XHTML 解析，输出 Markdown/HTML/JSON。
+- [ ] PDF text extraction MVP：仅文本型 PDF，输出 Markdown/HTML，不承诺高保真 PDF -> Office。
+- [ ] PPTX input MVP：幻灯片标题、文本框、表格、图片 alt/占位、备注，输出 Markdown/HTML/JSON。
+- [ ] 为每个重格式插件建立样例、快照、warnings 和性能预算。
+
+## P4：高保真输出与远期专业格式
+
+状态：远期。
+
+目标：在 P0-P3 稳定后，再进入高保真输出和专业格式研究。
+
+- [ ] DOCX output MVP：由 DocumentModel 生成基础段落、标题、列表、表格、图片。
+- [ ] 程序化 PDF output：不依赖浏览器打印，先评估本地生成路线。
+- [ ] PNG/JPEG rendering output：Canvas 渲染、多页/长图策略。
+- [ ] OFD research：政务格式、P4+、本地插件研究，不进近期核心包。
+- [ ] OFD 样例收集和 capability note。
+- [ ] OFD -> DocumentModel 文本/页面/图片/metadata 提取实验。
+- [ ] OFD -> PDF/PNG 高保真渲染风险评估。
+- [ ] 本地 OCR / layout / table model plugin 研究：远期、手动安装、可删除、不得上传数据。
+
+## 删除或降级路线
+
+- [x] URL / YouTube URL：删除，不是文件格式，且必然联网。
+- [x] Audio / Transcription：从主路线删除；音频转写不属于核心转换器。
+- [x] ZIP：降级为容器基础设施，不作为转换格式宣传。
+- [x] 云端 OCR / 云端 AI / 云端转写：删除，不提供。
+- [x] OCR：只保留本地插件接口，不承诺近期实现。
 
 ## 已完成归档
 
-### 项目迁移
-
 - [x] README、INSTALL、CONTRIBUTING、CHANGELOG、COMMIT_CHECKLIST 已同步浏览器优先路线。
-- [x] 旧桌面壳文档和服务端转换路线已清理。
-- [x] Git remote 已更新为 `Vantalens/Trans2Former`。
-
-### 模型与策略
-
 - [x] `docs/CONVERSION_POLICY.md` 已定义不可逆信息和降级策略。
 - [x] `docs/DOCUMENT_MODEL_SCHEMA.md` 已文档化 DocumentModel。
-- [x] `public/core/document-schema.js` 已提供基础 schema 校验。
-- [x] `docs/MARKITDOWN_RESEARCH.md` 已记录 MarkItDown 借鉴结论。
-- [x] `docs/MARKITDOWN_FORMAT_COVERAGE.md` 已建立 MarkItDown 格式覆盖目标。
-
-### 已支持格式
-
-- [x] Markdown 输入/输出。
-- [x] HTML 输入/输出。
-- [x] TXT 输入/输出。
-- [x] JSON 输入/输出。
-- [x] CSV 输入/输出。
-- [x] XML 输入/输出基础版。
-- [x] PNG 输入。
-- [x] PDF-print 过渡输出。
-
-### UI 与测试
-
-- [x] UI 动态读取格式能力表。
-- [x] UI 显示格式限制、输出限制和预计损失。
-- [x] 转换取消按钮已接入。
-- [x] 基础转换快照测试已加入 `npm test`。
-- [x] `git check-ignore -v` 已验证生成物会被忽略，源码和文档不会被误忽略。
+- [x] `docs/RESOURCE_BUDGET.md` 已建立资源预算。
+- [x] `docs/development-standards/` 已建立开发规范体系。
+- [x] `docs/OFD_RESEARCH.md` 已建立 OFD 远期研究入口。

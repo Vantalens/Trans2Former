@@ -1,8 +1,8 @@
 # Format Roadmap
 
-版本：v0.1.0
+版本：v0.2.0
 状态：生效
-最后更新：2026-04-26
+最后更新：2026-04-30
 
 ## 当前格式矩阵
 
@@ -16,7 +16,6 @@
 | XML | [x] | [x] | raw XML + 可读文本结构；标准 XML 输出 | 完善命名空间、属性、嵌套结构映射 |
 | PNG | [x] | [ ] | 输入进入 AssetStore，可转 HTML/MD/JSON/TXT/PDF-print | Canvas PNG 输出、多页/长图策略 |
 | PDF | [ ] | [~] | 当前输出为浏览器打印/另存 PDF | 先做文本型 PDF -> Markdown/HTML 评估，不承诺高保真 PDF -> Office |
-| ZIP | [ ] | [ ] | 未做 | 浏览器 ZIP 解包/打包，支撑批量转换、EPUB、DOCX、PPTX、XLSX |
 | DOCX | [ ] | [ ] | 未做 | 市场优先级最高；先做输入到 Markdown/HTML/JSON，再做基础 DOCX 输出 |
 | PPTX | [ ] | [ ] | 未做 | 市场优先级高；先做输入到 Markdown/HTML/JSON，输出前设计 `PresentationModel` |
 | XLSX | [ ] | [ ] | 未做 | 市场优先级高；先做多工作表到 Markdown/CSV/JSON |
@@ -24,8 +23,7 @@
 | JPEG/WebP/SVG | [ ] | [ ] | 未做 | 扩展 AssetStore 图片输入与输出策略，OCR 作为可选能力 |
 | RTF/ODT | [ ] | [ ] | 未做 | 进入评估矩阵，默认不得引入重依赖 |
 | YAML/TOML/IPYNB/LaTeX | [ ] | [ ] | 未做 | 进入数据/技术文档格式评估矩阵 |
-| Audio | [ ] | [ ] | 未做 | 先做 metadata，转写作为可选能力评估 |
-| YouTube URL | [ ] | [ ] | 未做 | 浏览器限制较大，作为可选远程提取能力评估 |
+| OFD | [ ] | [ ] | 远期研究 | 中国政务文档格式；P4+ 研究，不进近期路线 |
 
 说明：`[~]` 表示已有过渡方案，但不是最终程序化输出能力。
 
@@ -42,7 +40,18 @@
 - PNG input
 - PDF-print
 
-DOCX、PPTX、XLSX、PDF input、EPUB、ZIP 等热门但重的格式，先以 `format-plugin` 进入；只有通过体积、安全、本地化和质量评审后，才允许评估是否晋升为基础能力。
+DOCX、PPTX、XLSX、PDF input、EPUB 等热门但重的格式，先以 `format-plugin` 进入；只有通过体积、安全、本地化和质量评审后，才允许评估是否晋升为基础能力。
+
+## 容器基础设施
+
+ZIP 不作为用户-facing 转换格式宣传，但必须作为底层基础设施支持：
+
+- DOCX 解包/打包
+- PPTX 解包/打包
+- XLSX 解包/打包
+- EPUB 解包/打包
+- 批量导出打包
+- 插件包分发
 
 ## 建议执行顺序
 
@@ -53,9 +62,9 @@ DOCX、PPTX、XLSX、PDF input、EPUB、ZIP 等热门但重的格式，先以 `f
 5. 建立格式插件 manifest、按需下载、缓存和失败降级策略，避免核心包膨胀。
 6. 建立插件注册、能力发现和资源预算测试，确保新增格式不会进入默认核心路径。
 7. 补 AI-ready Markdown 输出准则、warnings 和质量评分维度。
-8. 进入 ZIP/OOXML 基础设施，优先以 `format-plugin` 做 DOCX/PPTX/XLSX 输入到 Markdown/HTML/JSON。
-9. 做 EPUB 和文本型 PDF 评估；扫描 PDF/OCR、音频、YouTube 放入 `optional-plugin`。
-10. 长期扩展超广格式矩阵，并为每个新增格式建立样例、快照、降级说明和性能基准。
+8. 进入 ZIP/OOXML 容器基础设施，优先以 `format-plugin` 做 DOCX/PPTX/XLSX 输入到 Markdown/HTML/JSON。
+9. 做 EPUB 和文本型 PDF 评估；扫描 PDF / 图片 OCR 只保留本地插件接口，不承诺近期实现。
+10. P4+ 研究 OFD 等政务/专业格式，先做可行性、样例和高保真风险评估。
 
 ## 新增格式准入规则
 
@@ -65,4 +74,17 @@ DOCX、PPTX、XLSX、PDF input、EPUB、ZIP 等热门但重的格式，先以 `f
 - 重依赖必须放入按需下载模块插件，不能进入默认 dependencies。
 - 插件必须提供 manifest，声明体积、依赖、安全模式、加载方式和失败降级路径。
 - 申请进入 `format-basic` 的热门格式必须额外说明使用频率、体积影响、依赖影响和免下载体验收益。
-- 涉及用户内容、缓存、远程增强或诊断信息时，必须同步更新安全策略。
+- 涉及用户内容、缓存、插件下载或诊断信息时，必须同步更新安全策略。
+
+## 删除或降级路线
+
+- URL / YouTube URL：删除，不属于文件格式，且必然联网。
+- Audio / Transcription：从主路线删除；本地语音转写不属于核心转换器。
+- ZIP：降级为容器基础设施，不作为转换格式宣传。
+- OCR：只保留本地插件接口，不做云端 OCR，不进近期核心路线。
+- OFD：保留为 P4+ 政务格式研究，不进近期实现。
+
+## 变更记录
+
+- v0.2.0：删除 URL/YouTube/Audio 主线；ZIP 降级为容器基础设施；新增 OFD P4+ 研究路线。
+- v0.1.0：建立格式矩阵、基础包和插件准入规则。

@@ -62,6 +62,7 @@ let currentFileName = "document.md";
 let currentOutputBlobUrl = "";
 let currentPrintHtml = "";
 let previewTimer = null;
+let previewIdleHandle = null;
 let lastRenderedPayload = "";
 let autoPreviewEnabled = false;
 let lastOutputIsPdf = false;
@@ -72,6 +73,7 @@ let lastErrorDiagnostics = null;
 
 const PREVIEW_DEBOUNCE_MS = 300;
 const LARGE_DOC_THRESHOLD = 12000;
+const LARGE_FILE_PREVIEW_BYTES = 2 * 1024 * 1024;
 const PROGRESS_STAGE_LABELS = {
   idle: "待命",
   read: "读取输入",
@@ -84,6 +86,24 @@ const PROGRESS_STAGE_LABELS = {
   canceled: "已取消",
   error: "转换失败",
 };
+
+function scheduleIdleTask(callback, timeout = 900) {
+  if (typeof window.requestIdleCallback === "function") {
+    return { type: "idle", id: window.requestIdleCallback(callback, { timeout }) };
+  }
+  return { type: "timeout", id: window.setTimeout(callback, 0) };
+}
+
+function cancelIdleTask(handle) {
+  if (!handle) {
+    return;
+  }
+  if (handle.type === "idle" && typeof window.cancelIdleCallback === "function") {
+    window.cancelIdleCallback(handle.id);
+    return;
+  }
+  window.clearTimeout(handle.id);
+}
 
 function setStatus(message, type = "info") {
   statusText.textContent = message;
@@ -283,6 +303,19 @@ function renderPreview() {
   setStatus(`浏览器端预览已更新 (${Date.now() - renderStart}ms)`, "success");
 }
 
+function renderPreviewWhenIdle() {
+  cancelIdleTask(previewIdleHandle);
+  setStatus("预览已排队，浏览器空闲时刷新", "info");
+  previewIdleHandle = scheduleIdleTask(() => {
+    previewIdleHandle = null;
+    try {
+      renderPreview();
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
 function schedulePreviewUpdate() {
   if (!autoPreviewEnabled) {
     setStatus("内容已更新，点击“刷新预览”查看", "info");
@@ -290,15 +323,11 @@ function schedulePreviewUpdate() {
   }
   window.clearTimeout(previewTimer);
   previewTimer = window.setTimeout(() => {
-    try {
-      renderPreview();
-    } catch (error) {
-      setStatus(error.message, "error");
-    }
+    renderPreviewWhenIdle();
   }, PREVIEW_DEBOUNCE_MS);
 }
 
-async function handleInputText(rawContent, fileName = currentFileName) {
+async function handleInputText(rawContent, fileName = currentFileName, { renderInitialPreview = true } = {}) {
   currentFileName = fileName;
   inputContent.value = rawContent;
   setFileMeta(fileName);
@@ -306,7 +335,11 @@ async function handleInputText(rawContent, fileName = currentFileName) {
   lastRenderedPayload = "";
   clearErrorDetails();
   updateWordCount();
-  renderPreview();
+  if (renderInitialPreview) {
+    renderPreviewWhenIdle();
+  } else {
+    setStatus("大文件已载入，预览保持手动刷新以避免卡顿", "info");
+  }
 }
 
 function readFileAsDataUrl(file) {
@@ -316,6 +349,29 @@ function readFileAsDataUrl(file) {
     reader.addEventListener("error", () => reject(reader.error || new Error("文件读取失败")), { once: true });
     reader.readAsDataURL(file);
   });
+}
+
+async function readFileAsTextChunked(file) {
+  if (!file.stream || typeof TextDecoder === "undefined") {
+    return file.text();
+  }
+  const reader = file.stream().getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: false });
+  const chunks = [];
+  let loaded = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    loaded += value.byteLength;
+    chunks.push(decoder.decode(value, { stream: true }));
+    if (file.size >= LARGE_FILE_PREVIEW_BYTES) {
+      setStatus(`正在分片读取大文件 ${Math.round((loaded / file.size) * 100)}%`, "info");
+    }
+  }
+  chunks.push(decoder.decode());
+  return chunks.join("");
 }
 
 async function handleFile(file) {
@@ -330,9 +386,11 @@ async function handleFile(file) {
   }
 
   try {
-    const content = detectedFormat === "png" ? await readFileAsDataUrl(file) : await file.text();
+    const content = detectedFormat === "png" ? await readFileAsDataUrl(file) : await readFileAsTextChunked(file);
     fromFormatSelect.value = detectedFormat;
-    await handleInputText(content, file.name);
+    await handleInputText(content, file.name, {
+      renderInitialPreview: detectedFormat === "png" || file.size < LARGE_FILE_PREVIEW_BYTES,
+    });
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -506,11 +564,7 @@ inputContent.addEventListener("keydown", (event) => {
 });
 
 refreshPreviewButton.addEventListener("click", () => {
-  try {
-    renderPreview();
-  } catch (error) {
-    setStatus(error.message, "error");
-  }
+  renderPreviewWhenIdle();
 });
 
 autoPreviewCheckbox.addEventListener("change", () => {
@@ -520,6 +574,7 @@ autoPreviewCheckbox.addEventListener("change", () => {
     schedulePreviewUpdate();
   } else {
     window.clearTimeout(previewTimer);
+    cancelIdleTask(previewIdleHandle);
     setStatus("已切换为手动预览模式", "info");
   }
 });

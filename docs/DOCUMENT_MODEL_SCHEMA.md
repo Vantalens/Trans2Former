@@ -1,8 +1,8 @@
 # DocumentModel Schema
 
-版本：v0.1.0  
+版本：v0.2.0
 状态：生效  
-最后更新：2026-04-25
+最后更新：2026-04-30
 
 ## 目标
 
@@ -38,6 +38,25 @@ input format -> DocumentModel -> output format
 
 ## Block 类型
 
+所有 block 都包含 P1 审计字段：
+
+```json
+{
+  "id": "block-1-abcd1234",
+  "sourceSpan": {
+    "startLine": 1,
+    "endLine": 1,
+    "startOffset": 0,
+    "endOffset": 7
+  },
+  "warnings": []
+}
+```
+
+- `id`：稳定块标识，用于结构化编辑、局部预览和质量报告。
+- `sourceSpan`：来源范围；无法定位时字段值为 `null`。
+- `warnings`：块级 warnings。
+
 ### heading
 
 ```json
@@ -53,8 +72,15 @@ input format -> DocumentModel -> output format
 ### list
 
 ```json
-{ "type": "list", "ordered": false, "items": ["One", "Two"] }
+{
+  "type": "list",
+  "ordered": false,
+  "items": ["One", "Two"],
+  "itemMeta": [{ "depth": 0, "marker": "-" }]
+}
 ```
+
+`itemMeta` 用于保留基础列表来源信息。
 
 ### code
 
@@ -66,8 +92,68 @@ input format -> DocumentModel -> output format
 ### table
 
 ```json
-{ "type": "table", "headers": ["Name", "Value"], "rows": [["A", "1"]] }
+{
+  "type": "table",
+  "headers": ["Name", "Value"],
+  "rows": [["A", "1"]],
+  "alignments": ["left", "right"]
+}
 ```
+
+`alignments` 可选值为 `left`、`center`、`right` 或空字符串，用于保留 Markdown 表格对齐信息。
+
+## Warnings
+
+Warnings 同时支持文档级 `metadata.warnings` 和块级 `block.warnings`：
+
+```json
+{
+  "severity": "info",
+  "code": "CSV_MULTILINE_FIELD",
+  "message": "CSV quoted multiline fields were normalized to LF newlines.",
+  "details": {}
+}
+```
+
+允许的 `severity`：
+
+- `info`
+- `lossy`
+- `unsupported`
+- `security`
+- `performance`
+
+`metadata.qualityReport` 会汇总 warnings 数量、按 severity 分组和降级数量。
+
+## Conversion Metadata
+
+```json
+{
+  "conversion": {
+    "reader": "md",
+    "writer": "html",
+    "targetFormat": "html",
+    "schemaVersion": "trans2former.document.v1",
+    "options": {}
+  }
+}
+```
+
+## Quality Report
+
+```json
+{
+  "qualityReport": {
+    "structureFidelity": "high",
+    "tableFidelity": "tracked",
+    "assetFidelity": "not-applicable",
+    "warningCount": 0,
+    "warningsBySeverity": {},
+    "downgradeCount": 0
+  }
+}
+```
+
 ### quote
 
 ```json
@@ -101,7 +187,13 @@ input format -> DocumentModel -> output format
   "mime": "image/png",
   "data": "data:image/png;base64,...",
   "size": 1234,
-  "role": "image"
+  "role": "image",
+  "provenance": {
+    "sourceFormat": "png",
+    "fileName": "image.png",
+    "sourceSpan": null,
+    "role": "image"
+  }
 }
 ```
 

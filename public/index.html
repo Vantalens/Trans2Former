@@ -10,9 +10,16 @@
   <body>
     <div class="app-container">
       <header class="app-header">
-        <div class="header-content">
-          <h1 class="app-title">Trans2Former</h1>
-          <p class="app-subtitle">Browser-side conversion for Markdown / HTML / TXT / JSON / CSV / XML / PNG / PDF</p>
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">T2F</div>
+          <div class="header-content">
+            <h1 class="app-title">Trans2Former</h1>
+            <p class="app-subtitle">Local-first document conversion workbench</p>
+          </div>
+        </div>
+        <div class="security-strip" aria-label="处理模式">
+          <span class="mode-pill">LOCAL-ONLY</span>
+          <span class="mode-copy">零上传 · 文档处理禁联网</span>
         </div>
         <div class="header-actions">
           <div class="status-indicator" id="statusText">就绪</div>
@@ -34,15 +41,30 @@
       <div class="workspace">
         <article class="panel editor-panel">
           <div class="panel-header">
-            <h2>输入文档</h2>
+            <div>
+              <span class="panel-kicker">SOURCE</span>
+              <h2>输入文档</h2>
+            </div>
             <div class="file-meta" id="fileMeta">未上传</div>
           </div>
 
           <label class="drop-zone" id="dropZone" for="fileInput">
             <input id="fileInput" type="file" accept=".md,.markdown,.html,.htm,.txt,.json,.csv,.xml,.png,text/markdown,text/html,text/plain,application/json,text/csv,application/xml,text/xml,image/png" hidden />
             <div class="drop-zone-inner">
-              <div class="drop-icon">⇪</div>
-              <strong>拖拽文件或点击上传</strong>
+              <div class="drop-icon" aria-hidden="true">+</div>
+              <div>
+                <strong>拖拽文件或点击上传</strong>
+                <span>基础格式免下载，本地读取</span>
+              </div>
+            </div>
+            <div class="format-chips" aria-label="基础格式">
+              <span>MD</span>
+              <span>HTML</span>
+              <span>TXT</span>
+              <span>JSON</span>
+              <span>CSV</span>
+              <span>XML</span>
+              <span>PNG</span>
             </div>
           </label>
 
@@ -89,7 +111,10 @@
 
         <article class="panel preview-panel">
           <div class="panel-header">
-            <h2>HTML 预览（标准化）</h2>
+            <div>
+              <span class="panel-kicker">DOCUMENTMODEL</span>
+              <h2>标准化预览</h2>
+            </div>
             <div class="preview-controls">
               <label class="checkbox-label" for="autoPreviewCheckbox">
                 <input id="autoPreviewCheckbox" type="checkbox" />
@@ -104,7 +129,10 @@
 
         <article class="panel output-panel">
           <div class="panel-header">
-            <h2>转换输出</h2>
+            <div>
+              <span class="panel-kicker">OUTPUT</span>
+              <h2>转换输出</h2>
+            </div>
             <div class="file-meta" id="outputMeta">未生成</div>
           </div>
 

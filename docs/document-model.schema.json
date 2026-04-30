@@ -22,9 +22,12 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "level", "text"],
+            "required": ["type", "id", "sourceSpan", "warnings", "level", "text"],
             "properties": {
               "type": { "const": "heading" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "level": { "type": "integer", "minimum": 1, "maximum": 6 },
               "text": { "type": "string" }
             }
@@ -32,31 +35,53 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "text"],
+            "required": ["type", "id", "sourceSpan", "warnings", "text"],
             "properties": {
               "type": { "const": "paragraph" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "text": { "type": "string" }
             }
           },
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "ordered", "items"],
+            "required": ["type", "id", "sourceSpan", "warnings", "ordered", "items"],
             "properties": {
               "type": { "const": "list" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "ordered": { "type": "boolean" },
               "items": {
                 "type": "array",
                 "items": { "type": "string" }
-              }
+              },
+              "itemMeta": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["depth", "marker"],
+                  "properties": {
+                    "depth": { "type": "integer", "minimum": 0 },
+                    "marker": { "type": "string" }
+                  }
+                }
+              },
+              "chunk": { "type": "object" }
             }
           },
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "language", "code"],
+            "required": ["type", "id", "sourceSpan", "warnings", "language", "code"],
             "properties": {
               "type": { "const": "code" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "language": { "type": "string" },
               "code": { "type": "string" }
             }
@@ -64,9 +89,12 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "headers", "rows"],
+            "required": ["type", "id", "sourceSpan", "warnings", "headers", "rows"],
             "properties": {
               "type": { "const": "table" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "headers": {
                 "type": "array",
                 "items": { "type": "string" }
@@ -77,24 +105,37 @@
                   "type": "array",
                   "items": { "type": "string" }
                 }
-              }
+              },
+              "alignments": {
+                "type": "array",
+                "items": {
+                  "enum": ["", "left", "center", "right"]
+                }
+              },
+              "chunk": { "type": "object" }
             }
           },
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "text"],
+            "required": ["type", "id", "sourceSpan", "warnings", "text"],
             "properties": {
               "type": { "const": "quote" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "text": { "type": "string" }
             }
           },
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "src", "alt", "title"],
+            "required": ["type", "id", "sourceSpan", "warnings", "src", "alt", "title"],
             "properties": {
               "type": { "const": "image" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "src": { "type": "string" },
               "alt": { "type": "string" },
               "title": { "type": "string" }
@@ -103,9 +144,12 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "assetId", "alt", "title"],
+            "required": ["type", "id", "sourceSpan", "warnings", "assetId", "alt", "title"],
             "properties": {
               "type": { "const": "asset" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "assetId": { "type": "string" },
               "alt": { "type": "string" },
               "title": { "type": "string" }
@@ -114,9 +158,12 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["type", "format", "content"],
+            "required": ["type", "id", "sourceSpan", "warnings", "format", "content"],
             "properties": {
               "type": { "const": "raw" },
+              "id": { "type": "string" },
+              "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
+              "warnings": { "$ref": "#/$defs/warnings" },
               "format": { "type": "string" },
               "content": { "type": "string" }
             }
@@ -129,19 +176,68 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "mime", "data", "size", "role"],
+        "required": ["id", "name", "mime", "data", "size", "role", "provenance"],
         "properties": {
           "id": { "type": "string" },
           "name": { "type": "string" },
           "mime": { "type": "string" },
           "data": { "type": "string" },
           "size": { "type": "number" },
-          "role": { "type": "string" }
+          "role": { "type": "string" },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sourceFormat", "fileName", "sourceSpan", "role"],
+            "properties": {
+              "sourceFormat": { "type": "string" },
+              "fileName": { "type": "string" },
+              "sourceSpan": {
+                "oneOf": [
+                  { "$ref": "#/$defs/sourceSpan" },
+                  { "type": "null" }
+                ]
+              },
+              "role": { "type": "string" }
+            }
+          }
         }
       }
     },
     "metadata": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "warnings": { "$ref": "#/$defs/warnings" },
+        "conversion": { "type": "object" },
+        "qualityReport": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "sourceSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startLine", "endLine", "startOffset", "endOffset"],
+      "properties": {
+        "startLine": { "type": ["integer", "null"] },
+        "endLine": { "type": ["integer", "null"] },
+        "startOffset": { "type": ["integer", "null"] },
+        "endOffset": { "type": ["integer", "null"] }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "code", "message", "details"],
+        "properties": {
+          "severity": { "enum": ["info", "lossy", "unsupported", "security", "performance"] },
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "details": { "type": "object" }
+        }
+      }
     }
   }
 }

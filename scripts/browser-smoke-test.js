@@ -47,6 +47,9 @@ try {
   assert.equal(appJs.includes("updateConversionProgress"), true, "main app should update staged conversion progress");
   assert.equal(appJs.includes("resetGeneratedOutput"), true, "main app should centralize generated output cleanup");
   assert.equal(appJs.includes("resetGeneratedOutput(\"已取消，未保留输出\")"), true, "cancel action should clear stale output and download URLs");
+  assert.equal(appJs.includes("requestIdleCallback"), true, "preview rendering should be scheduled through idle callback when available");
+  assert.equal(appJs.includes("readFileAsTextChunked"), true, "large text files should enter through chunked reading");
+  assert.equal(appJs.includes("LARGE_FILE_PREVIEW_BYTES"), true, "large file preview policy should be explicit");
 
   const workerJs = await fetchText(baseUrl, "/workers/convert-worker.js");
   assert.equal(workerJs.includes("postMessage"), true, "conversion worker should be served");

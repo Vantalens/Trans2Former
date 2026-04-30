@@ -30,11 +30,15 @@ export function createHeading(level, text) {
   };
 }
 
-export function createList(items, ordered = false) {
+export function createList(items, ordered = false, itemMeta = []) {
   return {
     type: "list",
     ordered: Boolean(ordered),
     items: items.map((item) => String(item ?? "")),
+    itemMeta: itemMeta.map((item) => ({
+      depth: Math.max(0, Number(item?.depth) || 0),
+      marker: String(item?.marker ?? ""),
+    })),
   };
 }
 
@@ -46,11 +50,15 @@ export function createCodeBlock(code, language = "") {
   };
 }
 
-export function createTable(headers = [], rows = []) {
+export function createTable(headers = [], rows = [], alignments = []) {
   return {
     type: "table",
     headers: headers.map((header) => String(header ?? "")),
     rows: rows.map((row) => row.map((cell) => String(cell ?? ""))),
+    alignments: alignments.map((alignment) => {
+      const normalized = String(alignment ?? "").toLowerCase();
+      return ["left", "center", "right"].includes(normalized) ? normalized : "";
+    }),
   };
 }
 
