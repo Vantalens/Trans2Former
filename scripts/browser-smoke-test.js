@@ -50,6 +50,11 @@ try {
   assert.equal(appJs.includes("requestIdleCallback"), true, "preview rendering should be scheduled through idle callback when available");
   assert.equal(appJs.includes("readFileAsTextChunked"), true, "large text files should enter through chunked reading");
   assert.equal(appJs.includes("LARGE_FILE_PREVIEW_BYTES"), true, "large file preview policy should be explicit");
+  assert.equal(appJs.includes("BINARY_INPUT_FORMATS"), true, "binary formats should avoid text decoding");
+  assert.equal(appJs.includes("docx"), true, "main app should accept DOCX input");
+  for (const format of ["xlsx", "epub", "pdf", "pptx"]) {
+    assert.equal(appJs.includes(format), true, `main app should accept ${format.toUpperCase()} input`);
+  }
 
   const workerJs = await fetchText(baseUrl, "/workers/convert-worker.js");
   assert.equal(workerJs.includes("postMessage"), true, "conversion worker should be served");

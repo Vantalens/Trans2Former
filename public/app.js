@@ -43,6 +43,8 @@ const paperFormatSelect = document.getElementById("paperFormatSelect");
 
 const formatCapabilities = getFormatCapabilities();
 
+const BINARY_INPUT_FORMATS = new Set(["docx", "xlsx", "epub", "pptx", "pdf", "png"]);
+
 const sampleMarkdown = `# Trans2Former Demo
 
 这是一个浏览器端转换示例。当前页面可在浏览器内完成 Markdown / HTML / TXT / JSON / CSV / XML 互转。
@@ -381,15 +383,15 @@ async function handleFile(file) {
 
   const detectedFormat = detectFormatFromName(file.name);
   if (!detectedFormat) {
-    setStatus("请选择 .md / .html / .txt / .json / .csv / .xml / .png 文件", "error");
+    setStatus("请选择 .md / .html / .txt / .json / .csv / .xml / .png / .docx / .xlsx / .epub / .pdf / .pptx 文件", "error");
     return;
   }
 
   try {
-    const content = detectedFormat === "png" ? await readFileAsDataUrl(file) : await readFileAsTextChunked(file);
+    const content = BINARY_INPUT_FORMATS.has(detectedFormat) ? await readFileAsDataUrl(file) : await readFileAsTextChunked(file);
     fromFormatSelect.value = detectedFormat;
     await handleInputText(content, file.name, {
-      renderInitialPreview: detectedFormat === "png" || file.size < LARGE_FILE_PREVIEW_BYTES,
+      renderInitialPreview: BINARY_INPUT_FORMATS.has(detectedFormat) || file.size < LARGE_FILE_PREVIEW_BYTES,
     });
   } catch (error) {
     setStatus(error.message, "error");

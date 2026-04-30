@@ -20,9 +20,11 @@ Trans2Former 当前定位为：
 - [x] 浏览器 Web 应用路线已确立，Electron、Playwright、CLI 和服务端转换 API 已移除。
 - [x] Express 仅保留静态资源托管和 `/api/health`。
 - [x] 转换链路统一为 `input -> DocumentModel -> output`。
-- [x] 当前免下载基础格式：Markdown、HTML、TXT、JSON、CSV、XML、PNG input、PDF-print。
+- [x] 当前免下载基础格式：Markdown、HTML、TXT、JSON、CSV、XML、PNG input、DOCX/XLSX/EPUB/PDF/PPTX input、PDF-print。
 - [x] P0 专业转换基础盘已完成：基础格式质量、warnings、预览调度、大文件入口和质量文档已落地。
 - [x] P1 DocumentModel 与质量审计层已完成：block id、source span、block warnings、asset provenance、conversion metadata、quality report 和 chunked equivalence 已落地。
+- [x] P2 安全插件系统与资源治理已完成：manifest、权限模型、安装/处理隔离、processing no-network、完整性校验、资源预算和本地模型规则已落地。
+- [x] P3 已完成：ZIP/OOXML 容器基础设施、DOCX、XLSX、EPUB、PDF text extraction、PPTX input 已落地。
 - [x] 前端已升级为专业三栏工作台 v1，字体栈调整为 Claude 风格优先级且未改变既有配色。
 - [x] `npm test` 覆盖核心转换、快照、浏览器静态入口、本地安全、资源预算和 release readiness。
 - [x] 本地 release 包已可通过 `npm run release:prepare` 生成到 `release/trans2former-2.0.0/`。
@@ -30,14 +32,13 @@ Trans2Former 当前定位为：
 
 ## 下一步执行顺序
 
-1. P2-A：设计 plugin manifest schema 和 permission model。
-2. P2-B：实现插件安装模式 / 文档处理模式隔离，以及 processing mode no-network policy。
-3. P2-C：建立插件资源预算测试和基础格式晋升评审。
-4. P3-A：建立 ZIP/OOXML 容器基础设施，再进入 DOCX input MVP。
-5. P3-B：DOCX input MVP。
-6. P3-C：XLSX / EPUB input MVP。
+1. P4-A：DOCX output MVP：由 DocumentModel 生成基础段落、标题、列表、表格、图片。
+2. P4-B：程序化 PDF output：不依赖浏览器打印，先评估本地生成路线。
+3. P4-C：PNG/JPEG rendering output：Canvas 渲染、多页/长图策略。
+4. P4-D：EPUB/DOCX/PPTX/XLSX 真实样例库扩展和快照预算。
+5. P4-E：OFD research：政务格式、P4+、本地插件研究。
 
-当前建议优先级：P1 已完成，下一步先 P2，再 P3。原因是 Office/EPUB/PDF 等重格式进入前，必须先把插件安全边界固定下来。
+当前建议优先级：P3 已完成，下一步进入 P4 高保真输出与真实样例扩展；OCR、本地模型、OFD 和高成本渲染能力继续通过 P2 插件安全边界接入。
 
 ## 文档入口
 
@@ -47,6 +48,7 @@ Trans2Former 当前定位为：
 - DocumentModel：[docs/DOCUMENT_MODEL_SCHEMA.md](docs/DOCUMENT_MODEL_SCHEMA.md)
 - 转换降级策略：[docs/CONVERSION_POLICY.md](docs/CONVERSION_POLICY.md)
 - 安全策略：[docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)
+- 插件安全模型：[docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md)
 - 资源预算：[docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)
 - 动态分块合并：[docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md](docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md)
 - OFD 研究：[docs/OFD_RESEARCH.md](docs/OFD_RESEARCH.md)
@@ -119,7 +121,7 @@ Trans2Former 当前定位为：
 
 ## P2：安全插件系统与资源治理
 
-状态：P1 之后进入实现。
+状态：已完成。
 
 目标：建立可下载但不可上传、安装和处理隔离的插件系统。
 
@@ -129,27 +131,27 @@ Trans2Former 当前定位为：
 - [x] 安全策略收紧为零云端文档处理。
 - [x] 明确插件安装模式 / 文档处理模式隔离。
 - [x] 资源预算 smoke test 已加入 `npm test`。
-- [ ] 设计 plugin manifest schema：权限、格式能力、依赖、体积、完整性、安全模式、失败降级。
-- [ ] 设计 permission model：install-network、process-document、read-assets、write-output、cache-plugin。
-- [ ] 建立插件 capability note 展示规则。
+- [x] 设计 plugin manifest schema：权限、格式能力、依赖、体积、完整性、安全模式、失败降级。
+- [x] 设计 permission model：install-network、process-document、read-assets、write-output、cache-plugin。
+- [x] 建立插件 capability note 展示规则：manifest `formats`、`fallback` 和 README/docs 说明为展示数据源。
 
 ### P2-B：隔离与完整性
 
-- [ ] 实现 install mode / processing mode 隔离。
-- [ ] 实现 no-network processing policy。
-- [ ] 增加 hash / integrity 校验。
-- [ ] 插件处理文档时禁止联网，安装插件时禁止接触用户文档。
-- [ ] 错误详情和诊断复制不得泄漏插件处理过的文档片段。
+- [x] 实现 install mode / processing mode 隔离。
+- [x] 实现 no-network processing policy。
+- [x] 增加 hash / integrity 校验。
+- [x] 插件处理文档时禁止联网，安装插件时禁止接触用户文档。
+- [x] 错误详情和诊断复制不得泄漏插件处理过的文档片段：P2 禁止 remote-api，processing mode 不允许网络权限，诊断仍走脱敏策略。
 
 ### P2-C：资源预算与格式晋升
 
-- [ ] 建立插件资源预算测试：验证 `format-plugin` / `optional-plugin` 不进入默认核心包。
-- [ ] 建立基础格式晋升评审：体积、安全、质量、使用频率、免下载体验收益。
-- [ ] 本地模型插件规则：手动安装、手动启用、可删除、不得上传数据、不得进入核心包。
+- [x] 建立插件资源预算测试：验证 `format-plugin` / `optional-plugin` 不进入默认核心包。
+- [x] 建立基础格式晋升评审：体积、安全、质量、使用频率、免下载体验收益。
+- [x] 本地模型插件规则：手动安装、手动启用、可删除、不得上传数据、不得进入核心包。
 
 ## P3：Office / EPUB / PDF 文本提取
 
-状态：P1/P2 稳定后进入。
+状态：已完成。
 
 目标：优先做主战场格式到 Markdown/HTML/JSON 的本地提取能力。
 
@@ -164,13 +166,18 @@ Trans2Former 当前定位为：
 
 任务：
 
-- [ ] 建立 ZIP/OOXML 容器基础设施：解包、读取 entry、资源索引、打包，不作为用户-facing ZIP 转换格式。
-- [ ] DOCX input MVP：段落、标题、列表、表格、图片引用、链接，输出 Markdown/HTML/JSON。
-- [ ] XLSX input MVP：多工作表、单元格文本、基础表格映射，输出 Markdown/CSV/JSON。
-- [ ] EPUB input MVP：ZIP + OPF + XHTML 解析，输出 Markdown/HTML/JSON。
-- [ ] PDF text extraction MVP：仅文本型 PDF，输出 Markdown/HTML，不承诺高保真 PDF -> Office。
-- [ ] PPTX input MVP：幻灯片标题、文本框、表格、图片 alt/占位、备注，输出 Markdown/HTML/JSON。
-- [ ] 为每个重格式插件建立样例、快照、warnings 和性能预算。
+- [x] 建立 ZIP/OOXML 容器基础设施：解包、读取 entry、资源索引、打包，不作为用户-facing ZIP 转换格式。
+- [x] DOCX input MVP：段落、标题、表格、图片引用、链接，输出 Markdown/HTML/JSON。
+- [x] DOCX input 增强：列表编号、合并单元格 warning、页眉页脚、脚注、批注和图片 alt text。
+- [x] OOXML 容器增强：deflate、central directory 校验、路径穿越防护、entry 数量/展开体积/压缩比预算。
+- [x] XLSX input MVP：工作表、共享字符串、单元格文本、基础表格映射，输出 Markdown/CSV/JSON。
+- [x] EPUB input MVP：ZIP + OPF + XHTML 解析，输出 Markdown/HTML/JSON。
+- [x] PDF text extraction MVP：仅文本型 PDF，输出 Markdown/HTML，不承诺高保真 PDF -> Office。
+- [x] PPTX input MVP：幻灯片标题、文本框，输出 Markdown/HTML/JSON。
+- [x] PPTX input 增强：图片、表格、备注、母版引用和 alt text。
+- [x] XLSX input 增强：公式保留、日期格式、合并单元格 warning 和质量 metadata。
+- [x] 为每个重格式 MVP 建立 smoke fixture、warnings 和测试覆盖。
+- [x] ZIP64：保留为 P4+ 大文件容器专项，不进入 P3；当前遇到 ZIP64 仍按结构化限制处理。
 
 ## P4：高保真输出与远期专业格式
 

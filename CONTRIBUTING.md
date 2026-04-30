@@ -26,6 +26,7 @@ http://localhost:3000
 - [docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)：格式覆盖矩阵和新增格式准入规则。
 - [docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)：P0 基础格式质量、before/after 和降级说明。
 - [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)：本地优先、零云端处理和插件隔离规则。
+- [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md)：插件 manifest、权限隔离、processing no-network 和完整性校验。
 - [docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)：核心包体积和依赖预算。
 - [docs/PROJECT_ASSESSMENT_2026-04-30.md](docs/PROJECT_ASSESSMENT_2026-04-30.md)：项目评估和修复记录。
 - [docs/RELEASE_PREP.md](docs/RELEASE_PREP.md)：GitHub release 准备流程。
@@ -52,8 +53,10 @@ src/
 - 新增格式时，先设计中间模型，再做输入/输出适配器。
 - 新增高频轻量格式时，可评估进入 `format-basic`，但必须通过体积、安全和质量门禁，保证免下载体验不破坏资源预算。
 - 新增重格式或可选能力时，默认按模块插件处理；用户需要时再下载或加载，不能进入核心包默认路径。
+- 新增插件能力时，必须通过 `public/core/plugin-policy.js` 和 `scripts/plugin-security-test.js`，不得绕过 manifest、权限、完整性和 no-network policy。
 - 可以进行代码水平拆分，但必须保持 `input -> DocumentModel -> output` 语义一致，拆分前后快照不能退化。
 - 处理超大单文件时，优先设计动态分块转换与结构化合并，不允许为了分块速度牺牲最终转换效果。
+- 新增 OOXML/ZIP 容器能力时，不得把 ZIP 宣传为用户-facing 转换格式；ZIP 只作为 DOCX/PPTX/XLSX/EPUB 基础设施。
 - 不提交生成产物、缓存、日志或本地构建输出。
 - 修改 UI 后要验证上传、预览、转换、下载、PDF 打印路径和错误详情面板。
 - 修改任务、定位、安全策略、测试命令或支持格式后，必须同步更新 `README.md`、`DEVELOPMENT_TASKS.md`、`INSTALL.md`、`COMMIT_CHECKLIST.md` 和必要的 `docs/` 专题文档。

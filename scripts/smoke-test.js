@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { deflateRawSync } from "node:zlib";
 
 import {
   convertContent,
@@ -15,9 +16,10 @@ import {
 } from "../public/core/chunking.js";
 import { ConversionError, normalizeConversionError } from "../public/core/conversion-error.js";
 import { assertValidDocumentModel, validateDocumentModel } from "../public/core/document-schema.js";
+import { readZipEntries } from "../public/core/zip-container.js";
 
 const SAMPLE_ROOT = path.resolve("samples");
-const INPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "png"];
+const INPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "png", "docx", "xlsx", "epub", "pptx", "pdf"];
 const OUTPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "pdf"];
 const TEXT_OUTPUT_FORMATS = ["md", "html", "txt", "json", "xml", "pdf"];
 const EXPECTED_BLOCK_TYPES = ["heading", "paragraph", "list", "code", "table", "quote", "image", "asset", "raw"];
@@ -33,6 +35,7 @@ const SAMPLE_MATRIX = {
 };
 
 const tests = [];
+const encoder = new TextEncoder();
 
 function test(name, fn) {
   tests.push({ name, fn });
@@ -64,6 +67,248 @@ async function readSamples() {
   return samples;
 }
 
+function uint32(value) {
+  return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+}
+
+function uint16(value) {
+  return [value & 0xff, (value >>> 8) & 0xff];
+}
+
+function concatBytes(chunks) {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return output;
+}
+
+function createStoredZip(entries) {
+  return createZip(entries, { compression: "store" });
+}
+
+function createDeflatedZip(entries) {
+  return createZip(entries, { compression: "deflate" });
+}
+
+function createCentralZip(entries, options = {}) {
+  return createZip(entries, { ...options, centralDirectory: true });
+}
+
+function createZip(entries, { compression = "store", centralDirectory = false, centralNameOverride = null } = {}) {
+  const chunks = [];
+  const centralChunks = [];
+  let localOffset = 0;
+  for (const [name, textOrBytes] of Object.entries(entries)) {
+    const nameBytes = encoder.encode(name);
+    const centralNameBytes = encoder.encode(centralNameOverride || name);
+    const data = textOrBytes instanceof Uint8Array ? textOrBytes : encoder.encode(textOrBytes);
+    const compressed = compression === "deflate" ? new Uint8Array(deflateRawSync(data)) : data;
+    const method = compression === "deflate" ? 8 : 0;
+    const localHeader = new Uint8Array([
+      ...uint32(0x04034b50),
+      ...uint16(20),
+      ...uint16(0),
+      ...uint16(method),
+      ...uint16(0),
+      ...uint16(0),
+      ...uint32(0),
+      ...uint32(compressed.length),
+      ...uint32(data.length),
+      ...uint16(nameBytes.length),
+      ...uint16(0),
+    ]);
+    chunks.push(localHeader);
+    chunks.push(nameBytes, compressed);
+    if (centralDirectory) {
+      centralChunks.push(new Uint8Array([
+        ...uint32(0x02014b50),
+        ...uint16(20),
+        ...uint16(20),
+        ...uint16(0),
+        ...uint16(method),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint32(0),
+        ...uint32(compressed.length),
+        ...uint32(data.length),
+        ...uint16(centralNameBytes.length),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint32(0),
+        ...uint32(localOffset),
+      ]));
+      centralChunks.push(centralNameBytes);
+    }
+    localOffset += localHeader.length + nameBytes.length + compressed.length;
+  }
+  if (centralDirectory) {
+    const centralOffset = localOffset;
+    const centralSize = centralChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    chunks.push(...centralChunks);
+    chunks.push(new Uint8Array([
+      ...uint32(0x06054b50),
+      ...uint16(0),
+      ...uint16(0),
+      ...uint16(Object.keys(entries).length),
+      ...uint16(Object.keys(entries).length),
+      ...uint32(centralSize),
+      ...uint32(centralOffset),
+      ...uint16(0),
+    ]));
+  }
+  return concatBytes(chunks);
+}
+
+function createDocxFixture() {
+  return createStoredZip({
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+    "word/_rels/document.xml.rels": `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>
+  <Relationship Id="rIdImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>
+</Relationships>`,
+    "word/document.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <w:body>
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Docx Title</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Hello </w:t></w:r><w:hyperlink r:id="rIdLink"><w:r><w:t>Example</w:t></w:r></w:hyperlink></w:p>
+    <w:tbl>
+      <w:tr><w:tc><w:p><w:r><w:t>Name</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Value</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>1</w:t></w:r></w:p></w:tc></w:tr>
+    </w:tbl>
+    <w:p><w:r><w:drawing><a:blip r:embed="rIdImage"/></w:drawing></w:r></w:p>
+  </w:body>
+</w:document>`,
+    "word/media/image1.png": new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+  });
+}
+
+function createAdvancedDocxFixture() {
+  return createDeflatedZip({
+    "[Content_Types].xml": "<Types></Types>",
+    "_rels/.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="officeDocument" Target="word/document.xml"/></Relationships>`,
+    "word/_rels/document.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rImg" Type="image" Target="media/image1.png"/>
+  <Relationship Id="rHeader" Type="header" Target="header1.xml"/>
+  <Relationship Id="rFooter" Type="footer" Target="footer1.xml"/>
+</Relationships>`,
+    "word/document.xml": `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+<w:body>
+  <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Advanced Docx</w:t></w:r></w:p>
+  <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>First item</w:t></w:r></w:p>
+  <w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Nested item</w:t></w:r></w:p>
+  <w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Merged</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+  <w:p><w:r><w:t>Main body</w:t></w:r><w:footnoteReference w:id="2"/><w:commentReference w:id="4"/></w:p>
+  <w:p><w:r><w:drawing><wp:inline><wp:docPr id="9" name="Logo" descr="Logo alt text"/><a:graphic><a:graphicData><a:blip r:embed="rImg"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
+</w:body></w:document>`,
+    "word/footnotes.xml": `<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:id="2"><w:p><w:r><w:t>Footnote text</w:t></w:r></w:p></w:footnote></w:footnotes>`,
+    "word/comments.xml": `<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment w:id="4"><w:p><w:r><w:t>Comment text</w:t></w:r></w:p></w:comment></w:comments>`,
+    "word/header1.xml": `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Header text</w:t></w:r></w:p></w:hdr>`,
+    "word/footer1.xml": `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Footer text</w:t></w:r></w:p></w:ftr>`,
+    "word/media/image1.png": new Uint8Array([137, 80, 78, 71]),
+  });
+}
+
+function createXlsxFixture() {
+  return createStoredZip({
+    "[Content_Types].xml": "<Types></Types>",
+    "xl/workbook.xml": `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet One" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/sharedStrings.xml": `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Name</t></si><si><t>Value</t></si><si><t>A</t></si></sst>`,
+    "xl/worksheets/sheet1.xml": `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>1</v></c></row></sheetData></worksheet>`,
+  });
+}
+
+function createAdvancedXlsxFixture() {
+  return createDeflatedZip({
+    "[Content_Types].xml": "<Types></Types>",
+    "xl/workbook.xml": `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Finance" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/sharedStrings.xml": `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Date</t></si><si><t>Total</t></si></sst>`,
+    "xl/styles.xml": `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>`,
+    "xl/worksheets/sheet1.xml": `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>
+  <sheetData>
+    <row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>
+    <row r="2"><c r="A2" s="1"><v>44927</v></c><c r="B2"><f>SUM(1,2)</f><v>3</v></c></row>
+  </sheetData>
+</worksheet>`,
+  });
+}
+
+function createEpubFixture() {
+  return createStoredZip({
+    "mimetype": "application/epub+zip",
+    "META-INF/container.xml": `<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`,
+    "OEBPS/content.opf": `<package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">EPUB Title</dc:title></metadata><manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="chapter"/></spine></package>`,
+    "OEBPS/chapter.xhtml": `<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>Chapter One</h1><p>Hello EPUB.</p><table><tr><th>Name</th><th>Value</th></tr><tr><td>A</td><td>1</td></tr></table></body></html>`,
+  });
+}
+
+function createPptxFixture() {
+  return createStoredZip({
+    "[Content_Types].xml": "<Types></Types>",
+    "ppt/presentation.xml": `<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="slide" Target="slides/slide1.xml"/></Relationships>`,
+    "ppt/slides/slide1.xml": `<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/></p:nvSpPr><p:txBody><a:p><a:r><a:t>Slide Title</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Body"/></p:nvSpPr><p:txBody><a:p><a:r><a:t>Bullet one</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`,
+  });
+}
+
+function createAdvancedPptxFixture() {
+  return createDeflatedZip({
+    "[Content_Types].xml": "<Types></Types>",
+    "ppt/presentation.xml": `<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`,
+    "ppt/_rels/presentation.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="slide" Target="slides/slide1.xml"/></Relationships>`,
+    "ppt/slides/_rels/slide1.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rImg" Type="image" Target="../media/image1.png"/>
+  <Relationship Id="rNotes" Type="notesSlide" Target="../notesSlides/notesSlide1.xml"/>
+  <Relationship Id="rMaster" Type="slideMaster" Target="../slideMasters/slideMaster1.xml"/>
+</Relationships>`,
+    "ppt/slides/slide1.xml": `<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<p:cSld><p:spTree>
+  <p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/></p:nvSpPr><p:txBody><a:p><a:r><a:t>Advanced Slide</a:t></a:r></a:p></p:txBody></p:sp>
+  <p:pic><p:nvPicPr><p:cNvPr id="3" name="Picture" descr="Chart image alt"/></p:nvPicPr><p:blipFill><a:blip r:embed="rImg"/></p:blipFill></p:pic>
+  <p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Metric</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Value</a:t></a:r></a:p></a:txBody></a:tc></a:tr><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Speed</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Fast</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>
+</p:spTree></p:cSld></p:sld>`,
+    "ppt/notesSlides/notesSlide1.xml": `<p:notes xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Speaker notes text</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>`,
+    "ppt/slideMasters/slideMaster1.xml": `<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"></p:sldMaster>`,
+    "ppt/media/image1.png": new Uint8Array([137, 80, 78, 71]),
+  });
+}
+
+function createPdfFixture() {
+  return `%PDF-1.4
+1 0 obj
+<< /Type /Catalog >>
+endobj
+2 0 obj
+<< /Length 60 >>
+stream
+BT
+(PDF Title) Tj
+(Hello PDF text extraction) Tj
+ET
+endstream
+endobj
+%%EOF`;
+}
+
 function assertValidOutput(result, toFormat, label) {
   assert.equal(result.format, toFormat, `${label} should output ${toFormat}`);
   assert.equal(typeof result.data, "string", `${label} should return string data`);
@@ -80,6 +325,138 @@ test("format registry exposes the supported input and output matrix", () => {
   const formats = listFormats();
   assert.deepEqual(formats.input, INPUT_FORMATS);
   assert.deepEqual(formats.output, OUTPUT_FORMATS);
+});
+
+test("ZIP/OOXML container reader exposes stored entries and text payloads", () => {
+  const docxBytes = createDocxFixture();
+  const zip = readZipEntries(docxBytes);
+  assert.equal(zip.has("[Content_Types].xml"), true);
+  assert.equal(zip.has("word/document.xml"), true);
+  assert.equal(zip.getText("word/document.xml").includes("Docx Title"), true);
+  assert.equal(zip.getBytes("word/media/image1.png")[1], 80);
+});
+
+test("ZIP/OOXML container reader inflates deflated entries and rejects unsafe paths", () => {
+  const zip = readZipEntries(createDeflatedZip({ "word/document.xml": "<root>deflated</root>" }));
+  assert.equal(zip.getText("word/document.xml"), "<root>deflated</root>");
+  assert.equal(readZipEntries(createCentralZip({ "word/document.xml": "<root>central</root>" })).getText("word/document.xml"), "<root>central</root>");
+
+  assert.throws(
+    () => readZipEntries(createStoredZip({ "../escape.txt": "bad" })),
+    (error) => error instanceof ConversionError && error.code === "ZIP_UNSAFE_ENTRY_PATH"
+  );
+  assert.throws(
+    () => readZipEntries(createCentralZip({ "word/document.xml": "<root />" }, { centralNameOverride: "word/missing.xml" })),
+    (error) => error instanceof ConversionError && error.code === "ZIP_CENTRAL_DIRECTORY_MISMATCH"
+  );
+});
+
+test("DOCX input MVP extracts headings, paragraphs, tables, links, and image assets", () => {
+  const docxBytes = createDocxFixture();
+  const model = toDocumentModel(docxBytes, "docx", "fixture.docx");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks[0].type, "heading");
+  assert.equal(model.blocks[0].text, "Docx Title");
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Hello Example")), true);
+  assert.equal(model.blocks.some((block) => block.type === "table" && block.headers[0] === "Name"), true);
+  assert.equal(model.assets.length, 1);
+  assert.equal(model.assets[0].mime, "image/png");
+  assert.equal(model.metadata.ooxml.relationshipCount, 2);
+
+  const markdown = convertContent({ content: docxBytes, from: "docx", to: "md", title: "fixture.docx" });
+  assertValidOutput(markdown, "md", "docx to markdown");
+  assert.equal(markdown.data.includes("# Docx Title"), true);
+  assert.equal(markdown.data.includes("| Name | Value |"), true);
+
+  const html = convertContent({ content: docxBytes, from: "docx", to: "html", title: "fixture.docx" });
+  assertValidOutput(html, "html", "docx to html");
+  assert.equal(html.data.includes("<h1>Docx Title</h1>"), true);
+
+  const json = convertContent({ content: docxBytes, from: "docx", to: "json", title: "fixture.docx" });
+  assertValidOutput(json, "json", "docx to json");
+  assert.equal(JSON.parse(json.data).from, "docx");
+});
+
+test("DOCX input enhancement extracts lists, header/footer, footnotes, comments, merge warnings, and image alt text", () => {
+  const model = toDocumentModel(createAdvancedDocxFixture(), "docx", "advanced.docx");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks.some((block) => block.type === "list" && block.items.includes("First item")), true);
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Header text")), true);
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Footer text")), true);
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Footnote text")), true);
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Comment text")), true);
+  assert.equal(model.blocks.some((block) => block.type === "asset" && block.alt === "Logo alt text"), true);
+  assert.equal(model.metadata.warnings.some((warning) => warning.code === "DOCX_TABLE_MERGE_APPROXIMATED"), true);
+  assert.equal(model.metadata.ooxml.compressionMethods.includes(8), true);
+});
+
+test("XLSX input MVP extracts worksheets into DocumentModel tables", () => {
+  const xlsxBytes = createXlsxFixture();
+  const model = toDocumentModel(xlsxBytes, "xlsx", "fixture.xlsx");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks[0].type, "heading");
+  assert.equal(model.blocks[0].text, "Sheet One");
+  const table = model.blocks.find((block) => block.type === "table");
+  assert.deepEqual(table.headers, ["Name", "Value"]);
+  assert.deepEqual(table.rows[0], ["A", "1"]);
+
+  const markdown = convertContent({ content: xlsxBytes, from: "xlsx", to: "md", title: "fixture.xlsx" });
+  assertValidOutput(markdown, "md", "xlsx to markdown");
+  assert.equal(markdown.data.includes("| Name | Value |"), true);
+});
+
+test("XLSX input enhancement preserves formulas, dates, merged-cell warnings, and metadata", () => {
+  const model = toDocumentModel(createAdvancedXlsxFixture(), "xlsx", "advanced.xlsx");
+  assert.equal(validateDocumentModel(model).ok, true);
+  const table = model.blocks.find((block) => block.type === "table");
+  assert.deepEqual(table.headers, ["Date", "Total"]);
+  assert.deepEqual(table.rows[0], ["2023-01-01", "=SUM(1,2) => 3"]);
+  assert.equal(model.metadata.warnings.some((warning) => warning.code === "XLSX_MERGED_CELLS_APPROXIMATED"), true);
+  assert.equal(model.metadata.ooxml.formulaCellCount, 1);
+});
+
+test("EPUB input MVP follows OPF spine and extracts XHTML structure", () => {
+  const epubBytes = createEpubFixture();
+  const model = toDocumentModel(epubBytes, "epub", "fixture.epub");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks.some((block) => block.type === "heading" && block.text === "EPUB Title"), true);
+  assert.equal(model.blocks.some((block) => block.type === "heading" && block.text === "Chapter One"), true);
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text === "Hello EPUB."), true);
+
+  const html = convertContent({ content: epubBytes, from: "epub", to: "html", title: "fixture.epub" });
+  assertValidOutput(html, "html", "epub to html");
+  assert.equal(html.data.includes("Chapter One"), true);
+});
+
+test("PDF text extraction MVP reads literal text operators", () => {
+  const pdf = createPdfFixture();
+  const model = toDocumentModel(pdf, "pdf", "fixture.pdf");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks[0].type, "heading");
+  assert.equal(model.blocks[0].text, "PDF Title");
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Hello PDF")), true);
+});
+
+test("PPTX input MVP extracts slide titles and body text", () => {
+  const pptxBytes = createPptxFixture();
+  const model = toDocumentModel(pptxBytes, "pptx", "fixture.pptx");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks.some((block) => block.type === "heading" && block.text === "Slide 1: Slide Title"), true);
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text === "Bullet one"), true);
+
+  const markdown = convertContent({ content: pptxBytes, from: "pptx", to: "md", title: "fixture.pptx" });
+  assertValidOutput(markdown, "md", "pptx to markdown");
+  assert.equal(markdown.data.includes("Slide 1: Slide Title"), true);
+});
+
+test("PPTX input enhancement extracts images, tables, notes, and master references", () => {
+  const model = toDocumentModel(createAdvancedPptxFixture(), "pptx", "advanced.pptx");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks.some((block) => block.type === "asset" && block.alt === "Chart image alt"), true);
+  assert.equal(model.blocks.some((block) => block.type === "table" && block.headers[0] === "Metric"), true);
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Speaker notes text")), true);
+  assert.equal(model.metadata.ooxml.notesSlideCount, 1);
+  assert.equal(model.metadata.ooxml.masterReferenceCount, 1);
 });
 
 test("DocumentModel validation accepts generated models and rejects invalid models", () => {
@@ -336,7 +713,7 @@ test("XML parser reports namespaces, attributes, and parser errors without DOMPa
 
 test("sample fixtures exist and parse into valid DocumentModels", async () => {
   const samples = await readSamples();
-  assert.equal(samples.length, INPUT_FORMATS.length * 3);
+  assert.equal(samples.length, Object.values(SAMPLE_MATRIX).reduce((sum, fileNames) => sum + fileNames.length, 0));
 
   for (const [format, fileNames] of Object.entries(SAMPLE_MATRIX)) {
     assert.equal(fileNames.length >= 3, true, `${format} should have at least three samples`);

@@ -52,6 +52,7 @@ npm test
 - 产品策略：[docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md)
 - 格式路线：[docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)
 - 基础格式质量：[docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)
+- 插件安全模型：[docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md)
 - 开发规范：[docs/development-standards/00_README.md](docs/development-standards/00_README.md)
 - 成本与资源治理：[docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md](docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md)
 - 发布准备：[docs/RELEASE_PREP.md](docs/RELEASE_PREP.md)
@@ -73,7 +74,7 @@ release/trans2former-2.0.0/
 ## 当前限制
 
 1. PDF 当前使用浏览器打印/另存为 PDF。
-2. EPUB、DOCX、PPTX、XLSX、OFD 的浏览器端转换尚未实现；PNG 当前作为输入图片资源导入。
+2. DOCX、XLSX、EPUB、PDF text extraction、PPTX input 已完成 P3；OFD 的浏览器端转换尚未实现。
 3. 不需要安装 Office、LibreOffice、Pandoc、Playwright 或桌面壳程序。
 4. 不提供远程 OCR、远程转写、远程 AI 增强或云端文档处理；本地模型只可能作为远期可删除插件。
 

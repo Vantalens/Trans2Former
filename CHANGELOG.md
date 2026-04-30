@@ -32,6 +32,20 @@
 - 新增结构化编辑状态模型文档 `docs/STRUCTURED_EDITING_MODEL.md` 和 AI-ready Markdown 准则 `docs/AI_READY_MARKDOWN.md`。
 - 新增项目评估文档 `docs/PROJECT_ASSESSMENT_2026-04-30.md`。
 - 新增 release 准备文档 `docs/RELEASE_PREP.md`、`scripts/prepare-release.js` 和 release readiness test。
+- 新增 P2 插件安全模型 `docs/PLUGIN_SECURITY_MODEL.md` 和机器可读 `docs/plugin-manifest.schema.json`。
+- 新增 `public/core/plugin-policy.js`，覆盖插件 manifest 校验、权限模式隔离、processing no-network、SHA-256 完整性校验和资源预算分层。
+- 新增 `scripts/plugin-security-test.js`。
+- 新增 P3 ZIP/OOXML 容器基础设施 `public/core/zip-container.js`。
+- 新增 DOCX input MVP `public/formats/docx.js`，支持标题、段落、表格、链接和图片引用提取。
+- 新增 XLSX input MVP `public/formats/xlsx.js`，支持工作表和共享字符串到表格。
+- 新增 EPUB input MVP `public/formats/epub.js`，支持 OPF spine 和 XHTML 结构提取。
+- 新增 PDF text extraction MVP `public/formats/pdf.js`，支持简单 literal text operators。
+- 新增 PPTX input MVP `public/formats/pptx.js`，支持幻灯片标题和文本框提取。
+- 新增 `docs/OOXML_CONTAINER.md`、`docs/DOCX_INPUT_MVP.md`、`docs/XLSX_INPUT_MVP.md`、`docs/EPUB_INPUT_MVP.md`、`docs/PDF_TEXT_EXTRACTION_MVP.md` 和 `docs/PPTX_INPUT_MVP.md`。
+- 新增 ZIP deflate 解压、central directory 校验、路径穿越防护、entry 数量/展开体积/压缩比预算。
+- 新增 DOCX P3 增强：列表、页眉页脚、脚注、批注、合并单元格 warning 和图片 alt text。
+- 新增 XLSX P3 增强：公式保留、基础日期格式、合并单元格 warning 和公式单元格 metadata。
+- 新增 PPTX P3 增强：图片 assets、基础表格、speaker notes、母版引用计数和 alt text。
 
 ### 变更
 
@@ -46,7 +60,9 @@
 - 浏览器预览改为 idle callback 调度，文本文件入口改为分片读取，大文件默认进入手动预览。
 - JSON 输出现在包含 `metadata`，用于保留转换审计和质量报告。
 - PNG asset fallback 命名避免重复 `.png` 扩展名，并由审计层补齐 provenance。
-- `npm test` 现在运行核心 smoke、转换快照、浏览器自检静态服务检查、本地安全 smoke test、资源预算 smoke test 和 release readiness test。
+- 输入格式矩阵新增 DOCX、XLSX、EPUB、PDF、PPTX input MVP。
+- P3 状态从 MVP 推进为完成，后续真实样例扩展和高保真输出进入 P4。
+- `npm test` 现在运行核心 smoke、转换快照、浏览器自检静态服务检查、本地安全 smoke test、资源预算 smoke test、插件安全 smoke test 和 release readiness test。
 - `DEVELOPMENT_TASKS.md` 已整理为任务看板，长期原则和格式矩阵移入 `docs/` 专题文档。
 - Worker 错误现在透传结构化错误字段，便于 UI 渲染。
 

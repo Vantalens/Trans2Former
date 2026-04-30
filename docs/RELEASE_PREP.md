@@ -10,6 +10,7 @@
 
 - 发布包必须保持 `local-only` 路线，不引入云端文档处理、远程转换、远程 OCR、远程转写或远程 AI。
 - 发布前必须运行 `npm test`。
+- 插件能力必须通过 `scripts/plugin-security-test.js`，确保 processing mode 禁联网。
 - 发布包不得包含 `node_modules/`、`.git/`、`.local/`、日志、缓存、用户文档、测试截图或临时导出文件。
 - release 包只包含源码、样例、测试、开发文档和静态浏览器应用资源。
 

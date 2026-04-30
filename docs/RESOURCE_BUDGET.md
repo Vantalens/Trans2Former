@@ -1,6 +1,6 @@
 # Resource Budget
 
-版本：v0.1.0
+版本：v0.2.0
 状态：生效
 最后更新：2026-04-26
 
@@ -17,10 +17,10 @@ core
   DocumentModel / registry / schema / errors / worker protocol / safety tests
 
 format-basic
-  Markdown / HTML / TXT / JSON / CSV / XML / PNG input / PDF-print
+  Markdown / HTML / TXT / JSON / CSV / XML / PNG input / DOCX input / XLSX input / EPUB input / PDF text input / PPTX input / PDF-print
 
 format-plugin
-  PDF input / DOCX / PPTX / XLSX / EPUB / advanced image formats / OFD research
+  high-fidelity Office/PDF output / advanced image formats / OFD research / heavy renderers
 
 optional-plugin
   local OCR / local layout analysis / local table recovery / local model plugins
@@ -30,11 +30,12 @@ optional-plugin
 
 - 默认只包含 `core + format-basic`。
 - `format-basic` 必须保持小而可用，内置热门轻量格式，不能退化为空壳。
-- `format-plugin` 必须插件化或按需加载。
+- DOCX/XLSX/EPUB/PDF/PPTX 的 P3 输入能力已作为轻量、无重依赖路径进入 `format-basic`。
+- 高保真输出、OCR、本地模型、OFD 和重渲染器必须插件化或按需加载。
 - `optional-plugin` 必须默认关闭。
 - 云端文档处理、远程转换、远程 OCR、远程转写、远程 AI 增强不提供。
 - 插件下载必须由用户操作或明确需求触发，不能在首屏默认下载所有格式能力。
-- 插件必须提供 manifest，声明体积、依赖、安全模式、加载方式和失败降级路径。
+- 插件必须提供 manifest，声明体积、依赖、安全模式、加载方式、完整性哈希和失败降级路径。
 - 插件安装模式可以联网，文档处理模式必须禁联网。
 
 ## 当前预算
@@ -50,10 +51,20 @@ optional-plugin
 
 ## 插件预算原则
 
-- 单个插件必须声明 `sizeBudgetKb`。
+- 单个插件必须声明 `resources.downloadBytes` 和 `resources.maxRuntimeMemoryMb`。
 - 插件依赖不得进入默认 dependencies，除非该插件转为 `format-basic` 并通过资源预算评审。
 - 插件缓存应可清理，且不能保存用户文档内容。
 - 插件加载失败必须返回可解释错误，不影响核心基础格式转换。
+
+## 插件预算分层
+
+| kind | 下载体积上限 | 运行内存上限 | 规则 |
+| --- | ---: | ---: | --- |
+| `format-plugin` | 10 MB | 1024 MB | 重格式解析/写入能力，按需加载。 |
+| `optional-plugin` | 50 MB | 2048 MB | 可选增强能力，不进入常用路径。 |
+| `local-model-plugin` | 500 MB | 4096 MB | 本地模型，必须手动安装、可删除、不得上传数据。 |
+
+运行时校验入口为 `public/core/plugin-policy.js`，机器可读 schema 为 `docs/plugin-manifest.schema.json`。
 
 ## 基础格式晋升原则
 
@@ -66,3 +77,5 @@ optional-plugin
 - 有样例、快照、warnings、安全测试和质量基准。
 
 成本与资源治理见 [development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md](development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md)。
+
+插件安全模型见 [PLUGIN_SECURITY_MODEL.md](PLUGIN_SECURITY_MODEL.md)。

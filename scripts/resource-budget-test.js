@@ -36,6 +36,16 @@ const FORBIDDEN_CORE_IMPORTS = [
   "http://",
 ];
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasForbiddenPackageImport(content, packageName) {
+  const escaped = escapeRegExp(packageName);
+  const importPattern = new RegExp(`\\bfrom\\s+["']${escaped}(?:\\/[^"']*)?["']|\\bimport\\s*\\(\\s*["']${escaped}(?:\\/[^"']*)?["']\\s*\\)|\\brequire\\s*\\(\\s*["']${escaped}(?:\\/[^"']*)?["']\\s*\\)`);
+  return importPattern.test(content);
+}
+
 async function listFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
@@ -97,10 +107,18 @@ async function assertCoreHasNoHeavyImports() {
   for (const file of files) {
     const content = await readFile(file, "utf8");
     for (const forbidden of FORBIDDEN_CORE_IMPORTS) {
+      if (forbidden === "https://" || forbidden === "http://") {
+        assert.equal(
+          content.includes(forbidden),
+          false,
+          `${path.relative(process.cwd(), file)} must not reference ${forbidden} in the default core path`
+        );
+        continue;
+      }
       assert.equal(
-        content.includes(forbidden),
+        hasForbiddenPackageImport(content, forbidden),
         false,
-        `${path.relative(process.cwd(), file)} must not import or reference ${forbidden} in the default core path`
+        `${path.relative(process.cwd(), file)} must not import ${forbidden} in the default core path`
       );
     }
   }

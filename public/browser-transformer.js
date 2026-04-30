@@ -1,11 +1,16 @@
 import { ConverterRegistry, normalizeFormat } from "./core/format-registry.js";
 import { readCsv, writeCsv } from "./formats/csv.js";
+import { readDocx } from "./formats/docx.js";
+import { readEpub } from "./formats/epub.js";
 import { readHtml, writeHtml, writePdfPrintHtml } from "./formats/html.js";
 import { readJson, writeJson } from "./formats/json.js";
 import { modelToBodyHtml, readMarkdown, writeMarkdown } from "./formats/markdown.js";
+import { readPdf } from "./formats/pdf.js";
 import { readPng } from "./formats/png.js";
 import { readText, writeText } from "./formats/plain-text.js";
+import { readPptx } from "./formats/pptx.js";
 import { readXml, writeXml } from "./formats/xml.js";
+import { readXlsx } from "./formats/xlsx.js";
 
 const EXT_TO_FORMAT = {
   md: "md",
@@ -18,6 +23,11 @@ const EXT_TO_FORMAT = {
   csv: "csv",
   xml: "xml",
   png: "png",
+  docx: "docx",
+  xlsx: "xlsx",
+  epub: "epub",
+  pdf: "pdf",
+  pptx: "pptx",
 };
 
 const registry = new ConverterRegistry();
@@ -80,7 +90,40 @@ registry.registerFormat("png", {
   note: "当前支持作为输入图片资源导入 DocumentModel",
 });
 
+registry.registerFormat("docx", {
+  read: readDocx,
+  extension: "docx",
+  mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  label: "DOCX",
+  note: "P3：浏览器端读取 OOXML 文本、标题、表格、链接、图片、列表、页眉页脚、脚注和批注",
+});
+
+registry.registerFormat("xlsx", {
+  read: readXlsx,
+  extension: "xlsx",
+  mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  label: "XLSX",
+  note: "P3：浏览器端读取工作表文本、公式缓存、日期和合并单元格 warning",
+});
+
+registry.registerFormat("epub", {
+  read: readEpub,
+  extension: "epub",
+  mime: "application/epub+zip",
+  label: "EPUB",
+  note: "P3：读取 OPF spine 和 XHTML 内容结构",
+});
+
+registry.registerFormat("pptx", {
+  read: readPptx,
+  extension: "pptx",
+  mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  label: "PPTX",
+  note: "P3：读取幻灯片标题、文本框、图片、表格和备注",
+});
+
 registry.registerFormat("pdf", {
+  read: readPdf,
   write: writePdfPrintHtml,
   extension: "html",
   mime: "text/html;charset=utf-8",
