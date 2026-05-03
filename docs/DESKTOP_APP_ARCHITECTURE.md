@@ -1,8 +1,8 @@
 # Desktop App Architecture
 
-版本：v0.1.0
+版本：v0.2.0
 状态：生效
-最后更新：2026-05-01
+最后更新：2026-05-03
 
 ## 目标形态
 
@@ -134,7 +134,7 @@ Tauri + Web-GUI 是当前最合理的桌面路线。
 | 重格式 | 插件按需加载 |
 | 本地模型 | 手动安装、手动启用 |
 
-## P0 当前实现
+## 当前实现
 
 - 已建立 Tauri v2 scaffold：`src-tauri/tauri.conf.json`、`src-tauri/capabilities/default.json`、Rust entrypoint 和 `npm run desktop:check`。
 - 已声明最小权限边界：主窗口、打开/保存对话框、文件读写能力；不开放 shell、HTTP 或目录级扫描权限。
@@ -142,18 +142,26 @@ Tauri + Web-GUI 是当前最合理的桌面路线。
 - 主工作区已升级为 Input / DocumentModel / Output 三栏，窄屏使用 tabs。
 - 底部已建立 Warnings、Quality Report、Diff、Versions、Plugin Downloads 和 Plugin Updates 面板。
 - 顶部已建立 Plugin Manager 和 Security Center 入口。
+- OutputEditor 已落地文本输出编辑、实时预览、undo / redo、checkpoint、version diff、warnings resolved 和本地历史 opt-in。
+- P2 响应核心已落地：Worker Transferable、虚拟列表、渐进/降级预览、取消清理和专项测试。
+- P3 插件核心运行时已落地：安装模式隔离、本地导入校验、启用/禁用/卸载/回滚、能力发现、processing no-network 和崩溃 fallback。
 
 ## 当前不足
 
-- 本机尚未安装 Rust/Cargo 时不能真实启动 Tauri 桌面壳；当前只能通过 `desktop:check` 验证 scaffold 和权限配置。
-- 当前文件队列是 P0 交互骨架，批量转换调度、队列持久化和桌面原生保存仍需后续增强。
-- 底部报告面板是基础信息承载，warnings resolved、可交互 diff 和 session checkpoint 进入 P1。
-- 输出编辑器、实时预览同步、undo/redo、checkpoint、version diff、warnings resolved 状态尚未完成。
-- 大文件能力还停在入口基线，Worker Transferable、虚拟滚动、渐进预览、大文件降级预览、Asset lazy-load 和生命周期专项测试还没落地。
-- 插件系统仍偏策略层，缺少可用的安装、导入、启用、禁用、卸载、回滚和沙箱运行时。
+- `public/app.js` 已经承担过多职责，P4 必须拆分工作台状态、预览、队列、插件管理和历史持久化模块。
+- 当前文件队列仍是交互骨架，批量转换调度、队列持久化和桌面原生保存仍需后续增强。
+- Asset lazy-load 尚未落地，图片、字体、附件仍需按预览/导出需要加载。
+- 插件系统已有核心运行时，但还缺真实第三方插件代码加载、Worker/WASM 执行容器、fixture 插件和资源限制。
 - DOCX/PDF/PNG/JPEG 输出还只是高保真基线，复杂样式、字体、分页、图片尺寸、表格宽度、视觉 diff 和真实样例回归还不足。
 - OFD 还没有进入真实实现，容器/manifest/metadata 读取、DocumentModel 提取、本地渲染和视觉回归仍待推进。
 - `release/trans2former-2.0.0/` 当前是 Web-GUI core preview release 包，不是 Tauri 桌面安装包。
+
+## 下一阶段架构方向
+
+1. P4：先拆分前端工作台模块，并建立重格式 capability note、公开样例和质量回归。
+2. P5：实现真实插件加载器和 fixture 插件，验证 no-network processing、崩溃隔离、资源预算和回滚。
+3. P6：以样例驱动推进 OFD、高保真 DOCX/PDF、本地 OCR/layout/table 插件。
+4. P7：补 Tauri 安装包、签名、自动更新、平台 smoke 和桌面权限体验。
 
 ## 技术边界
 

@@ -201,7 +201,10 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
   });
 }
 
-export function writeMarkdown({ model }) {
+export function writeMarkdown({ model, options = {} }) {
+  const profile = String(options.profile || "ai-ready").toLowerCase();
+  const includeArchiveSummary = profile === "archive";
+  const keepStrictRoundTripHints = profile === "strict-round-trip";
   const markdown = model.blocks
     .map((block) => {
       if (block.type === "heading") {
@@ -253,10 +256,30 @@ export function writeMarkdown({ model }) {
     .filter(Boolean)
     .join("\n\n");
 
+  const archiveSummary = includeArchiveSummary
+    ? [
+      "",
+      "---",
+      `title: ${markdownInlineFromText(model.title || "document")}`,
+      `source-format: ${markdownInlineFromText(model.sourceFormat || "md")}`,
+      `blocks: ${model.blocks.length}`,
+      `warnings: ${(model.metadata?.warnings || []).length}`,
+      "---",
+    ].join("\n")
+    : "";
+
+  const strictHints = keepStrictRoundTripHints
+    ? [
+      "",
+      `<!-- round-trip: ${markdownInlineFromText(model.sourceFormat || "md")} -->`,
+      ...(model.metadata?.warnings || []).map((warning) => `<!-- warning:${warning.code} -->`),
+    ].join("\n")
+    : "";
+
   return {
     type: "text",
     format: "md",
-    data: `${markdown.trim()}\n`,
+    data: `${markdown.trim()}${archiveSummary}${strictHints}\n`,
     mime: "text/markdown;charset=utf-8",
   };
 }

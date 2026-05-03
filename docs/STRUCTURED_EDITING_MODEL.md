@@ -38,3 +38,7 @@ P2/P3 前端实现时应优先建立以下接口：
 - `exportEditedModel()`
 
 编辑器不得绕过 `DocumentModel`，也不得把用户文档上传到远程服务。
+
+## 当前实现
+
+- 浏览器工作台已落地文本输出编辑器、实时预览、undo / redo、checkpoint、version diff、warnings resolved 和关闭后持久版本历史 opt-in。

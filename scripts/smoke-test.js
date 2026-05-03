@@ -778,6 +778,29 @@ test("sample fixtures convert to common text outputs with explicit degradation p
   }
 });
 
+test("Markdown output profiles preserve the requested profile hints", async () => {
+  const sample = await readSample("md", "chinese.md");
+  const archive = convertContent({
+    content: sample.trimEnd(),
+    from: "md",
+    to: "md",
+    title: "chinese.md",
+    fileName: "chinese.md",
+    options: { profile: "archive" },
+  });
+  assert(archive.data.includes("source-format:"), "archive profile emits archive metadata");
+
+  const strictRoundTrip = convertContent({
+    content: sample.trimEnd(),
+    from: "md",
+    to: "md",
+    title: "chinese.md",
+    fileName: "chinese.md",
+    options: { profile: "strict-round-trip" },
+  });
+  assert(strictRoundTrip.data.includes("<!-- round-trip:"), "strict round-trip profile emits round-trip hints");
+});
+
 test("machine-readable DocumentModel schema mirrors the runtime block and asset shapes", async () => {
   const schemaPath = path.resolve("docs", "document-model.schema.json");
   const schema = JSON.parse(await readFile(schemaPath, "utf8"));

@@ -14,6 +14,17 @@ function postProgress(id, stageInfo) {
   self.postMessage({ id, type: "progress", ...stageInfo });
 }
 
+function normalizeWorkerPayload(payload) {
+  if (!payload?.contentBuffer) {
+    return payload;
+  }
+  return {
+    ...payload,
+    content: new TextDecoder("utf-8", { fatal: false }).decode(payload.contentBuffer),
+    contentBuffer: undefined,
+  };
+}
+
 self.addEventListener("message", (event) => {
   const { id, payload } = event.data || {};
   if (!id || !payload) {
@@ -25,7 +36,7 @@ self.addEventListener("message", (event) => {
     postProgress(id, STAGES[1]);
     postProgress(id, STAGES[2]);
     postProgress(id, STAGES[3]);
-    const result = convertContent(payload);
+    const result = convertContent(normalizeWorkerPayload(payload));
     postProgress(id, STAGES[4]);
     postProgress(id, STAGES[5]);
     self.postMessage({ id, type: "progress", stage: "complete", progress: 1, message: "转换完成" });

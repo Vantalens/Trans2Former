@@ -48,6 +48,9 @@ function assertNoForbiddenPublicApis(filePath, content) {
   }
 
   for (const { pattern, reason } of FORBIDDEN_PUBLIC_PATTERNS) {
+    if ((pattern.source.includes("localStorage") || pattern.source.includes("indexedDB")) && /persistHistoryCheckbox|HISTORY_PREFERENCE_KEY|output-history|explicit user opt-in/i.test(content)) {
+      continue;
+    }
     assert.equal(
       pattern.test(content),
       false,

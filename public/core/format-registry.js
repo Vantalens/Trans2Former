@@ -90,7 +90,7 @@ export class ConverterRegistry {
     });
   }
 
-  write({ model, to, title = model?.title || "document" }) {
+  write({ model, to, title = model?.title || "document", options = {} }) {
     const toFormat = normalizeFormat(to);
     const writer = this.writers.get(toFormat);
     if (!writer) {
@@ -104,11 +104,11 @@ export class ConverterRegistry {
       writer: toFormat,
       targetFormat: toFormat,
     });
-    return writer({ model: auditedModel, title, format: toFormat });
+    return writer({ model: auditedModel, title, format: toFormat, options });
   }
 
-  convert({ content, from, to, title = "document", fileName = "" }) {
+  convert({ content, from, to, title = "document", fileName = "", options = {} }) {
     const model = this.read({ content, from, title, fileName });
-    return this.write({ model, to, title });
+    return this.write({ model, to, title, options });
   }
 }

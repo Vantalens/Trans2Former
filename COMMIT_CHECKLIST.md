@@ -15,6 +15,7 @@
 - [ ] DOCX / PDF / PNG / JPEG output 可通过 P4 smoke fixture，并按二进制 Blob 下载。
 - [ ] 基础格式解析改动已同步 samples、snapshots、warnings 和 [docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)。
 - [ ] 错误详情面板显示结构化错误，并且复制诊断不包含用户文档正文、title 或 stack。
+- [ ] 文本输出编辑器、实时预览、undo / redo、checkpoint、version diff、warnings resolved 和本地历史 opt-in 已验证。
 - [ ] 没有新增人为固定上传大小上限；如涉及文件读取，已考虑分片/流式/Worker 路线。
 - [ ] 如果进行了动态分块转换，直接转换 vs 分块转换的 blocks、assets、warnings、metadata 和输出快照没有不可解释差异。
 - [ ] 如果进行了代码水平拆分，拆分前后样例、快照、warnings、assets 和错误分类没有退化。

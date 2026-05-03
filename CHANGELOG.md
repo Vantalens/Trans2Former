@@ -6,6 +6,8 @@
 
 ### 新增
 
+- 新增文本输出编辑器、实时预览、undo / redo 和 checkpoint 基线，输出草稿可在工作台内直接编辑并回写下载链接。
+- 新增 Markdown output profile、version diff（文本 + block id）、warnings resolved 状态和关闭后持久版本历史 opt-in。
 - 新增 `samples/` 样例集，覆盖 Markdown、HTML、TXT、JSON、CSV、XML、PNG 当前输入格式。
 - 新增机器可读 `docs/document-model.schema.json`。
 - 新增转换快照测试和 `tests/snapshots/conversions/`。

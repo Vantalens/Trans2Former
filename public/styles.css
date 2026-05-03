@@ -574,6 +574,84 @@ button:disabled {
   background: #ffffff;
 }
 
+.output-editor-panel {
+  display: grid;
+  grid-template-rows: auto minmax(150px, 240px) auto;
+  gap: 8px;
+  margin: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fbfcfd;
+}
+
+.output-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.output-editor-header strong,
+.output-editor-header span {
+  display: block;
+}
+
+.output-editor-header strong {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.output-editor-header span {
+  max-width: 34rem;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.output-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+#outputEditor {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  outline: none;
+  background: #ffffff;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  line-height: 1.58;
+}
+
+#outputEditor:disabled {
+  background: #f4f7f9;
+  color: #87929e;
+  cursor: not-allowed;
+}
+
+.output-preview-notice {
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff7ed;
+  color: #8b4a12;
+  font-size: 0.76rem;
+}
+
+.output-preview-notice[hidden] {
+  display: none;
+}
+
 .result-title {
   display: flex;
   align-items: baseline;
@@ -631,8 +709,74 @@ button:disabled {
   box-shadow: 0 14px 32px rgba(20, 31, 43, 0.12);
 }
 
+.output-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
 .naming-field {
   min-width: 150px;
+}
+
+.large-preview-field[hidden] {
+  display: none;
+}
+
+.large-preview-field {
+  min-width: 132px;
+}
+
+.report-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.report-card-header h2 {
+  margin: 0;
+}
+
+.report-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.plugin-list {
+  display: grid;
+  gap: 8px;
+}
+
+.plugin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  background: #ffffff;
+}
+
+.plugin-row strong,
+.plugin-row span,
+.plugin-row small {
+  display: block;
+}
+
+.plugin-row small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.plugin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .workbench-tabs {
@@ -739,7 +883,7 @@ button:disabled {
 }
 
 .text-output-preview:empty::before {
-  content: "输出";
+  content: "输出预览";
 }
 
 .preview-markdown h1,
@@ -815,6 +959,7 @@ button:disabled {
   font-size: 0.84rem;
   line-height: 1.55;
 }
+
 
 .error-details-panel {
   margin: 10px;

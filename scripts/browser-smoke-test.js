@@ -44,6 +44,10 @@ try {
   assert.equal(indexHtml.includes("id=\"securityCenterButton\""), true, "P0 workbench should expose security center entry");
   assert.equal(indexHtml.includes("id=\"pluginDownloadPanel\""), true, "P0 workbench should expose plugin download entry");
   assert.equal(indexHtml.includes("id=\"pluginUpdatePanel\""), true, "P0 workbench should expose plugin update entry");
+  assert.equal(indexHtml.includes("id=\"importPluginInput\""), true, "P3 workbench should expose local plugin import");
+  assert.equal(indexHtml.includes("id=\"pluginInstalledList\""), true, "P3 workbench should expose installed plugin lifecycle list");
+  assert.equal(indexHtml.includes("id=\"pluginCapabilityList\""), true, "P3 workbench should expose plugin capability discovery");
+  assert.equal(indexHtml.includes("id=\"pluginSecuritySummary\""), true, "P3 workbench should expose plugin mode isolation summary");
   assert.equal(indexHtml.includes("<details id=\"fileQueuePanel\""), true, "modern workbench should keep file queue collapsed by default");
   assert.equal(indexHtml.includes("<details id=\"bottomReportPanel\""), true, "modern workbench should keep reports and plugin metadata collapsed by default");
   assert.equal(indexHtml.includes("workspace-primary"), true, "modern workbench should expose a simple primary two-pane workflow");
@@ -74,6 +78,15 @@ try {
   assert.equal(appJs.includes("requestIdleCallback"), true, "preview rendering should be scheduled through idle callback when available");
   assert.equal(appJs.includes("readFileAsTextChunked"), true, "large text files should enter through chunked reading");
   assert.equal(appJs.includes("LARGE_FILE_PREVIEW_BYTES"), true, "large file preview policy should be explicit");
+  assert.equal(appJs.includes("WORKER_TRANSFERABLE_THRESHOLD_BYTES"), true, "P2 should define when large payloads move to Worker Transferable");
+  assert.equal(appJs.includes("buildWorkerPayload"), true, "P2 should prepare Worker payloads for transferable ArrayBuffer delivery");
+  assert.equal(appJs.includes("worker.postMessage({ id, payload: workerPayload }, transferList)"), true, "P2 should transfer ArrayBuffer ownership to the Worker");
+  assert.equal(appJs.includes("VIRTUAL_LIST_ITEM_LIMIT"), true, "P2 should virtualize long report and version lists");
+  assert.equal(appJs.includes("renderVirtualTextList"), true, "P2 should centralize virtual list rendering");
+  assert.equal(appJs.includes("LARGE_PROGRESSIVE_PREVIEW_BYTES"), true, "P2 should define a 50MB+ progressive preview threshold");
+  assert.equal(appJs.includes("LARGE_DEGRADED_PREVIEW_BYTES"), true, "P2 should define a 100MB+ degraded preview threshold");
+  assert.equal(appJs.includes("renderLargeDocumentPreview"), true, "P2 should render large-file summary/sample previews without full parse");
+  assert.equal(appJs.includes("releaseConversionResources"), true, "P2 should centralize Worker and ObjectURL lifecycle cleanup");
   assert.equal(appJs.includes("BINARY_INPUT_FORMATS"), true, "binary formats should avoid text decoding");
   assert.equal(appJs.includes("createQueueItem"), true, "main app should track queued files as reusable workbench state");
   assert.equal(appJs.includes("renderDocumentModelPanel"), true, "main app should render DocumentModel inspection");
@@ -83,6 +96,12 @@ try {
   assert.equal(appJs.includes("retryFailedQueueItems"), true, "main app should retry failed queued tasks");
   assert.equal(appJs.includes("showWorkbenchTab"), true, "main app should support narrow-screen workbench tabs");
   assert.equal(appJs.includes("setActiveWorkbenchTab"), true, "main app should keep a single active workbench view on desktop and mobile");
+  assert.equal(appJs.includes("TRUSTED_PLUGIN_CATALOG"), true, "P3 should expose a trusted GitHub Releases plugin catalog");
+  assert.equal(appJs.includes("importLocalPluginPackage"), true, "P3 should wire local plugin package import");
+  assert.equal(appJs.includes("openPluginRelease"), true, "P3 should keep plugin downloads in install mode");
+  assert.equal(appJs.includes("setPluginEnabled"), true, "P3 should support enable and disable lifecycle controls");
+  assert.equal(appJs.includes("rollbackPlugin"), true, "P3 should support rollback lifecycle controls");
+  assert.equal(appJs.includes("discoverPluginCapabilities"), true, "P3 should expose plugin capability discovery");
   assert.equal(appJs.includes("docx"), true, "main app should accept DOCX input");
   for (const format of ["xlsx", "epub", "pdf", "pptx"]) {
     assert.equal(appJs.includes(format), true, `main app should accept ${format.toUpperCase()} input`);
@@ -90,6 +109,8 @@ try {
 
   const workerJs = await fetchText(baseUrl, "/workers/convert-worker.js");
   assert.equal(workerJs.includes("postMessage"), true, "conversion worker should be served");
+  assert.equal(workerJs.includes("normalizeWorkerPayload"), true, "conversion worker should decode transferable ArrayBuffer payloads");
+  assert.equal(workerJs.includes("contentBuffer"), true, "conversion worker should accept transferred content buffers");
   for (const stage of ["read", "parse", "validate", "convert", "render", "package"]) {
     assert.equal(workerJs.includes(`stage: \"${stage}\"`), true, `conversion worker should emit ${stage} stage`);
   }

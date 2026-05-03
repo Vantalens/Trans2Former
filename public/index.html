@@ -118,6 +118,22 @@
                     <span>命名</span>
                     <input id="exportNamingInput" type="text" value="{name}.{ext}" />
                   </label>
+                  <label class="compact-field naming-field">
+                    <span>Markdown Profile</span>
+                    <select id="markdownProfileSelect">
+                      <option value="ai-ready" selected>AI-ready</option>
+                      <option value="human-readable">Human-readable</option>
+                      <option value="archive">Archive</option>
+                      <option value="strict-round-trip">Strict round-trip</option>
+                    </select>
+                  </label>
+                  <label class="toggle-label">
+                    <input id="persistHistoryCheckbox" type="checkbox" />
+                    关闭后保留版本历史
+                  </label>
+                  <div class="output-settings-actions">
+                    <button id="clearHistoryButton" class="mini-button" type="button">清除历史</button>
+                  </div>
                 </div>
               </details>
               <label class="toggle-label" for="autoPreviewCheckbox">
@@ -125,6 +141,14 @@
                 自动预览
               </label>
               <button id="refreshPreviewButton" class="ghost-button" type="button">刷新</button>
+              <label class="compact-field large-preview-field" hidden>
+                <span>大文件预览</span>
+                <select id="largePreviewModeSelect">
+                  <option value="structure" selected>结构</option>
+                  <option value="sample">抽样</option>
+                  <option value="full">全文</option>
+                </select>
+              </label>
             </div>
           </div>
 
@@ -154,6 +178,21 @@
                 <span>Output</span>
                 <button id="openPdfPreviewButton" class="mini-button" type="button">打开 PDF</button>
               </div>
+              <section id="outputEditorPanel" class="output-editor-panel" hidden>
+                <div class="output-editor-header">
+                  <div>
+                    <strong>Output Editor</strong>
+                    <span id="outputDraftMeta">等待转换</span>
+                  </div>
+                  <div class="output-editor-actions">
+                    <button id="outputCheckpointButton" class="mini-button" type="button" disabled>检查点</button>
+                    <button id="outputUndoButton" class="mini-button" type="button" disabled>撤销</button>
+                    <button id="outputRedoButton" class="mini-button" type="button" disabled>重做</button>
+                  </div>
+                </div>
+                <textarea id="outputEditor" spellcheck="false" placeholder="转换结果会显示在这里，可直接编辑文本输出" disabled></textarea>
+                <div id="outputPreviewNotice" class="output-preview-notice" hidden></div>
+              </section>
               <section id="errorDetailsPanel" class="error-details-panel" hidden aria-live="polite">
                 <div class="error-details-header">
                   <div>
@@ -174,7 +213,7 @@
                 </details>
               </section>
               <iframe id="pdfPreview" title="PDF 预览" class="preview-frame pdf-frame"></iframe>
-              <pre id="textOutputPreview" class="preview-frame text-output-preview"></pre>
+              <div id="textOutputPreview" class="preview-frame text-output-preview"></div>
             </article>
           </div>
 
@@ -185,7 +224,13 @@
             </summary>
             <div class="report-grid">
               <article id="warningsPanel" class="report-card">
-                <h2>Warnings</h2>
+                <div class="report-card-header">
+                  <h2>Warnings</h2>
+                  <div class="report-card-actions">
+                    <button id="resolveWarningsButton" class="mini-button" type="button">标记已处理</button>
+                    <button id="clearResolvedWarningsButton" class="mini-button" type="button">清除标记</button>
+                  </div>
+                </div>
                 <div id="warningsList" class="report-list">无</div>
               </article>
               <article id="qualityReportPanel" class="report-card">
@@ -201,12 +246,30 @@
                 <div id="versionsList" class="report-list">v0 等待初始转换</div>
               </article>
               <article id="pluginDownloadPanel" class="report-card">
-                <h2>Plugin Downloads</h2>
-                <div class="report-list">GitHub Releases install mode</div>
+                <div class="report-card-header">
+                  <h2>Plugin Downloads</h2>
+                  <div class="report-card-actions">
+                    <button id="importPluginButton" class="mini-button" type="button">导入本地插件包</button>
+                    <input id="importPluginInput" type="file" accept="application/json,.json" hidden />
+                  </div>
+                </div>
+                <div id="pluginDownloadList" class="report-list plugin-list">GitHub Releases install mode</div>
               </article>
               <article id="pluginUpdatePanel" class="report-card">
                 <h2>Plugin Updates</h2>
-                <div class="report-list">权限变化、资源预算和回滚入口</div>
+                <div id="pluginUpdateList" class="report-list plugin-list">权限变化、资源预算和回滚入口</div>
+              </article>
+              <article id="pluginInstalledPanel" class="report-card">
+                <h2>Installed Plugins</h2>
+                <div id="pluginInstalledList" class="report-list plugin-list">尚未导入本地插件包</div>
+              </article>
+              <article id="pluginCapabilityPanel" class="report-card">
+                <h2>Plugin Capabilities</h2>
+                <div id="pluginCapabilityList" class="report-list">尚无插件能力</div>
+              </article>
+              <article id="pluginSecurityPanel" class="report-card">
+                <h2>Plugin Security</h2>
+                <div id="pluginSecuritySummary" class="report-list">install mode / processing mode</div>
               </article>
             </div>
           </details>

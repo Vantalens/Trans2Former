@@ -26,6 +26,8 @@ http://localhost:3000
 
 当前 Node.js 服务只负责承载 Web 页面，转换逻辑在浏览器端执行。Tauri 桌面壳已建立 scaffold，并复用这套 Web-GUI 和转换核心。
 
+在输出面板的导出设置中，可以切换 Markdown profile、开启“关闭后保留版本历史”并使用“清除历史”入口删除本地保存的会话版本。
+
 浏览器自检页：
 
 ```text

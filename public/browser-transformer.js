@@ -172,6 +172,6 @@ export function renderPreviewHtml(content, fromFormat, title = "document") {
   return modelToBodyHtml(model);
 }
 
-export function convertContent({ content, from, to, title = "document", fileName = "" }) {
-  return registry.convert({ content, from, to, title, fileName });
+export function convertContent({ content, from, to, title = "document", fileName = "", options = {} }) {
+  return registry.convert({ content, from, to, title, fileName, options });
 }
