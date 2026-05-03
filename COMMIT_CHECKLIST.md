@@ -3,7 +3,8 @@
 ## 当前提交前检查
 
 - [ ] `npm install` 可完成依赖安装。
-- [ ] `npm test` 可通过浏览器端转换核心 smoke test。
+- [ ] `npm test` 可通过核心转换、浏览器工作台、桌面壳配置、本地安全、资源预算、插件安全和 release readiness 检查。
+- [ ] `npm run desktop:check` 可通过 Tauri scaffold 和最小权限边界检查。
 - [ ] `npm run release:prepare` 可生成本地 `release/trans2former-2.0.0/`。
 - [ ] `npm start` 可启动 Web 应用。
 - [ ] 浏览器可访问 `http://localhost:3000`。
@@ -18,6 +19,7 @@
 - [ ] 如果进行了动态分块转换，直接转换 vs 分块转换的 blocks、assets、warnings、metadata 和输出快照没有不可解释差异。
 - [ ] 如果进行了代码水平拆分，拆分前后样例、快照、warnings、assets 和错误分类没有退化。
 - [ ] README 与安装文档已说明当前 Web 应用是转换核心验证底座，目标产品为 Tauri 桌面 Web-GUI。
+- [ ] 若声明桌面应用可真实启动，已安装 Rust/Cargo 并运行 `npm run desktop:dev` 或等效 Tauri 启动验收。
 - [ ] 不引入 Office、LibreOffice、Pandoc 等本地办公软件依赖。
 - [ ] 不引入上传、遥测、远程转换、远程 OCR、远程转写、远程 AI 或分析 SDK。
 - [ ] 不把 PDF/OCR/Office/AI 等重依赖加入默认 dependencies 或核心路径。

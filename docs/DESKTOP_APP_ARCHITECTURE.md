@@ -134,10 +134,20 @@ Tauri + Web-GUI 是当前最合理的桌面路线。
 | 重格式 | 插件按需加载 |
 | 本地模型 | 手动安装、手动启用 |
 
+## P0 当前实现
+
+- 已建立 Tauri v2 scaffold：`src-tauri/tauri.conf.json`、`src-tauri/capabilities/default.json`、Rust entrypoint 和 `npm run desktop:check`。
+- 已声明最小权限边界：主窗口、打开/保存对话框、文件读写能力；不开放 shell、HTTP 或目录级扫描权限。
+- Web-GUI 已建立 P0 工作台骨架：文件队列、任务状态、批量选择、失败重试、输出目录提示、导出命名策略。
+- 主工作区已升级为 Input / DocumentModel / Output 三栏，窄屏使用 tabs。
+- 底部已建立 Warnings、Quality Report、Diff、Versions、Plugin Downloads 和 Plugin Updates 面板。
+- 顶部已建立 Plugin Manager 和 Security Center 入口。
+
 ## 当前不足
 
-- 还没有真正的 Tauri 桌面壳、桌面文件系统权限、输出目录选择、桌面打包和平台 smoke test。
-- 当前前端只是工作台基线，缺少成熟 PC 软件应有的文件队列、任务中心、底部报告面板、可停靠/可折叠布局、版本历史、插件管理和安全中心。
+- 本机尚未安装 Rust/Cargo 时不能真实启动 Tauri 桌面壳；当前只能通过 `desktop:check` 验证 scaffold 和权限配置。
+- 当前文件队列是 P0 交互骨架，批量转换调度、队列持久化和桌面原生保存仍需后续增强。
+- 底部报告面板是基础信息承载，warnings resolved、可交互 diff 和 session checkpoint 进入 P1。
 - 输出编辑器、实时预览同步、undo/redo、checkpoint、version diff、warnings resolved 状态尚未完成。
 - 大文件能力还停在入口基线，Worker Transferable、虚拟滚动、渐进预览、大文件降级预览、Asset lazy-load 和生命周期专项测试还没落地。
 - 插件系统仍偏策略层，缺少可用的安装、导入、启用、禁用、卸载、回滚和沙箱运行时。

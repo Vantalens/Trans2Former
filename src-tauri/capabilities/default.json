@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main Trans2Former window can open user-selected files and save explicit exports without shell, HTTP, or directory-wide access.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:read-files",
+    "fs:write-files"
+  ]
+}

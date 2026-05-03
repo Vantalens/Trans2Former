@@ -26,6 +26,30 @@ try {
   assert.equal(indexHtml.includes("id=\"copyErrorDiagnosticsButton\""), true, "main app should expose sanitized diagnostics copy control");
   assert.equal(indexHtml.includes("id=\"conversionProgress\""), true, "main app should expose conversion progress element");
   assert.equal(indexHtml.includes("id=\"progressStage\""), true, "main app should expose progress stage label");
+  assert.equal(indexHtml.includes("id=\"fileQueuePanel\""), true, "P0 workbench should expose file queue panel");
+  assert.equal(indexHtml.includes("id=\"selectAllQueueButton\""), true, "P0 workbench should expose batch selection");
+  assert.equal(indexHtml.includes("id=\"retryFailedButton\""), true, "P0 workbench should expose failed task retry");
+  assert.equal(indexHtml.includes("id=\"outputDirectoryButton\""), true, "P0 workbench should expose output directory chooser");
+  assert.equal(indexHtml.includes("id=\"exportNamingInput\""), true, "P0 workbench should expose export naming strategy");
+  assert.equal(indexHtml.includes("id=\"inputPreviewPanel\""), true, "P0 workbench should expose input preview pane");
+  assert.equal(indexHtml.includes("id=\"documentModelPanel\""), true, "P0 workbench should expose DocumentModel pane");
+  assert.equal(indexHtml.includes("id=\"outputPreviewPanel\""), true, "P0 workbench should expose output preview pane");
+  assert.equal(indexHtml.includes("id=\"workbenchTabs\""), true, "P0 workbench should expose narrow-screen tabs");
+  assert.equal(indexHtml.includes("id=\"bottomReportPanel\""), true, "P0 workbench should expose bottom report panel");
+  assert.equal(indexHtml.includes("id=\"warningsPanel\""), true, "P0 workbench should expose warnings panel");
+  assert.equal(indexHtml.includes("id=\"qualityReportPanel\""), true, "P0 workbench should expose quality report panel");
+  assert.equal(indexHtml.includes("id=\"diffPanel\""), true, "P0 workbench should expose diff panel");
+  assert.equal(indexHtml.includes("id=\"versionsPanel\""), true, "P0 workbench should expose versions panel");
+  assert.equal(indexHtml.includes("id=\"pluginManagerButton\""), true, "P0 workbench should expose plugin manager entry");
+  assert.equal(indexHtml.includes("id=\"securityCenterButton\""), true, "P0 workbench should expose security center entry");
+  assert.equal(indexHtml.includes("id=\"pluginDownloadPanel\""), true, "P0 workbench should expose plugin download entry");
+  assert.equal(indexHtml.includes("id=\"pluginUpdatePanel\""), true, "P0 workbench should expose plugin update entry");
+  assert.equal(indexHtml.includes("<details id=\"fileQueuePanel\""), true, "modern workbench should keep file queue collapsed by default");
+  assert.equal(indexHtml.includes("<details id=\"bottomReportPanel\""), true, "modern workbench should keep reports and plugin metadata collapsed by default");
+  assert.equal(indexHtml.includes("workspace-primary"), true, "modern workbench should expose a simple primary two-pane workflow");
+  assert.equal(indexHtml.includes("class=\"auxiliary-actions\""), true, "modern workbench should group secondary actions away from the primary command path");
+  assert.equal(indexHtml.includes("class=\"output-settings\""), true, "modern workbench should keep export settings behind disclosure");
+  assert.equal(indexHtml.includes("class=\"viewer-grid single-view\""), true, "modern workbench should show one right-side work view at a time");
 
   const smokeHtml = await fetchText(baseUrl, "/smoke-test.html");
   assert.equal(smokeHtml.includes("Trans2Former Browser Smoke Test"), true);
@@ -51,6 +75,14 @@ try {
   assert.equal(appJs.includes("readFileAsTextChunked"), true, "large text files should enter through chunked reading");
   assert.equal(appJs.includes("LARGE_FILE_PREVIEW_BYTES"), true, "large file preview policy should be explicit");
   assert.equal(appJs.includes("BINARY_INPUT_FORMATS"), true, "binary formats should avoid text decoding");
+  assert.equal(appJs.includes("createQueueItem"), true, "main app should track queued files as reusable workbench state");
+  assert.equal(appJs.includes("renderDocumentModelPanel"), true, "main app should render DocumentModel inspection");
+  assert.equal(appJs.includes("renderBottomReports"), true, "main app should render warnings, quality, diff, and versions");
+  assert.equal(appJs.includes("chooseOutputDirectory"), true, "main app should expose explicit output directory selection");
+  assert.equal(appJs.includes("buildExportFileName"), true, "main app should apply export naming strategy");
+  assert.equal(appJs.includes("retryFailedQueueItems"), true, "main app should retry failed queued tasks");
+  assert.equal(appJs.includes("showWorkbenchTab"), true, "main app should support narrow-screen workbench tabs");
+  assert.equal(appJs.includes("setActiveWorkbenchTab"), true, "main app should keep a single active workbench view on desktop and mobile");
   assert.equal(appJs.includes("docx"), true, "main app should accept DOCX input");
   for (const format of ["xlsx", "epub", "pdf", "pptx"]) {
     assert.equal(appJs.includes(format), true, `main app should accept ${format.toUpperCase()} input`);

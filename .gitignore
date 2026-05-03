@@ -11,6 +11,7 @@ coverage/
 .cache/
 .parcel-cache/
 .vite/
+/src-tauri/target/
 
 # Legacy desktop/package artifacts
 *.exe

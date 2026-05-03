@@ -104,7 +104,7 @@ src/
 npm test
 ```
 
-当前测试包括核心转换 smoke、转换快照、浏览器自检静态服务检查、本地安全 smoke test、资源预算 smoke test。
+当前测试包括核心转换 smoke、转换快照、浏览器自检静态服务检查、Tauri 桌面壳配置检查、本地安全 smoke test、资源预算 smoke test、插件安全 test 和 release readiness test。
 
 ## PPTX 方向
 

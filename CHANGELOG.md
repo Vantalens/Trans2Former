@@ -59,6 +59,11 @@
 - Tauri + Web-GUI 选择判断、现代桌面体验目标和当前不足已合并到 `docs/DESKTOP_APP_ARCHITECTURE.md`。
 - 新增 `samples/ofd/README.md`，作为 OFD-L0 公开样例登记入口。
 - 新增 `docs/PLUGIN_DISTRIBUTION.md`，确定插件下载默认跳转 GitHub Releases，并要求浏览器端和桌面端保留下载板块与更新板块。
+- 新增 P0 桌面 Web-GUI 工作台 MVP：文件队列、批量选择、失败重试、输出目录提示、导出命名策略、Input / DocumentModel / Output 三栏、窄屏 tabs、底部 Warnings / Quality Report / Diff / Versions 面板、Plugin Manager / Security Center 入口。
+- 新增 Tauri v2 桌面壳 scaffold：`src-tauri/`、CSP、主窗口配置和最小 dialog/fs 权限边界。
+- 新增 `public/core/workbench-state.js` 和 `scripts/desktop-shell-test.js`，覆盖工作台状态复用与桌面壳配置检查。
+- 新增现代化简洁工作台布局：高级队列、导出设置、质量报告和插件信息默认折叠，右侧预览区改为单视图 tabs，减少首屏信息噪音。
+- P0 桌面启动验收通过：Rust/Cargo 与 Visual Studio Build Tools 环境下，`npm run desktop:dev` 可编译并运行到 `target\debug\trans2former.exe`。
 
 ### 变更
 
@@ -72,6 +77,8 @@
 - 格式路线删除 URL / YouTube / Audio transcription 主线，ZIP 降级为容器基础设施。
 - 浏览器主界面从 demo 风格调整为专业转换工作台风格。
 - 浏览器主界面从三栏说明型工作台重建为响应式用户端工具界面。
+- 浏览器主界面升级为桌面工作台骨架，转换核心继续通过 `DocumentModel` 和 Worker 复用，保持浏览器 smoke test 可运行。
+- 浏览器主界面从密集工程面板调整为更简洁的两栏工作流，默认聚焦文件、转换、预览和导出。
 - 前端字体栈调整为 Claude 风格优先级，保持现有配色不变。
 - Markdown 解析增强：支持有序列表、嵌套层级提示、表格对齐、脚注引用和脚注降级 warning。
 - CSV 解析增强：支持 BOM、引号内逗号、引号内换行、空单元格、CRLF/LF 混合换行。

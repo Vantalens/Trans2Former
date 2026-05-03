@@ -4,8 +4,14 @@ import {
   getFormatCapabilities,
   getOutputExtension,
   renderPreviewHtml,
+  toDocumentModel,
 } from "./browser-transformer.js";
 import { normalizeConversionError } from "./core/conversion-error.js";
+import {
+  buildExportFileName as buildWorkbenchExportFileName,
+  createQueueItem as createWorkbenchQueueItem,
+  summarizeQualityReport,
+} from "./core/workbench-state.js";
 
 const inputContent = document.getElementById("inputContent");
 const fileInput = document.getElementById("fileInput");
@@ -35,6 +41,19 @@ const progressStage = document.getElementById("progressStage");
 const progressPercent = document.getElementById("progressPercent");
 const progressFill = document.getElementById("progressFill");
 const loadSampleButton = document.getElementById("loadSampleButton");
+const fileQueueList = document.getElementById("fileQueueList");
+const selectAllQueueButton = document.getElementById("selectAllQueueButton");
+const retryFailedButton = document.getElementById("retryFailedButton");
+const outputDirectoryButton = document.getElementById("outputDirectoryButton");
+const exportNamingInput = document.getElementById("exportNamingInput");
+const documentModelPreview = document.getElementById("documentModelPreview");
+const warningsList = document.getElementById("warningsList");
+const qualityReportList = document.getElementById("qualityReportList");
+const diffSummary = document.getElementById("diffSummary");
+const versionsList = document.getElementById("versionsList");
+const pluginManagerButton = document.getElementById("pluginManagerButton");
+const securityCenterButton = document.getElementById("securityCenterButton");
+const workbenchTabs = document.getElementById("workbenchTabs");
 const wordCountEl = document.getElementById("wordCount");
 const lineCountEl = document.getElementById("lineCount");
 const fromFormatSelect = document.getElementById("fromFormatSelect");
@@ -72,6 +91,10 @@ let convertWorker = null;
 let convertJobSeq = 0;
 let activeConversion = null;
 let lastErrorDiagnostics = null;
+let fileQueue = [];
+let activeQueueItemId = "";
+let outputDirectoryLabel = "浏览器下载目录";
+let sessionVersions = [];
 
 const PREVIEW_DEBOUNCE_MS = 300;
 const LARGE_DOC_THRESHOLD = 12000;
@@ -125,6 +148,199 @@ function setFileMeta(message) {
 
 function setOutputMeta(message) {
   outputMeta.textContent = message;
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) {
+    return "0 B";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function createQueueItem(file, detectedFormat) {
+  return createWorkbenchQueueItem(file, detectedFormat);
+}
+
+function getActiveQueueItem() {
+  return fileQueue.find((item) => item.id === activeQueueItemId) || null;
+}
+
+function updateActiveQueueItem(patch) {
+  const item = getActiveQueueItem();
+  if (!item) {
+    return;
+  }
+  Object.assign(item, patch);
+  renderFileQueue();
+}
+
+function renderFileQueue() {
+  if (!fileQueueList) {
+    return;
+  }
+  if (!fileQueue.length) {
+    fileQueueList.innerHTML = '<div class="queue-empty">暂无队列文件</div>';
+    return;
+  }
+
+  fileQueueList.replaceChildren(...fileQueue.map((item) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `queue-item${item.id === activeQueueItemId ? " is-active" : ""}`;
+    row.dataset.queueId = item.id;
+    const check = document.createElement("span");
+    check.className = "queue-check";
+    check.textContent = item.selected ? "✓" : "";
+    const name = document.createElement("span");
+    name.className = "queue-name";
+    name.textContent = item.name;
+    const meta = document.createElement("span");
+    meta.className = "queue-meta";
+    meta.textContent = `${item.format || "?"} · ${formatFileSize(item.size)}`;
+    const status = document.createElement("span");
+    status.className = "queue-status";
+    status.dataset.status = item.status;
+    status.textContent = item.status;
+    row.append(check, name, meta, status);
+    row.addEventListener("click", () => {
+      activeQueueItemId = item.id;
+      renderFileQueue();
+    });
+    return row;
+  }));
+}
+
+function registerQueuedFile(file, detectedFormat) {
+  const existing = fileQueue.find((item) => item.name === file.name && item.size === file.size);
+  if (existing) {
+    activeQueueItemId = existing.id;
+    existing.selected = true;
+    existing.format = detectedFormat || existing.format;
+    renderFileQueue();
+    return existing;
+  }
+  const item = createQueueItem(file, detectedFormat);
+  fileQueue.push(item);
+  activeQueueItemId = item.id;
+  renderFileQueue();
+  return item;
+}
+
+function selectAllQueueItems() {
+  const shouldSelect = fileQueue.some((item) => !item.selected);
+  fileQueue = fileQueue.map((item) => ({ ...item, selected: shouldSelect }));
+  renderFileQueue();
+}
+
+function retryFailedQueueItems() {
+  let retries = 0;
+  fileQueue = fileQueue.map((item) => {
+    if (item.status !== "failed") {
+      return item;
+    }
+    retries += 1;
+    return { ...item, selected: true, status: "queued", error: "" };
+  });
+  renderFileQueue();
+  setStatus(retries ? `已将 ${retries} 个失败任务放回队列` : "没有失败任务可重试", retries ? "success" : "info");
+}
+
+async function chooseOutputDirectory() {
+  if (window.showDirectoryPicker) {
+    const directory = await window.showDirectoryPicker({ mode: "readwrite" });
+    outputDirectoryLabel = directory.name || "已选择目录";
+    setStatus(`输出目录：${outputDirectoryLabel}`, "success");
+    return;
+  }
+  outputDirectoryLabel = "浏览器默认下载目录";
+  setStatus("当前环境不支持目录授权，将使用浏览器下载目录", "info");
+}
+
+function buildExportFileName(extension) {
+  return buildWorkbenchExportFileName({
+    pattern: exportNamingInput.value,
+    baseName: currentFileName,
+    extension,
+  });
+}
+
+function renderDocumentModelPanel(model = null) {
+  if (!documentModelPreview) {
+    return;
+  }
+  if (!model) {
+    documentModelPreview.textContent = "等待输入结构";
+    return;
+  }
+  documentModelPreview.textContent = JSON.stringify({
+    schemaVersion: model.schemaVersion,
+    title: model.title,
+    blocks: model.blocks,
+    assets: model.assets,
+    metadata: model.metadata,
+  }, null, 2);
+}
+
+function renderBottomReports(model = null, output = "") {
+  if (!warningsList || !qualityReportList || !diffSummary || !versionsList) {
+    return;
+  }
+  if (!model) {
+    warningsList.textContent = "无";
+    qualityReportList.textContent = "等待转换";
+    diffSummary.textContent = "尚无版本差异";
+    versionsList.textContent = sessionVersions.length ? sessionVersions.map((item) => item.label).join("\n") : "v0 等待初始转换";
+    return;
+  }
+
+  const warnings = model.metadata?.warnings || [];
+  warningsList.textContent = warnings.length
+    ? warnings.map((warning) => `${warning.severity || "info"} · ${warning.code}: ${warning.message}`).join("\n")
+    : "无";
+
+  const quality = summarizeQualityReport(model);
+  qualityReportList.textContent = [
+    `warnings: ${quality.warningCount}`,
+    `structure: ${quality.structureFidelity}`,
+    `asset: ${quality.assetFidelity}`,
+    `text: ${quality.textFidelity}`,
+  ].join("\n");
+
+  const previous = sessionVersions.at(-1);
+  diffSummary.textContent = previous
+    ? `v${sessionVersions.length - 1} -> v${sessionVersions.length}: ${Math.abs(String(output).length - previous.outputLength)} chars`
+    : "初始转换结果";
+  versionsList.textContent = sessionVersions.map((item) => `${item.label} · ${item.outputLength} chars`).join("\n") || "v0 等待初始转换";
+}
+
+function addSessionVersion(output) {
+  sessionVersions.push({
+    label: `v${sessionVersions.length}`,
+    outputLength: String(output || "").length,
+    createdAt: new Date().toLocaleTimeString(),
+  });
+  if (sessionVersions.length > 8) {
+    sessionVersions = sessionVersions.slice(-8);
+  }
+}
+
+function setActiveWorkbenchTab(panelId) {
+  document.querySelectorAll(".workbench-panel").forEach((panel) => {
+    panel.classList.toggle("is-active", panel.id === panelId);
+  });
+  document.querySelectorAll(".tab-button").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.tabTarget === panelId);
+  });
+}
+
+function showWorkbenchTab(panelId) {
+  setActiveWorkbenchTab(panelId);
 }
 
 function updateConversionProgress({ stage = "idle", progress = 0, message = "" } = {}) {
@@ -296,8 +512,11 @@ function renderPreview() {
   }
 
   setStatus("正在浏览器端渲染预览...");
-  const bodyHtml = renderPreviewHtml(inputContent.value, fromFormatSelect.value);
+  const model = toDocumentModel(inputContent.value, fromFormatSelect.value, currentFileName);
+  const bodyHtml = renderPreviewHtml(inputContent.value, fromFormatSelect.value, currentFileName);
   htmlPreview.innerHTML = bodyHtml;
+  renderDocumentModelPanel(model);
+  renderBottomReports(model);
   lastRenderedPayload = payloadKey;
   setStatus(`浏览器端预览已更新 (${Date.now() - renderStart}ms)`, "success");
 }
@@ -331,6 +550,8 @@ async function handleInputText(rawContent, fileName = currentFileName, { renderI
   inputContent.value = rawContent;
   setFileMeta(fileName);
   resetGeneratedOutput();
+  renderDocumentModelPanel(null);
+  renderBottomReports(null);
   lastRenderedPayload = "";
   clearErrorDetails();
   updateWordCount();
@@ -385,12 +606,17 @@ async function handleFile(file) {
   }
 
   try {
+    const queueItem = registerQueuedFile(file, detectedFormat);
+    Object.assign(queueItem, { status: "reading", attempts: queueItem.attempts + 1, error: "" });
+    renderFileQueue();
     const content = BINARY_INPUT_FORMATS.has(detectedFormat) ? await readFileAsDataUrl(file) : await readFileAsTextChunked(file);
     fromFormatSelect.value = detectedFormat;
+    updateActiveQueueItem({ status: "ready" });
     await handleInputText(content, file.name, {
       renderInitialPreview: BINARY_INPUT_FORMATS.has(detectedFormat) || file.size < LARGE_FILE_PREVIEW_BYTES,
     });
   } catch (error) {
+    updateActiveQueueItem({ status: "failed", error: error.message });
     setStatus(error.message, "error");
   }
 }
@@ -489,12 +715,15 @@ async function transformContent() {
   try {
     const title = getBaseName(currentFileName);
     const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName });
-    const baseName = getBaseName(currentFileName);
+    const model = toDocumentModel(content, from, currentFileName);
+    renderDocumentModelPanel(model);
+    renderBottomReports(model, result.data);
+    addSessionVersion(result.data);
 
     if (result.type === "binary") {
       const outputUrl = createBinaryDownloadUrl(result.data, result.mime);
       downloadOutputButton.href = outputUrl;
-      downloadOutputButton.download = `${baseName}.${getOutputExtension(result.format)}`;
+      downloadOutputButton.download = buildExportFileName(getOutputExtension(result.format));
       downloadOutputButton.textContent = "下载二进制输出";
       textOutputPreview.textContent = `已生成 ${result.format.toUpperCase()} 二进制输出，可直接下载。`;
       if (result.format === "pdf") {
@@ -504,8 +733,9 @@ async function transformContent() {
         updateOutputPreviewVisibility(false);
       }
       updateDownloadState(true);
-      setOutputMeta(`二进制输出已生成 · ${result.mime}`);
+      setOutputMeta(`二进制输出已生成 · ${result.mime} · ${outputDirectoryLabel}`);
       updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
+      updateActiveQueueItem({ status: "done" });
       setStatus("浏览器端本地二进制转换成功", "success");
       return;
     }
@@ -516,13 +746,14 @@ async function transformContent() {
       pdfPreview.src = previewUrl;
 
       downloadOutputButton.href = previewUrl;
-      downloadOutputButton.download = `${baseName}.print.html`;
+      downloadOutputButton.download = buildExportFileName("print.html");
       downloadOutputButton.textContent = "下载打印版 HTML";
 
       updateOutputPreviewVisibility(true);
       updateDownloadState(true);
-      setOutputMeta("已生成浏览器打印页面");
+      setOutputMeta(`已生成浏览器打印页面 · ${outputDirectoryLabel}`);
       updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
+      updateActiveQueueItem({ status: "done" });
       setStatus("已生成打印页面，可用浏览器另存为 PDF", "success");
       return;
     }
@@ -530,19 +761,21 @@ async function transformContent() {
     textOutputPreview.textContent = result.data;
     const outputUrl = createDownloadUrl(result.data, result.mime);
     downloadOutputButton.href = outputUrl;
-    downloadOutputButton.download = `${baseName}.${getOutputExtension(result.format)}`;
+    downloadOutputButton.download = buildExportFileName(getOutputExtension(result.format));
     downloadOutputButton.textContent = "下载输出";
 
     updateOutputPreviewVisibility(false);
     updateDownloadState(true);
-    setOutputMeta(`文本输出已生成 · ${result.data.length} chars`);
+    setOutputMeta(`文本输出已生成 · ${result.data.length} chars · ${outputDirectoryLabel}`);
     updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
+    updateActiveQueueItem({ status: "done" });
     setStatus("浏览器端转换成功", "success");
   } catch (error) {
     if (error.message === "转换已取消") {
       updateConversionProgress({ stage: "canceled", progress: 0, message: "转换已取消" });
       setStatus("转换已取消", "info");
     } else {
+      updateActiveQueueItem({ status: "failed", error: error.message });
       renderErrorDetails(error);
       updateConversionProgress({ stage: "error", progress: 0, message: "转换失败" });
       setStatus(error.message, "error");
@@ -577,8 +810,14 @@ function printCurrentPdf() {
 }
 
 fileInput.addEventListener("change", (event) => {
-  const [file] = event.target.files || [];
-  handleFile(file);
+  const files = [...event.target.files || []];
+  files.forEach((file, index) => {
+    if (index === 0) {
+      handleFile(file);
+      return;
+    }
+    registerQueuedFile(file, detectFormatFromName(file.name));
+  });
 });
 
 inputContent.addEventListener("input", () => {
@@ -638,11 +877,35 @@ dropZone.addEventListener("dragleave", () => {
 dropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   dropZone.classList.remove("is-active");
-  const [file] = event.dataTransfer.files || [];
-  handleFile(file);
+  const files = [...event.dataTransfer.files || []];
+  files.forEach((file, index) => {
+    if (index === 0) {
+      handleFile(file);
+      return;
+    }
+    registerQueuedFile(file, detectFormatFromName(file.name));
+  });
 });
 
 transformButton.addEventListener("click", transformContent);
+selectAllQueueButton.addEventListener("click", selectAllQueueItems);
+retryFailedButton.addEventListener("click", retryFailedQueueItems);
+outputDirectoryButton.addEventListener("click", () => {
+  chooseOutputDirectory().catch((error) => setStatus(error.message, "error"));
+});
+pluginManagerButton.addEventListener("click", () => {
+  setStatus("插件管理入口已就绪，下载和更新面板位于底部", "info");
+  document.getElementById("pluginDownloadPanel")?.scrollIntoView({ block: "nearest" });
+});
+securityCenterButton.addEventListener("click", () => {
+  setStatus("local-only · 文档处理阶段禁联网 · 历史默认不落盘", "success");
+});
+workbenchTabs.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-tab-target]");
+  if (button) {
+    showWorkbenchTab(button.dataset.tabTarget);
+  }
+});
 copyErrorDiagnosticsButton.addEventListener("click", () => {
   copyErrorDiagnostics().catch((error) => setStatus(error.message, "error"));
 });
@@ -678,6 +941,18 @@ function bootstrapInitialSample() {
   currentFileName = "sample.md";
   inputContent.value = sampleMarkdown;
   setFileMeta("sample.md");
+  fileQueue = [{
+    id: "sample",
+    name: "sample.md",
+    size: sampleMarkdown.length,
+    format: "md",
+    selected: true,
+    status: "ready",
+    attempts: 0,
+    error: "",
+  }];
+  activeQueueItemId = "sample";
+  renderFileQueue();
   updateOutputPreviewVisibility(false);
   resetGeneratedOutput();
   lastRenderedPayload = "";

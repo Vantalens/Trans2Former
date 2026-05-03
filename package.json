@@ -8,7 +8,10 @@
     "start": "node src/server.js",
     "web": "node src/server.js",
     "release:prepare": "node scripts/prepare-release.js",
-    "test": "node scripts/smoke-test.js && node scripts/conversion-snapshot-test.js && node scripts/browser-smoke-test.js && node scripts/local-security-test.js && node scripts/resource-budget-test.js && node scripts/plugin-security-test.js && node scripts/release-readiness-test.js"
+    "desktop:check": "node scripts/desktop-shell-test.js",
+    "desktop:dev": "npm exec @tauri-apps/cli -- dev",
+    "desktop:build": "npm exec @tauri-apps/cli -- build",
+    "test": "node scripts/smoke-test.js && node scripts/conversion-snapshot-test.js && node scripts/browser-smoke-test.js && node scripts/desktop-shell-test.js && node scripts/local-security-test.js && node scripts/resource-budget-test.js && node scripts/plugin-security-test.js && node scripts/release-readiness-test.js"
   },
   "keywords": [
     "converter",

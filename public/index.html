@@ -14,7 +14,7 @@
           <div class="brand-mark" aria-hidden="true">T2F</div>
           <div>
             <h1>Trans2Former</h1>
-            <span>本地文档转换</span>
+            <span>Local document studio</span>
           </div>
         </div>
 
@@ -38,26 +38,35 @@
         </div>
 
         <div class="topbar-actions">
-          <div id="statusText" class="status-chip">就绪</div>
           <button id="transformButton" class="primary-button" type="button">转换</button>
           <button id="cancelTransformButton" class="ghost-button" type="button" disabled hidden>取消</button>
           <a id="downloadOutputButton" class="ghost-button disabled" href="#" download>下载</a>
+          <details class="auxiliary-actions">
+            <summary aria-label="更多操作">更多</summary>
+            <div class="auxiliary-menu">
+              <button id="pluginManagerButton" class="menu-button" type="button">插件管理</button>
+              <button id="securityCenterButton" class="menu-button" type="button">安全中心</button>
+              <button id="outputDirectoryButton" class="menu-button" type="button">输出目录</button>
+            </div>
+          </details>
         </div>
       </header>
 
       <section id="conversionProgress" class="progress-bar" data-state="idle" aria-live="polite">
         <span id="progressStage">待命</span>
+        <span id="statusText" class="status-chip">就绪</span>
         <div class="progress-track" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div>
         <span id="progressPercent">0%</span>
       </section>
 
-      <main class="workspace">
+      <main class="workspace workspace-primary">
         <section class="source-pane">
           <div class="upload-row">
             <label id="dropZone" class="drop-zone" for="fileInput">
               <input
                 id="fileInput"
                 type="file"
+                multiple
                 accept=".md,.markdown,.html,.htm,.txt,.json,.csv,.xml,.png,.docx,.xlsx,.epub,.pdf,.pptx,text/markdown,text/html,text/plain,application/json,text/csv,application/xml,text/xml,image/png,application/pdf"
                 hidden
               />
@@ -69,6 +78,20 @@
             </label>
             <button id="loadSampleButton" class="ghost-button" type="button">示例</button>
           </div>
+
+          <details id="fileQueuePanel" class="queue-panel" aria-label="文件队列">
+            <summary>
+              <span>文件队列</span>
+              <small>批量任务与失败重试</small>
+            </summary>
+            <div class="queue-header">
+              <div class="queue-actions">
+                <button id="selectAllQueueButton" class="mini-button" type="button">全选</button>
+                <button id="retryFailedButton" class="mini-button" type="button">重试失败</button>
+              </div>
+            </div>
+            <div id="fileQueueList" class="queue-list"></div>
+          </details>
 
           <div class="editor-toolbar">
             <div id="formatCapabilityNote" class="format-note">本地处理</div>
@@ -88,6 +111,15 @@
               <span id="outputMeta">未生成</span>
             </div>
             <div class="preview-actions">
+              <details class="output-settings">
+                <summary>导出设置</summary>
+                <div class="output-settings-panel">
+                  <label class="compact-field naming-field">
+                    <span>命名</span>
+                    <input id="exportNamingInput" type="text" value="{name}.{ext}" />
+                  </label>
+                </div>
+              </details>
               <label class="toggle-label" for="autoPreviewCheckbox">
                 <input id="autoPreviewCheckbox" type="checkbox" />
                 自动预览
@@ -96,17 +128,30 @@
             </div>
           </div>
 
-          <div class="viewer-grid">
-            <article class="viewer-card">
+          <nav id="workbenchTabs" class="workbench-tabs" aria-label="工作台视图">
+            <button class="tab-button is-active" type="button" data-tab-target="inputPreviewPanel">输入</button>
+            <button class="tab-button" type="button" data-tab-target="documentModelPanel">结构</button>
+            <button class="tab-button" type="button" data-tab-target="outputPreviewPanel">输出</button>
+          </nav>
+
+          <div class="viewer-grid single-view">
+            <article id="inputPreviewPanel" class="viewer-card workbench-panel is-active">
               <div class="viewer-card-header">
-                <span>标准化内容</span>
+                <span>Input</span>
               </div>
               <div id="htmlPreview" class="preview-frame preview-markdown" aria-label="标准化预览"></div>
             </article>
 
-            <article class="viewer-card">
+            <article id="documentModelPanel" class="viewer-card workbench-panel">
               <div class="viewer-card-header">
-                <span>输出查看</span>
+                <span>DocumentModel</span>
+              </div>
+              <pre id="documentModelPreview" class="preview-frame text-output-preview"></pre>
+            </article>
+
+            <article id="outputPreviewPanel" class="viewer-card workbench-panel">
+              <div class="viewer-card-header">
+                <span>Output</span>
                 <button id="openPdfPreviewButton" class="mini-button" type="button">打开 PDF</button>
               </div>
               <section id="errorDetailsPanel" class="error-details-panel" hidden aria-live="polite">
@@ -132,6 +177,39 @@
               <pre id="textOutputPreview" class="preview-frame text-output-preview"></pre>
             </article>
           </div>
+
+          <details id="bottomReportPanel" class="bottom-report-panel" aria-label="报告面板">
+            <summary>
+              <span>质量、版本与插件</span>
+              <small>Warnings / Quality / Diff / Versions / Plugins</small>
+            </summary>
+            <div class="report-grid">
+              <article id="warningsPanel" class="report-card">
+                <h2>Warnings</h2>
+                <div id="warningsList" class="report-list">无</div>
+              </article>
+              <article id="qualityReportPanel" class="report-card">
+                <h2>Quality Report</h2>
+                <div id="qualityReportList" class="report-list">等待转换</div>
+              </article>
+              <article id="diffPanel" class="report-card">
+                <h2>Diff</h2>
+                <div id="diffSummary" class="report-list">尚无版本差异</div>
+              </article>
+              <article id="versionsPanel" class="report-card">
+                <h2>Versions</h2>
+                <div id="versionsList" class="report-list">v0 等待初始转换</div>
+              </article>
+              <article id="pluginDownloadPanel" class="report-card">
+                <h2>Plugin Downloads</h2>
+                <div class="report-list">GitHub Releases install mode</div>
+              </article>
+              <article id="pluginUpdatePanel" class="report-card">
+                <h2>Plugin Updates</h2>
+                <div class="report-list">权限变化、资源预算和回滚入口</div>
+              </article>
+            </div>
+          </details>
         </section>
       </main>
     </div>
