@@ -44,6 +44,7 @@ Trans2Former 当前产品方向正式收敛为：
 
 ## 最近验收修复
 
+- 2026-05-12：P8-M6 fixtures 扩展 + SSIM 视觉对比框架。扩展 samples 到 50+ 个程序化生成样例，覆盖中英文、RTL文本、复杂表格、代码示例等场景。新增 scripts/visual-comparison-test.js 框架和 docs/VISUAL_COMPARISON_PLAN.md 实现计划，定义 SSIM 测试配置、接口和两种实现方案（使用库 vs 自实现）。修复 PDF 高保真输出坐标计算错误（dx 计算）和转换开始时标签页状态问题。改进按钮可访问性（添加 title 属性）。生成 release 包（5.1MB）。所有 44 个测试组通过。P8 阶段 100% 完成，P7 核心准备就绪。
 - 2026-05-12：P8-M4 高保真 PDF 输出双路实现。新增 public/formats/pdf-output-high-fidelity.js，直接消费 FixedLayoutModel，按 textRun.bbox 精确定位每个文本片段，保留原始坐标、字体、尺寸和 annotations。pdf-output.js 升级为智能路由：优先使用高保真路径（FixedLayoutModel → 精确坐标重现），回落到程序化路径（SemanticDoc → 重新排版）。Producer 标记区分 High-Fidelity vs 普通 Trans2Former。新增 P8-M4 测试验证 FixedLayoutModel 坐标保留和 PDF round-trip 高保真路径。所有 44 个测试组通过。
 - 2026-05-12：P8-M7 结构化 inline 节点 + 公式/合并单元格保留。DOCX reader 新增 extractInlinesFromParagraph 和 extractRunInlines，识别 hyperlink、bold/italic/del/code 属性，输出 strong/em/del/code/link inline 节点，链接不再降级为 "文本 (URL)" 字符串。PDF reader 新增 itemsToInlines，从 PDF.js textContent.items 提取 fontName 识别 bold/italic。XLSX writer 新增 extractCachedValue 单独提取公式缓存值，sheetXml 从 WorkbookModel.formulas 回写 `<f>expression</f><v>cachedValue</v>`，从 WorkbookModel.merges 回写 `<mergeCells>` 节点，xlsx → xlsx round-trip 保留公式表达式和合并单元格范围。新增 P9-C 和 P9-B 测试，所有 43 个测试组通过。新增 public/core/models/mappers.js 实现跨模型 mapper（workbookToSemantic / semanticToWorkbook / slideToSemantic / semanticToSlide / fixedLayoutToSemantic / semanticToFixedLayout）。
 - 2026-05-12：工作台 UI 重构为双栏主区 + 底部抽屉。原右侧 utility-pane（9 张 report-card 高低不平）整体并入底部 `<details>` 抽屉，内部三个 tab（质量 / 插件 / 版本）以 `auto-fill minmax(260px,1fr)` 控宽度。顶栏新增紧凑进度组件（status chip + 细条 + %），独立进度条行删除。插件 / 安全入口统一走顶栏"更多"菜单，点击自动展开抽屉、切到对应 tab、滚到目标卡片，避免顶栏与右栏双重冗余。浏览器 smoke 测试更新为新结构断言（`bottom-drawer` / `topbar-progress` / `drawer-tab`）。
@@ -360,8 +361,8 @@ Trans2Former 当前产品方向正式收敛为：
 
 ## 当前主要不足
 
-- [ ] 单一 `DocumentModel` 表达力有限，对工作簿、幻灯片、固定页面等跨类对象的转换易丢信息；P8 多模型架构正在落地。
-- [ ] PDF / OFD / 扫描件的版面恢复仍偏弱，PDF reader 仅做坐标启发式，FixedLayoutModel 与本地 OCR/layout 插件待 P8-M4 合入。
+- [x] 单一 `DocumentModel` 表达力有限，对工作簿、幻灯片、固定页面等跨类对象的转换易丢信息；P8 多模型架构已完成。
+- [ ] PDF / OFD / 扫描件的版面恢复仍偏弱，PDF reader 仅做坐标启发式，FixedLayoutModel 与本地 OCR/layout 插件待后续实现。
 - [ ] 平台安装包真实产出、签名/公证和跨平台 smoke 仍需在对应 Windows/macOS/Linux 构建环境执行。
 
 ## 已完成基础盘归档
