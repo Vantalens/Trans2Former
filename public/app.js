@@ -733,18 +733,11 @@ function initializeOutputDraft(result) {
 }
 
 function setActiveWorkbenchTab(panelId) {
-  console.log("[setActiveWorkbenchTab] Switching to:", panelId);
-
   document.querySelectorAll(".workbench-panel").forEach((panel) => {
-    const shouldBeActive = panel.id === panelId;
-    panel.classList.toggle("is-active", shouldBeActive);
-    console.log(`  Panel ${panel.id}: ${shouldBeActive ? "active" : "inactive"}`);
+    panel.classList.toggle("is-active", panel.id === panelId);
   });
-
   document.querySelectorAll(".tab-button").forEach((button) => {
-    const shouldBeActive = button.dataset.tabTarget === panelId;
-    button.classList.toggle("is-active", shouldBeActive);
-    console.log(`  Button [${button.textContent.trim()}] (target: ${button.dataset.tabTarget}): ${shouldBeActive ? "active" : "inactive"}`);
+    button.classList.toggle("is-active", button.dataset.tabTarget === panelId);
   });
 }
 
