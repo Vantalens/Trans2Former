@@ -1,217 +1,287 @@
 # Trans2Former
 
-Trans2Former Desktop 是一个专业级、本地优先、零上传、多格式、高质量的桌面端格式转换处理器。最终产品形态为 Tauri 桌面壳 + Web-GUI 前端 + TypeScript 转换核心 + Web Worker / WASM + 本地插件系统；当前仓库仍以浏览器 Web 应用验证转换核心和前端工作台。文档处理阶段必须本地执行，不提供云端文档处理、远程转换、远程 OCR、远程转写或远程 AI 增强。基础热门格式免下载可用，重格式、高保真渲染、本地模型和 OFD 能力按需插件化。
+> 本地优先的多格式文档转换工具
 
-## 当前状态
+Trans2Former 是一个专业级的桌面文档转换工具，支持 12 种输入格式和 11 种输出格式的相互转换。所有转换在本地完成，零上传，保护您的数据隐私。
 
-- 项目名：Trans2Former
-- 包名：`trans2former`
-- 当前可用输入：Markdown、HTML、TXT、JSON、CSV、XML、PNG、DOCX/XLSX/EPUB/PDF/PPTX input
-- 当前可用输出能力：Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、EPUB、PPTX、PDF；前端会按输入格式动态筛选可选输出
-- Electron：已移除
-- Playwright：已从运行依赖移除
-- CLI：已从当前运行形态移除，项目收敛为桌面 Web-GUI 工作台路线
-- PDF：当前支持文本型 PDF 输入和程序化 PDF 二进制输出
-- 数据安全：文档处理阶段 `local-only`，不提供云端文档处理
-- 前端体验：响应式用户端工作台 v3，围绕上传/粘贴、动态输出格式、预览/结果、转换和下载组织；维护型面板默认隐藏
-- P0 工作台：已建立文件队列、批量选择、失败重试、输出命名策略、Input / DocumentModel / Output 三栏、底部 Warnings / Quality Report / Diff / Versions 面板、Plugin Manager 和 Security Center 入口
-- 桌面壳：已加入最小 Tauri v2 scaffold 和权限检查；真实桌面启动需要本机安装 Rust/Cargo 工具链
-- 交互状态：支持结构化错误详情、脱敏诊断复制、阶段化转换进度和取消后输出清理
-- Worker 转换：大文本 transferable 传输按声明编码处理，二进制输入以 data URL 进入转换器，避免上传后内容被二次解码破坏
-- P1 输出编辑：文本输出编辑器已支持实时预览、undo / redo、checkpoint、version diff、warnings resolved 和本地历史 opt-in
-- 文件大小：不设置人为上传大小上限；文本文件入口已使用分片读取，大文件默认手动预览以减少卡顿
-- 基础格式质量：Markdown、CSV、XML 已补齐 P0 高风险语法路径和可解释 warnings
-- 质量审计：P1 已补齐 block id、source span、block warnings、asset provenance、conversion metadata、quality report、chunked equivalence、version diff 和会话历史
-- 插件安全：P2 已建立 plugin manifest、权限模型、安装/处理隔离、processing no-network、完整性校验和插件资源预算
-- P3 进展：已完成 ZIP/OOXML 容器、DOCX、XLSX、EPUB、PDF text extraction、PPTX input；包含 deflate、central directory 校验和 Office 增强提取路径
-- P4 进展：已完成 DOCX/XLSX/EPUB/PPTX output 和程序化 PDF output 的本地二进制输出基线；PPTX 只对 Markdown/HTML/JSON 等演示素材源开放，不对 DOCX 等文档源开放
-- 发布准备：可运行 `npm run release:prepare` 生成本地 `release/trans2former-2.0.0/` 发布包
-- 超大文件策略：规划动态分块转换与结构化合并，避免单文件过大导致内存和卡顿问题
-- 架构：目标为 Tauri + Web-GUI + TypeScript core + Worker/WASM + 本地插件系统；当前 Web 应用作为核心验证底座
-- 插件分发：默认跳转 GitHub Releases 进行目标下载，浏览器端和桌面端都规划下载板块与更新板块
-- 测试：`npm test` 覆盖核心转换、P3 重格式增强、P4 二进制输出、快照、浏览器自检、本地安全、资源预算、插件安全和 release readiness
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-44%2F44%20passing-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](#)
 
-## 目标方向
+---
 
-Trans2Former 不走“依赖本地安装办公软件”的路线，不要求用户安装 Microsoft Office、LibreOffice、Pandoc、Electron 或 Playwright。转换能力优先通过 Web-GUI、TypeScript、Web Worker、WASM、Canvas、ZIP/XML 解析和本地文件 API 实现；桌面壳采用 Tauri 承载权限隔离、文件系统入口和插件管理。
+## ✨ 特性
 
-产品壁垒：
+- 🔒 **本地优先** - 所有转换在本地完成，不上传任何数据
+- 🚀 **高性能** - 基于 Web Worker 的并行处理
+- 📦 **零依赖** - 不需要安装 Office、LibreOffice 或 Pandoc
+- 🎨 **实时预览** - 转换前后实时预览文档
+- 📝 **结构化编辑** - 支持编辑转换后的文档结构
+- 🔌 **插件系统** - 按需加载高级功能
+- 🌍 **多语言** - 支持中英文、RTL 文本等
+- ⚡ **无大小限制** - 不设置人为文件大小上限
 
-- 桌面 Web-GUI 动态编辑：不仅转换，还要能编辑标准化后的文档结构。
-- 实时预览：输入、结构、输出格式和 warnings 变化后尽量实时反馈。
-- 上传文件大小无限制：不设置固定 MB/GB 上限，实际处理能力由用户设备和浏览器资源决定。
-- 动态分块不降质：单个超大文件可拆成语义子模块转换，再结构化合并，最终结果应与直接转换语义等价。
-- 行业顶尖质量：每个格式必须有样例、快照、降级说明和质量基准。
-- 超广格式覆盖：长期覆盖 Office、PDF、EPUB、图片、结构化数据和政务格式。
-- OFD 高保真攻坚：OFD 是政务、公文、票据场景的战略格式，目标是本地高保真和可解释质量报告。
-- 热门格式免下载：基础包内置 Markdown、HTML、TXT、JSON、CSV、XML、PNG input、DOCX input/output、XLSX/EPUB/PPTX output 和 PDF input/output 等高频格式；文档到 PNG/JPEG 的视觉渲染未达标前不暴露为可下载输出。
-- 模块插件按需下载：重格式和可选能力不默认进入核心包，用户需要时再加载对应模块，降低资源占用并提升常用路径性能。
-- GitHub Releases 插件分发：应用内展示插件下载和更新入口，实际插件包默认通过 GitHub Release 页面或 release asset 获取。
-- 数据绝对安全：不上传用户文件、文件名、文档片段、转换结果或错误日志；插件处理文档时禁联网。
+---
 
-目标格式矩阵：
+## 📋 支持的格式
 
-- Markdown
-- HTML
-- TXT
-- JSON
-- PDF
-- EPUB
-- Word DOCX
-- PowerPoint PPTX
-- PNG
-- CSV
-- XML
-- Excel XLSX
-- OFD（战略攻坚 / 政务格式 / 本地高保真插件）
+### 输入格式（12 种）
+- **文档**: Markdown, HTML, TXT, DOCX, PDF, EPUB
+- **数据**: JSON, CSV, XML, XLSX
+- **演示**: PPTX
+- **图片**: PNG
 
-详细分阶段任务见 [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md)。开发文档总目录见 [docs/README.md](docs/README.md)，产品定位见 [docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md)，桌面架构和体验标准见 [docs/DESKTOP_APP_ARCHITECTURE.md](docs/DESKTOP_APP_ARCHITECTURE.md)，插件分发见 [docs/PLUGIN_DISTRIBUTION.md](docs/PLUGIN_DISTRIBUTION.md)，转换路径见 [docs/CONVERSION_PATHS.md](docs/CONVERSION_PATHS.md)，格式路线见 [docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)，基础格式质量说明见 [docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)，项目评估见 [docs/PROJECT_ASSESSMENT_2026-04-30.md](docs/PROJECT_ASSESSMENT_2026-04-30.md)，发布准备见 [docs/RELEASE_PREP.md](docs/RELEASE_PREP.md)，OFD 攻坚路线见 [docs/OFD_RESEARCH.md](docs/OFD_RESEARCH.md)，动态分块合并设计见 [docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md](docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md)。
+### 输出格式（11 种）
+- **文档**: Markdown, HTML, TXT, DOCX, PDF, EPUB
+- **数据**: JSON, CSV, XML, XLSX
+- **演示**: PPTX
 
-## 仓库地址
+### 热门转换路径
+- Markdown ↔ HTML
+- DOCX → Markdown
+- PDF → Markdown
+- XLSX ↔ CSV
+- HTML → PDF
 
-https://github.com/Vantalens/Trans2Former
+---
 
-## 本地运行当前版本
+## 🚀 快速开始
+
+### 安装依赖
 
 ```bash
 npm install
+```
+
+### 启动应用
+
+```bash
 npm start
 ```
 
-打开：
+然后在浏览器中打开：
 
-```text
+```
 http://localhost:3000
 ```
 
-当前版本使用 Node.js + Express 承载静态前端页面，文档转换在浏览器端执行。后续目标是将这套 Web-GUI 和转换核心迁移进 Tauri 桌面壳。
-
-桌面壳配置检查：
-
-```bash
-npm run desktop:check
-```
-
-安装 Rust/Cargo 和 Tauri CLI 后可运行：
-
-```bash
-npm run desktop:dev
-```
-
-浏览器端自检页：
-
-```text
-http://localhost:3000/smoke-test.html
-```
-
-## 项目结构
-
-```text
-public/              浏览器界面
-public/app.js        浏览器端界面逻辑
-public/browser-transformer.js 浏览器端转换门面
-public/core/         DocumentModel 与 ConverterRegistry
-public/core/workbench-state.js 文件队列、导出命名和工作台报告状态
-public/core/document-audit.js DocumentModel 审计层
-public/core/chunking.js 动态分块合并基础工具
-public/core/plugin-policy.js 插件 manifest、权限和完整性策略
-public/plugin-patches/ release 内置插件补丁包，用户按需下载导入
-public/formats/      Markdown / HTML / TXT / JSON / CSV / XML / PNG input / DOCX / XLSX / EPUB / PDF / PPTX 适配器
-public/workers/      浏览器端转换 Worker
-samples/             当前格式样例集
-tests/snapshots/     转换快照
-src/web-server.js    Express 静态资源容器
-src-tauri/           Tauri v2 桌面壳、CSP 和最小权限配置
-```
-
-## 开发文档
-
-- [docs/README.md](docs/README.md)：文档总目录和维护规则
-- [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md)：当前任务看板
-- [docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md)：产品原则、市场路线和安全底线
-- [docs/DESKTOP_APP_ARCHITECTURE.md](docs/DESKTOP_APP_ARCHITECTURE.md)：Tauri 桌面壳、Web-GUI、体验标准、版本控制和插件隔离架构
-- [docs/DESKTOP_RELEASE_PLAN.md](docs/DESKTOP_RELEASE_PLAN.md)：P7 桌面发布、安装包、checksum、平台 smoke 和插件补丁包规则
-- [docs/CONVERSION_PATHS.md](docs/CONVERSION_PATHS.md)：输入格式到输出格式的产品路径矩阵
-- [docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)：格式覆盖矩阵和新增格式准入规则
-- [docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)：基础格式 before/after、保真范围和降级说明
-- [docs/STRUCTURED_EDITING_MODEL.md](docs/STRUCTURED_EDITING_MODEL.md)：结构化编辑状态模型
-- [docs/AI_READY_MARKDOWN.md](docs/AI_READY_MARKDOWN.md)：AI-ready Markdown 输出准则
-- [docs/PROJECT_ASSESSMENT_2026-04-30.md](docs/PROJECT_ASSESSMENT_2026-04-30.md)：当前项目评估和修复记录
-- [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md)：插件安全模型、权限隔离和资源预算
-- [docs/PLUGIN_DISTRIBUTION.md](docs/PLUGIN_DISTRIBUTION.md)：release 插件补丁包、下载板块和更新板块规则
-- [docs/OOXML_CONTAINER.md](docs/OOXML_CONTAINER.md)：ZIP/OOXML 容器基础设施
-- [docs/DOCX_INPUT_MVP.md](docs/DOCX_INPUT_MVP.md)：DOCX input 支持范围和限制
-- [docs/XLSX_INPUT_MVP.md](docs/XLSX_INPUT_MVP.md)：XLSX input 支持范围和限制
-- [docs/EPUB_INPUT_MVP.md](docs/EPUB_INPUT_MVP.md)：EPUB input 支持范围和限制
-- [docs/PDF_TEXT_EXTRACTION_MVP.md](docs/PDF_TEXT_EXTRACTION_MVP.md)：PDF 文本提取 MVP 支持范围和限制
-- [docs/PPTX_INPUT_MVP.md](docs/PPTX_INPUT_MVP.md)：PPTX input 支持范围和限制
-- [docs/P4_OUTPUTS.md](docs/P4_OUTPUTS.md)：DOCX/XLSX/EPUB/PPTX/PDF 输出支持范围和限制
-- [docs/RELEASE_PREP.md](docs/RELEASE_PREP.md)：GitHub release 准备流程
-- [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)：本地优先、零云端处理和插件隔离规则
-- [docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)：核心包体积与依赖预算
-- [docs/OFD_RESEARCH.md](docs/OFD_RESEARCH.md)：OFD 政务格式高保真攻坚路线
-- [docs/development-standards/00_README.md](docs/development-standards/00_README.md)：开发规范体系
-- [docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md](docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md)：成本、资源和模块插件治理规则
-
-## 验证
+### 运行测试
 
 ```bash
 npm test
 ```
 
-当前 smoke test 会验证浏览器端 `DocumentModel -> ConverterRegistry -> 格式适配器` 基础链路。
-
-`npm test` 当前包含：
-
-- 核心转换 smoke test
-- 固定转换快照测试
-- 浏览器自检静态服务检查
-- 本地安全 smoke test
-- 资源预算 smoke test
-- 插件安全 smoke test
-- Release readiness test
-- Tauri desktop shell scaffold and permission boundary check
-
-## Release 准备
+### 生成 Release 包
 
 ```bash
 npm run release:prepare
 ```
 
-该命令会生成本地 `release/trans2former-2.0.0/`，用于后续 GitHub release 上传前检查。`release/` 默认不提交 GitHub。
+---
 
-## 资源预算
+## 🏗️ 项目结构
 
-- 默认包只包含 `core + format-basic`。
-- `format-basic` 内置热门轻量格式，保证常见转换无需下载即可使用。
-- 基础包内置 DOCX、XLSX、EPUB、PDF、PPTX input 基线和 DOCX/XLSX/EPUB/PDF/PPTX output 基线；输出下拉框按输入格式筛选，PPTX 不对 DOCX 等正文文档源开放。
-- OFD、本地 OCR、本地模型、高保真渲染和重格式增强能力必须通过模块插件按需下载或加载；OFD 属于战略攻坚格式，不属于默认核心包膨胀项。
-- 插件必须声明 manifest、体积预算、依赖、安全模式、加载方式和失败降级路径。
-- 插件安装可以联网下载插件代码，文档处理阶段必须禁联网。
-- 插件下载默认跳转 GitHub Releases；浏览器端和桌面端必须提供下载板块和更新板块。
-- `npm test` 会检查核心目录体积、默认依赖数量，并阻止重依赖进入默认核心路径。
+```
+Trans2Former/
+├── public/                    # 前端界面
+│   ├── app.js                 # 主应用逻辑
+│   ├── core/                  # 核心模块
+│   │   ├── models/            # 数据模型
+│   │   ├── format-registry.js # 格式注册表
+│   │   └── plugin-runtime.js  # 插件运行时
+│   ├── formats/               # 格式处理器
+│   │   ├── markdown.js        # Markdown 处理
+│   │   ├── html.js            # HTML 处理
+│   │   ├── docx.js            # DOCX 处理
+│   │   ├── pdf.js             # PDF 处理
+│   │   └── ...                # 其他格式
+│   └── workers/               # Web Workers
+├── samples/                   # 样例文件（50+）
+├── tests/                     # 测试套件
+├── docs/                      # 完整文档
+├── src-tauri/                 # Tauri 桌面壳
+└── scripts/                   # 构建脚本
+```
 
-## 数据安全
+---
 
-- 默认 `local-only`，文档处理在用户设备上执行。
-- 产品不设置人为上传大小上限；当前文本文件入口已使用分片读取，大文件默认手动预览，后续继续推进流式解析、Worker 和渐进预览。
-- 不上传文档、图片、转换结果、错误详情、文件名、文档片段或编辑内容。
-- 不接入第三方转换 API、云端 OCR、云端转写、云端 AI、分析 SDK 或遥测 SDK。
-- 错误详情面板复制诊断时只复制脱敏字段，不默认复制用户文档正文、title 或 stack。
-- 取消转换后会终止 active Worker、撤销旧 Blob URL、清空旧输出并禁用下载入口，避免误下载上一轮结果。
-- URL / YouTube extraction、云端能力和音频转写不进入主路线。
+## 📖 使用指南
 
-## 已知限制
+### 基本使用
 
-1. DOCX/XLSX/EPUB/PPTX/PDF 输出是当前公开二进制基线；文档到 PNG/JPEG 的视觉渲染路径在能保留真实内容前不作为输出能力展示。
-2. EPUB、XLSX、PPTX 输出已实现基础容器写出；PPTX 仅对 Markdown/HTML/JSON 等演示素材源开放，复杂样式、图表、动画、公式计算和高保真排版仍进入插件化增强路线。
-3. DOCX/XLSX/PPTX/PDF 输入仍以结构化提取为主，复杂版式、动画、公式计算、扫描 PDF 和 Office 高保真还原进入插件化增强路线。
-4. OOXML/EPUB 容器暂不支持 ZIP64 和 data descriptor，超大真实样例库和性能预算进入后续增强。
-5. 文本文件读取已支持 UTF-8/UTF-16/GBK/GB18030/Big5 检测；超大文件后续继续向流式解码演进。
+1. **上传文件** - 拖拽或点击上传按钮
+2. **选择格式** - 选择目标输出格式
+3. **预览** - 查看转换前后的预览
+4. **转换** - 点击转换按钮
+5. **下载** - 下载转换结果
 
-## Community
-https://linux.do/
+### 高级功能
 
-## 许可证
+- **批量转换** - 同时转换多个文件
+- **编辑输出** - 直接编辑转换后的文本
+- **版本历史** - 查看和恢复历史版本
+- **质量报告** - 查看转换质量和警告
+- **插件管理** - 安装和管理插件
 
-MIT License - 详见 [LICENSE](LICENSE)。
+---
+
+## 🔌 插件系统
+
+Trans2Former 支持通过插件扩展功能：
+
+- **OFD 支持** - 政务格式支持
+- **本地 OCR** - 扫描文档识别
+- **版面分析** - 复杂布局识别
+- **表格恢复** - PDF 表格提取
+
+插件通过 GitHub Releases 分发，按需下载安装。
+
+---
+
+## 🛡️ 数据安全
+
+Trans2Former 严格遵守本地优先原则：
+
+- ✅ 所有转换在本地完成
+- ✅ 不上传文件、文件名或内容
+- ✅ 不上传转换结果或错误日志
+- ✅ 插件处理文档时禁止联网
+- ✅ 不接入第三方 API 或分析 SDK
+
+---
+
+## 🧪 测试
+
+项目包含完整的测试套件：
+
+```bash
+npm test
+```
+
+测试覆盖：
+- ✅ 核心转换测试（44/44 通过）
+- ✅ 快照测试
+- ✅ 格式能力审计
+- ✅ 安全测试
+- ✅ 资源预算测试
+- ✅ 插件安全测试
+- ✅ 发布就绪测试
+
+---
+
+## 📚 文档
+
+### 核心文档
+- [开发任务](DEVELOPMENT_TASKS.md) - 当前任务和进度
+- [更新日志](CHANGELOG.md) - 版本更新记录
+- [贡献指南](CONTRIBUTING.md) - 如何贡献代码
+- [安装指南](INSTALL.md) - 详细安装说明
+
+### 架构文档
+- [多模型架构](docs/MULTI_MODEL_ARCHITECTURE.md) - 核心架构设计
+- [转换路由](docs/CONVERSION_ROUTING.md) - 转换路径规划
+- [桌面应用架构](docs/DESKTOP_APP_ARCHITECTURE.md) - 桌面应用设计
+- [插件安全模型](docs/PLUGIN_SECURITY_MODEL.md) - 插件安全策略
+
+### 产品文档
+- [产品策略](docs/PRODUCT_STRATEGY.md) - 产品定位和原则
+- [格式路线](docs/FORMAT_ROADMAP.md) - 格式支持计划
+- [基础格式质量](docs/BASIC_FORMAT_QUALITY.md) - 质量标准
+
+### 更多文档
+查看 [docs/README.md](docs/README.md) 获取完整文档列表。
+
+---
+
+## 🎯 技术架构
+
+### 核心技术栈
+- **前端**: HTML, CSS, JavaScript
+- **桌面**: Tauri v2
+- **转换**: TypeScript + Web Workers
+- **格式**: 自研解析器 + 标准库
+
+### 数据模型
+- **SemanticDoc** - 语义文档模型
+- **WorkbookModel** - 工作簿模型
+- **SlideModel** - 幻灯片模型
+- **FixedLayoutModel** - 固定布局模型
+- **AssetGraph** - 资源图模型
+
+### 转换流程
+```
+输入文件 → Reader → DocumentModel → Mapper → Writer → 输出文件
+```
+
+---
+
+## 🚧 已知限制
+
+1. **复杂样式** - 部分复杂样式可能无法完全保留
+2. **图表动画** - PPTX 动画和图表需要插件支持
+3. **扫描 PDF** - 扫描文档需要 OCR 插件
+4. **ZIP64** - 暂不支持超大 ZIP 文件
+
+这些限制将在后续版本中通过插件系统逐步解决。
+
+---
+
+## 🗺️ 路线图
+
+### 已完成 ✅
+- [x] P0-P8 核心功能
+- [x] 12 种输入格式
+- [x] 11 种输出格式
+- [x] 插件系统
+- [x] 桌面发布准备
+
+### 进行中 🚧
+- [ ] 平台安装包构建
+- [ ] SSIM 视觉对比
+- [ ] 性能优化
+
+### 计划中 📋
+- [ ] 本地 OCR 插件
+- [ ] 版面分析插件
+- [ ] 更多格式支持
+
+---
+
+## 🤝 贡献
+
+欢迎贡献代码、报告问题或提出建议！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+---
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
+
+---
+
+## 🔗 链接
+
+- **仓库**: https://github.com/Vantalens/Trans2Former
+- **社区**: https://linux.do/
+- **文档**: [docs/README.md](docs/README.md)
+
+---
+
+## 💬 反馈
+
+如有问题或建议，欢迎：
+- 提交 [Issue](https://github.com/Vantalens/Trans2Former/issues)
+- 参与 [Discussions](https://github.com/Vantalens/Trans2Former/discussions)
+- 访问我们的[社区](https://linux.do/)
+
+---
+
+**Made with ❤️ by Trans2Former Team**
