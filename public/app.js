@@ -733,11 +733,18 @@ function initializeOutputDraft(result) {
 }
 
 function setActiveWorkbenchTab(panelId) {
+  console.log("[setActiveWorkbenchTab] Switching to:", panelId);
+
   document.querySelectorAll(".workbench-panel").forEach((panel) => {
-    panel.classList.toggle("is-active", panel.id === panelId);
+    const shouldBeActive = panel.id === panelId;
+    panel.classList.toggle("is-active", shouldBeActive);
+    console.log(`  Panel ${panel.id}: ${shouldBeActive ? "active" : "inactive"}`);
   });
+
   document.querySelectorAll(".tab-button").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.tabTarget === panelId);
+    const shouldBeActive = button.dataset.tabTarget === panelId;
+    button.classList.toggle("is-active", shouldBeActive);
+    console.log(`  Button [${button.textContent.trim()}] (target: ${button.dataset.tabTarget}): ${shouldBeActive ? "active" : "inactive"}`);
   });
 }
 
@@ -1260,6 +1267,7 @@ async function transformContent() {
   setStatus("正在浏览器端执行转换...");
   resetGeneratedOutput("正在生成");
   clearErrorDetails();
+  showWorkbenchTab("inputPreviewPanel"); // 转换开始时切换回预览标签页
 
   try {
     const title = getBaseName(currentFileName);

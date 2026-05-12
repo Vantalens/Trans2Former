@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/conversion-quality-test.js)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}
