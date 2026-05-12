@@ -66,11 +66,14 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
       const cellXml = cellMatch[0];
       const ref = getAttr(cellXml.match(/<c\b[^>]*>/)?.[0] || "", "r");
       const formula = stripTags(cellXml.match(/<f\b[\s\S]*?<\/f>/)?.[0] || "");
-      const value = cellValue(cellXml, sharedStrings, styleFormats, counters);
-      row[columnIndex(ref)] = value;
-      cells.push({ ref, value, formula });
+      // cellValue 仍按"=expr => cached"形式给 SemanticDoc.table 用作可读显示；
+      // WorkbookModel.formulas 单独保存干净的 expression 和 cachedValue。
+      const displayValue = cellValue(cellXml, sharedStrings, styleFormats, counters);
+      row[columnIndex(ref)] = displayValue;
+      const cachedValue = extractCachedValue(cellXml, sharedStrings, styleFormats);
+      cells.push({ ref, value: formula ? cachedValue : displayValue, formula });
       if (formula) {
-        formulas.push({ ref, expression: formula, cachedValue: value });
+        formulas.push({ ref, expression: formula, cachedValue });
       }
     }
     rows.push(row.map((cell) => String(cell ?? "")));
@@ -90,6 +93,17 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
     headers,
     rows,
   };
+}
+
+function extractCachedValue(cellXml, sharedStrings, styleFormats) {
+  const headTag = cellXml.match(/<c\b[^>]*>/)?.[0] || "";
+  const type = getAttr(headTag, "t");
+  const styleIndex = Number(getAttr(headTag, "s")) || 0;
+  const raw = cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/)?.[1] || "";
+  if (type === "s") return sharedStrings[Number(raw)] || "";
+  const inline = cellXml.match(/<is\b[\s\S]*?<\/is>/)?.[0];
+  if (inline) return stripTags(inline);
+  return isDateFormat(styleFormats[styleIndex]) ? excelSerialDateToIso(raw) : raw;
 }
 
 export function readXlsx({ content, title = "workbook", fileName = "", format = "xlsx" }) {
@@ -199,18 +213,48 @@ function generateStylesXml() {
 </styleSheet>`;
 }
 
-function sheetXml(rows, stringIndex) {
+function sheetXml(rows, stringIndex, { workbookSheet = null } = {}) {
   const NS = "http" + "://schemas.openxmlformats.org";
+  const formulaByRef = new Map();
+  const mergeRefs = [];
+  if (workbookSheet) {
+    for (const formula of workbookSheet.formulas || []) {
+      if (formula.ref && formula.expression) {
+        formulaByRef.set(String(formula.ref).toUpperCase(), formula);
+      }
+    }
+    for (const merge of workbookSheet.merges || []) {
+      const ref = merge.from && merge.to && merge.from !== merge.to
+        ? `${merge.from}:${merge.to}`
+        : merge.from;
+      if (ref) mergeRefs.push(ref);
+    }
+  }
+
   const rowXml = rows.map((row, rowIndex) => {
     const cells = row.map((cell, columnIndexValue) => {
       const ref = `${columnName(columnIndexValue)}${rowIndex + 1}`;
+      const formula = formulaByRef.get(ref.toUpperCase());
+      // P9-B：保留来自 WorkbookModel 的公式缓存。如果该 cell 在 reader 阶段被
+      // 标记为公式 cell，写回 <f>expression</f><v>cachedValue</v>，让 round-trip
+      // 不丢公式。其它 cell 继续走共享字符串（type="s"）。
+      if (formula) {
+        const cachedValue = String(formula.cachedValue ?? cell ?? "").trim();
+        const valueXml = cachedValue ? `<v>${escapeHtml(cachedValue)}</v>` : "";
+        return `<c r="${ref}"><f>${escapeHtml(formula.expression)}</f>${valueXml}</c>`;
+      }
       const strIdx = stringIndex.get(String(cell || ""));
       return `<c r="${ref}" t="s"><v>${strIdx}</v></c>`;
     }).join("");
     return `<row r="${rowIndex + 1}">${cells}</row>`;
   }).join("");
+
+  const mergeXml = mergeRefs.length > 0
+    ? `<mergeCells count="${mergeRefs.length}">${mergeRefs.map((ref) => `<mergeCell ref="${escapeHtml(ref)}"/>`).join("")}</mergeCells>`
+    : "";
+
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="${NS}/spreadsheetml/2006/main"><sheetData>${rowXml}</sheetData></worksheet>`;
+<worksheet xmlns="${NS}/spreadsheetml/2006/main"><sheetData>${rowXml}</sheetData>${mergeXml}</worksheet>`;
 }
 
 export function writeXlsx({ model, title = model.title }) {
@@ -281,7 +325,7 @@ ${stringArray.map(str => `  <si><t>${escapeHtml(str)}</t></si>`).join('\n')}
     },
     { name: "xl/sharedStrings.xml", data: sharedStringsXml },
     { name: "xl/styles.xml", data: generateStylesXml() },
-    { name: "xl/worksheets/sheet1.xml", data: sheetXml(rows, stringIndex) },
+    { name: "xl/worksheets/sheet1.xml", data: sheetXml(rows, stringIndex, { workbookSheet: model.workbook?.sheets?.[0] }) },
   ]);
   return {
     type: "binary",

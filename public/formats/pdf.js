@@ -515,6 +515,7 @@ function analyzePageLayout(items) {
   for (const line of lines) {
     line.items.sort((a, b) => a.x - b.x);
     line.text = line.items.map((i) => i.str).join("").replace(/\s+/g, " ").trim();
+    line.inlines = itemsToInlines(line.items);
   }
   const validLines = lines.filter((line) => line.text);
   if (validLines.length === 0) return [];
@@ -523,16 +524,23 @@ function analyzePageLayout(items) {
   const headingThreshold = bodyFontSize * 1.15;
 
   const blocks = [];
-  let paragraphBuffer = [];
+  let paragraphTextBuffer = [];
+  let paragraphInlineBuffer = [];
   let paragraphMinX = null;
   let lastY = null;
   let lastHeight = bodyFontSize;
 
   function flushParagraph() {
-    if (paragraphBuffer.length > 0) {
-      const text = paragraphBuffer.join(" ").replace(/\s+/g, " ").trim();
-      if (text) blocks.push({ type: "paragraph", text });
-      paragraphBuffer = [];
+    if (paragraphTextBuffer.length > 0) {
+      const text = paragraphTextBuffer.join(" ").replace(/\s+/g, " ").trim();
+      if (text) {
+        const block = { type: "paragraph", text };
+        const inlines = mergeInlineSegments(paragraphInlineBuffer);
+        if (inlines.length > 0) block.inlines = inlines;
+        blocks.push(block);
+      }
+      paragraphTextBuffer = [];
+      paragraphInlineBuffer = [];
       paragraphMinX = null;
     }
   }
@@ -549,20 +557,28 @@ function analyzePageLayout(items) {
     if (isHeading) {
       flushParagraph();
       const level = computeHeadingLevel(line.height, bodyFontSize);
-      blocks.push({ type: "heading", level, text });
+      const block = { type: "heading", level, text };
+      if (line.inlines.length > 0) block.inlines = line.inlines;
+      blocks.push(block);
     } else if (listMatch) {
       const itemText = listMatch[2].trim();
       const lastBlock = blocks[blocks.length - 1];
       const ordered = /^\d{1,3}[.)]/.test(listMatch[1]);
+      // list 项的行内格式：去掉行首符号，沿用剩余 inline 序列
+      const itemInlines = stripListPrefixInlines(line.inlines, listMatch[1]);
       if (!isNewBlock && lastBlock && lastBlock.type === "list" && lastBlock.ordered === ordered) {
         lastBlock.items.push(itemText);
+        if (lastBlock.itemInlines) lastBlock.itemInlines.push(itemInlines);
       } else {
         flushParagraph();
-        blocks.push({ type: "list", ordered, items: [itemText] });
+        const list = { type: "list", ordered, items: [itemText] };
+        if (itemInlines.length > 0) list.itemInlines = [itemInlines];
+        blocks.push(list);
       }
     } else {
       if (isNewBlock) flushParagraph();
-      paragraphBuffer.push(text);
+      paragraphTextBuffer.push(text);
+      paragraphInlineBuffer.push(line.inlines);
       if (paragraphMinX === null) paragraphMinX = line.minX;
     }
     lastY = line.y;
@@ -570,6 +586,86 @@ function analyzePageLayout(items) {
   }
   flushParagraph();
   return blocks;
+}
+
+// 把 PDF.js textContent.items 转成 inline 节点序列。fontName 决定 bold / italic：
+// 常见 PDF 字体名约定如 "Times-Bold" / "Helvetica-Oblique" / "Arial,BoldItalic"。
+function itemsToInlines(items) {
+  const segments = [];
+  for (const item of items) {
+    const text = String(item.str || "");
+    if (!text) continue;
+    const fontName = String(item.fontName || "");
+    const bold = /bold|bd\b|black|heavy/i.test(fontName);
+    const italic = /italic|oblique/i.test(fontName);
+    const key = `${bold ? "b" : ""}${italic ? "i" : ""}`;
+    const last = segments[segments.length - 1];
+    if (last && last.key === key) {
+      last.text += text;
+    } else {
+      segments.push({ key, text });
+    }
+  }
+  return segments.map(({ key, text }) => {
+    if (key === "bi") {
+      return { type: "strong", inlines: [{ type: "em", inlines: [{ type: "text", value: text }] }] };
+    }
+    if (key === "b") return { type: "strong", inlines: [{ type: "text", value: text }] };
+    if (key === "i") return { type: "em", inlines: [{ type: "text", value: text }] };
+    return { type: "text", value: text };
+  });
+}
+
+// 合并多行 inline 片段，行间塞空格。同时合并相邻 text 节点。
+function mergeInlineSegments(lineInlinesArray) {
+  const merged = [];
+  for (let i = 0; i < lineInlinesArray.length; i += 1) {
+    if (i > 0) merged.push({ type: "text", value: " " });
+    for (const node of lineInlinesArray[i] || []) merged.push(node);
+  }
+  // 合并相邻 text 节点
+  const collapsed = [];
+  for (const node of merged) {
+    const last = collapsed[collapsed.length - 1];
+    if (last && last.type === "text" && node.type === "text") {
+      last.value = `${last.value}${node.value}`;
+    } else {
+      collapsed.push(node);
+    }
+  }
+  // 规范化空白
+  for (const node of collapsed) {
+    if (node.type === "text") node.value = node.value.replace(/\s+/g, " ");
+  }
+  // 去掉首尾纯空白
+  while (collapsed.length > 0 && collapsed[0].type === "text" && !collapsed[0].value.trim()) {
+    collapsed.shift();
+  }
+  while (collapsed.length > 0) {
+    const tail = collapsed[collapsed.length - 1];
+    if (tail.type === "text" && !tail.value.trim()) collapsed.pop();
+    else break;
+  }
+  return collapsed;
+}
+
+function stripListPrefixInlines(inlines, prefix) {
+  if (!Array.isArray(inlines) || inlines.length === 0) return [];
+  const stripPattern = new RegExp(`^\\s*${prefix.replace(/[.*+?^${}()|[\\\]\\\\]/g, "\\$&")}\\s+`);
+  const result = [];
+  let stripped = false;
+  for (const node of inlines) {
+    if (!stripped && node.type === "text") {
+      const replaced = node.value.replace(stripPattern, "");
+      if (replaced !== node.value) {
+        if (replaced) result.push({ ...node, value: replaced });
+        stripped = true;
+        continue;
+      }
+    }
+    result.push(node);
+  }
+  return result;
 }
 
 function computeBodyFontSize(lines) {
@@ -717,19 +813,27 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
         if (block.type === "heading" && typeof block.text === "string") {
           const text = block.text.trim();
           if (text) {
-            layoutBlocks.push(createHeading(Number(block.level) || 2, text));
+            const heading = createHeading(Number(block.level) || 2, text);
+            if (Array.isArray(block.inlines) && block.inlines.length > 0) heading.inlines = block.inlines;
+            layoutBlocks.push(heading);
             totalItems += 1;
           }
         } else if (block.type === "paragraph" && typeof block.text === "string") {
           const text = block.text.trim();
           if (text) {
-            layoutBlocks.push(createParagraph(text));
+            const paragraph = createParagraph(text);
+            if (Array.isArray(block.inlines) && block.inlines.length > 0) paragraph.inlines = block.inlines;
+            layoutBlocks.push(paragraph);
             totalItems += 1;
           }
         } else if (block.type === "list" && Array.isArray(block.items)) {
           const items = block.items.map((item) => String(item || "").trim()).filter(Boolean);
           if (items.length > 0) {
-            layoutBlocks.push(createList(items, Boolean(block.ordered)));
+            const list = createList(items, Boolean(block.ordered));
+            if (Array.isArray(block.itemInlines) && block.itemInlines.some((entry) => Array.isArray(entry) && entry.length > 0)) {
+              list.itemInlines = block.itemInlines;
+            }
+            layoutBlocks.push(list);
             totalItems += items.length;
           }
         }

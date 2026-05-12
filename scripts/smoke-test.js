@@ -407,6 +407,22 @@ test("DOCX input MVP extracts headings, paragraphs, tables, links, and image ass
   assert.equal(JSON.parse(json.data).from, "docx");
 });
 
+test("DOCX reader emits structured inline nodes for runs and hyperlinks (P9-C)", () => {
+  const docxBytes = createDocxFixture();
+  const model = toDocumentModel(docxBytes, "docx", "fixture.docx");
+  const helloParagraph = model.blocks.find((block) => block.type === "paragraph" && (block.text || "").startsWith("Hello"));
+  assert.equal(helloParagraph !== undefined, true);
+  assert.equal(Array.isArray(helloParagraph.inlines), true);
+  const link = helloParagraph.inlines.find((node) => node.type === "link");
+  assert.equal(link !== undefined, true);
+  assert.equal(link.href, "https://example.com");
+  assert.equal(link.inlines[0].type, "text");
+  assert.equal(link.inlines[0].value, "Example");
+
+  const md = convertContent({ content: docxBytes, from: "docx", to: "md", title: "fixture.docx" }).data;
+  assert.match(md, /Hello \[Example\]\(https:\/\/example\.com\)/);
+});
+
 test("DOCX input enhancement extracts lists, header/footer, footnotes, comments, merge warnings, and image alt text", () => {
   const model = toDocumentModel(createAdvancedDocxFixture(), "docx", "advanced.docx");
   assert.equal(validateDocumentModel(model).ok, true);
@@ -443,6 +459,21 @@ test("XLSX input enhancement preserves formulas, dates, merged-cell warnings, an
   assert.deepEqual(table.rows[0], ["2023-01-01", "=SUM(1,2) => 3"]);
   assert.equal(model.metadata.warnings.some((warning) => warning.code === "XLSX_MERGED_CELLS_APPROXIMATED"), true);
   assert.equal(model.metadata.ooxml.formulaCellCount, 1);
+});
+
+test("XLSX writer preserves formula cache and merge ranges from WorkbookModel (P9-B)", () => {
+  const fixture = createAdvancedXlsxFixture();
+  const model = toDocumentModel(fixture, "xlsx", "advanced.xlsx");
+  assert.equal(model.workbook.sheets[0].formulas.length, 1);
+  assert.equal(model.workbook.sheets[0].merges.length, 1);
+
+  const output = convertContent({ content: fixture, from: "xlsx", to: "xlsx", title: "advanced.xlsx" });
+  const outZip = readZipEntries(output.data);
+  const sheetXmlOut = outZip.getText("xl/worksheets/sheet1.xml");
+  // 公式表达式 + 缓存值都应当回写
+  assert.match(sheetXmlOut, /<f>SUM\(1,2\)<\/f><v>3<\/v>/);
+  // mergeCells 节点应当存在
+  assert.match(sheetXmlOut, /<mergeCells count="1"><mergeCell ref="A1:B1"\/><\/mergeCells>/);
 });
 
 test("EPUB input MVP follows OPF spine and extracts XHTML structure", () => {
@@ -815,6 +846,81 @@ test("CSV reader attaches WorkbookModel (P8-M3)", () => {
   assert.equal(model.workbook.sheets.length, 1);
   assert.deepEqual(model.workbook.sheets[0].headers, ["name", "score"]);
   assert.deepEqual(model.workbook.sheets[0].rows, [["张三", "90"], ["李四", "85"]]);
+});
+
+test("Cross-model mappers preserve table / slide / fixed-layout content (P9-A)", async () => {
+  const { workbookToSemantic, semanticToWorkbook, slideToSemantic, semanticToSlide, fixedLayoutToSemantic, semanticToFixedLayout } = await import("../public/core/models/mappers.js");
+  const { createWorkbookModel } = await import("../public/core/models/workbook-model.js");
+  const { createSlideModel } = await import("../public/core/models/slide-model.js");
+  const { createFixedLayoutModel } = await import("../public/core/models/fixed-layout.js");
+
+  // workbookToSemantic
+  const workbook = createWorkbookModel({
+    sheets: [{ name: "工资", headers: ["姓名", "金额"], rows: [["张三", "1000"], ["李四", "2000"]] }],
+  });
+  const semantic = workbookToSemantic(workbook, { title: "wb.xlsx" });
+  assert.equal(semantic.blocks[0].type, "heading");
+  assert.equal(semantic.blocks[0].text, "工资");
+  assert.equal(semantic.blocks[1].type, "table");
+  assert.deepEqual(semantic.blocks[1].headers, ["姓名", "金额"]);
+
+  // semanticToWorkbook（反向）
+  const back = semanticToWorkbook(semantic);
+  assert.equal(back.sheets.length, 1);
+  assert.deepEqual(back.sheets[0].headers, ["姓名", "金额"]);
+
+  // slideToSemantic
+  const slides = createSlideModel({
+    slides: [
+      { pageNumber: 1, title: "Cover", shapes: [{ type: "text", text: "Cover" }, { type: "text", text: "Subtitle" }], notes: "讲三分钟" },
+      { pageNumber: 2, title: "Body", shapes: [{ type: "text", text: "Body" }], notes: "" },
+    ],
+  });
+  const slideModel = slideToSemantic(slides);
+  assert.equal(slideModel.blocks.find((block) => block.type === "heading" && block.text === "Slide 1: Cover") !== undefined, true);
+  assert.equal(slideModel.blocks.find((block) => block.type === "paragraph" && block.text === "Subtitle") !== undefined, true);
+  assert.equal(slideModel.blocks.find((block) => block.type === "quote" && block.text.includes("讲三分钟")) !== undefined, true);
+
+  // semanticToSlide
+  const semanticForSlide = {
+    blocks: [
+      { type: "heading", level: 1, text: "标题一" },
+      { type: "paragraph", text: "段落 A" },
+      { type: "heading", level: 2, text: "标题二" },
+      { type: "paragraph", text: "段落 B" },
+    ],
+  };
+  const slideOut = semanticToSlide(semanticForSlide);
+  assert.equal(slideOut.slides.length, 2);
+  assert.equal(slideOut.slides[0].title, "标题一");
+  assert.equal(slideOut.slides[1].shapes.find((shape) => shape.text === "段落 B") !== undefined, true);
+
+  // fixedLayoutToSemantic
+  const layout = createFixedLayoutModel({
+    pages: [{
+      pageNumber: 1,
+      size: { width: 595, height: 842, unit: "pt" },
+      textRuns: [
+        { text: "标题", bbox: { x: 80, y: 800, w: 200, h: 18 }, fontSize: 18, fontWeight: "bold" },
+        { text: "正文段落。", bbox: { x: 80, y: 770, w: 200, h: 11 }, fontSize: 11, fontWeight: "regular" },
+      ],
+    }],
+  });
+  const layoutSemantic = fixedLayoutToSemantic(layout);
+  assert.equal(layoutSemantic.blocks.length, 2);
+  assert.equal(layoutSemantic.blocks[0].text, "标题");
+  assert.equal(layoutSemantic.blocks[1].text, "正文段落。");
+
+  // semanticToFixedLayout
+  const layoutBack = semanticToFixedLayout({
+    blocks: [
+      { type: "heading", level: 1, text: "Heading" },
+      { type: "paragraph", text: "Body content." },
+    ],
+  });
+  assert.equal(layoutBack.pages.length, 1);
+  assert.equal(layoutBack.pages[0].textRuns.length, 2);
+  assert.equal(layoutBack.pages[0].textRuns[0].fontWeight, "bold");
 });
 
 test("HTML reader emits structured inline nodes (P8-M2)", () => {
