@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(node scripts/conversion-quality-test.js)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git commit -m 'docs\\(review\\): 添加代码审查和 UI bug 修复报告 *)",
+      "Bash(git commit -m 'feat\\(a11y\\): 改进按钮和控件的可访问性 *)"
     ]
   }
 }
