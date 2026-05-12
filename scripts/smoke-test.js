@@ -516,6 +516,39 @@ endobj
   assert.equal(model.metadata.pdf.extraction, "embedded-original-pdf-glyph-noise");
 });
 
+test("PDF reader consumes pdfjs-layout payload with structured blocks", () => {
+  const layoutPayload = {
+    engine: "pdfjs-layout",
+    pages: [
+      {
+        pageNumber: 1,
+        blocks: [
+          { type: "heading", level: 1, text: "线性代数复习讲义" },
+          { type: "heading", level: 2, text: "第一章 向量空间" },
+          { type: "paragraph", text: "向量空间的定义和基本性质。" },
+          { type: "list", ordered: false, items: ["线性独立", "线性相关", "基与维数"] },
+          { type: "paragraph", text: "下面给出若干例题。" },
+        ],
+      },
+    ],
+  };
+  const sentinelStart = "% Trans2Former PDFJS_TEXT_START";
+  const sentinelEnd = "% Trans2Former PDFJS_TEXT_END";
+  const encoded = `base64:${Buffer.from(JSON.stringify(layoutPayload), "utf8").toString("base64")}`;
+  const fakePdfWithLayout = `%PDF-1.7\n%%EOF\n${sentinelStart}\n${encoded}\n${sentinelEnd}\n`;
+  const model = toDocumentModel(fakePdfWithLayout, "pdf", "layout.pdf");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks[0].type, "heading");
+  assert.equal(model.blocks[0].level, 1);
+  assert.equal(model.blocks[0].text, "线性代数复习讲义");
+  assert.equal(model.blocks[1].type, "heading");
+  assert.equal(model.blocks[1].level, 2);
+  assert.equal(model.blocks.find((block) => block.type === "list" && block.items.includes("线性独立")) !== undefined, true);
+  assert.equal(model.metadata.pdf.extraction, "pdfjs-layout");
+  assert.equal(model.metadata.warnings.some((warning) => warning.code === "PDF_LAYOUT_HEURISTIC"), true);
+  assert.equal(model.metadata.warnings.some((warning) => warning.code === "PDF_NO_CREDIBLE_TEXT"), false);
+});
+
 test("PDF text extraction expands FlateDecode text streams", async () => {
   const compressedStream = deflateSync(Buffer.from("BT\n(Compressed PDF Title) Tj\n(Readable text from a normal compressed PDF.) Tj\nET", "latin1"));
   const pdf = `%PDF-1.7

@@ -1,4 +1,4 @@
-import { createDocumentModel, createHeading, createParagraph, createRawBlock } from "../core/document-model.js";
+import { createDocumentModel, createHeading, createList, createParagraph, createRawBlock } from "../core/document-model.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
 import { escapeHtml } from "./text-utils.js";
 
@@ -418,19 +418,24 @@ async function extractTextWithPdfJs(content) {
         disableNormalization: false,
         includeMarkedContent: false,
       });
-      const lines = [];
-      let line = "";
-      for (const item of textContent.items || []) {
-        if (typeof item.str !== "string") continue;
-        line = appendTextFragment(line, item.str);
-        if (item.hasEOL) {
-          if (line.trim()) lines.push(line.trim());
-          line = "";
-        }
+      const items = (textContent.items || [])
+        .filter((item) => typeof item.str === "string" && item.str.length > 0)
+        .map((item) => ({
+          str: item.str,
+          x: item.transform?.[4] ?? 0,
+          y: item.transform?.[5] ?? 0,
+          height: item.height || Math.abs(item.transform?.[3] ?? 0) || 12,
+          fontName: String(item.fontName || ""),
+        }));
+      const pageBlocks = analyzePageLayout(items);
+      const fallbackText = pageBlocks.length === 0
+        ? (textContent.items || []).map((item) => (typeof item.str === "string" ? item.str : "")).join(" ").replace(/\s+/g, " ").trim()
+        : "";
+      if (pageBlocks.length > 0) {
+        pages.push({ pageNumber, blocks: pageBlocks });
+      } else if (fallbackText) {
+        pages.push({ pageNumber, text: fallbackText });
       }
-      if (line.trim()) lines.push(line.trim());
-      const text = lines.join("\n").trim();
-      if (text) pages.push({ pageNumber, text });
       page.cleanup();
     }
     await document.destroy();
@@ -444,6 +449,115 @@ async function extractTextWithPdfJs(content) {
     }
     return [];
   }
+}
+
+// 把 PDF 文本 item 按 y 坐标聚成行，再按字号 / 间距 / 行首符号区分
+// 标题 / 列表 / 段落。坐标系 y 越大越靠上（PDF 原点在左下）。
+function analyzePageLayout(items) {
+  if (!items || items.length === 0) return [];
+  const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines = [];
+  for (const item of sorted) {
+    const last = lines[lines.length - 1];
+    const tolerance = (item.height || 12) * 0.5;
+    if (last && Math.abs(last.y - item.y) < tolerance) {
+      last.items.push(item);
+      last.height = Math.max(last.height, item.height || 0);
+      last.minX = Math.min(last.minX, item.x);
+    } else {
+      lines.push({
+        y: item.y,
+        height: item.height || 12,
+        minX: item.x,
+        items: [item],
+      });
+    }
+  }
+  for (const line of lines) {
+    line.items.sort((a, b) => a.x - b.x);
+    line.text = line.items.map((i) => i.str).join("").replace(/\s+/g, " ").trim();
+  }
+  const validLines = lines.filter((line) => line.text);
+  if (validLines.length === 0) return [];
+
+  const bodyFontSize = computeBodyFontSize(validLines);
+  const headingThreshold = bodyFontSize * 1.15;
+
+  const blocks = [];
+  let paragraphBuffer = [];
+  let paragraphMinX = null;
+  let lastY = null;
+  let lastHeight = bodyFontSize;
+
+  function flushParagraph() {
+    if (paragraphBuffer.length > 0) {
+      const text = paragraphBuffer.join(" ").replace(/\s+/g, " ").trim();
+      if (text) blocks.push({ type: "paragraph", text });
+      paragraphBuffer = [];
+      paragraphMinX = null;
+    }
+  }
+
+  for (const line of validLines) {
+    const text = line.text;
+    if (!text) continue;
+
+    const yGap = lastY !== null ? Math.abs(lastY - line.y) : 0;
+    const isNewBlock = lastY !== null && yGap > lastHeight * 1.6;
+    const isHeading = line.height > headingThreshold && text.length <= 200;
+    const listMatch = text.match(/^([•·▪◦•·▪◦*\-]|\d{1,3}[.)])\s+(.+)$/);
+
+    if (isHeading) {
+      flushParagraph();
+      const level = computeHeadingLevel(line.height, bodyFontSize);
+      blocks.push({ type: "heading", level, text });
+    } else if (listMatch) {
+      const itemText = listMatch[2].trim();
+      const lastBlock = blocks[blocks.length - 1];
+      const ordered = /^\d{1,3}[.)]/.test(listMatch[1]);
+      if (!isNewBlock && lastBlock && lastBlock.type === "list" && lastBlock.ordered === ordered) {
+        lastBlock.items.push(itemText);
+      } else {
+        flushParagraph();
+        blocks.push({ type: "list", ordered, items: [itemText] });
+      }
+    } else {
+      if (isNewBlock) flushParagraph();
+      paragraphBuffer.push(text);
+      if (paragraphMinX === null) paragraphMinX = line.minX;
+    }
+    lastY = line.y;
+    lastHeight = line.height;
+  }
+  flushParagraph();
+  return blocks;
+}
+
+function computeBodyFontSize(lines) {
+  if (lines.length === 0) return 12;
+  const counts = new Map();
+  for (const line of lines) {
+    const bucket = Math.round(line.height * 2) / 2;
+    const weight = line.text.length || 1;
+    counts.set(bucket, (counts.get(bucket) || 0) + weight);
+  }
+  let bestSize = 12;
+  let bestCount = 0;
+  for (const [size, count] of counts) {
+    if (count > bestCount) {
+      bestSize = size;
+      bestCount = count;
+    }
+  }
+  return bestSize > 0 ? bestSize : 12;
+}
+
+function computeHeadingLevel(lineHeight, bodyFontSize) {
+  const ratio = bodyFontSize > 0 ? lineHeight / bodyFontSize : 1;
+  if (ratio >= 1.8) return 1;
+  if (ratio >= 1.4) return 2;
+  if (ratio >= 1.2) return 3;
+  return 4;
 }
 
 function bytesToBinaryString(bytes) {
@@ -552,6 +666,60 @@ export async function expandPdfContentForTextExtraction(content) {
 export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" }) {
   const source = coercePdfText(content);
   const pdfJsPayload = extractPdfJsPayload(source);
+
+  // PDF.js + 版面分析路径：page.blocks 已经是结构化的 heading/list/paragraph
+  if (pdfJsPayload && pdfJsPayload.pages?.some((page) => Array.isArray(page.blocks) && page.blocks.length > 0)) {
+    const layoutBlocks = [];
+    let totalItems = 0;
+    for (const page of pdfJsPayload.pages) {
+      if (!Array.isArray(page.blocks)) continue;
+      for (const block of page.blocks) {
+        if (!block || typeof block !== "object") continue;
+        if (block.type === "heading" && typeof block.text === "string") {
+          const text = block.text.trim();
+          if (text) {
+            layoutBlocks.push(createHeading(Number(block.level) || 2, text));
+            totalItems += 1;
+          }
+        } else if (block.type === "paragraph" && typeof block.text === "string") {
+          const text = block.text.trim();
+          if (text) {
+            layoutBlocks.push(createParagraph(text));
+            totalItems += 1;
+          }
+        } else if (block.type === "list" && Array.isArray(block.items)) {
+          const items = block.items.map((item) => String(item || "").trim()).filter(Boolean);
+          if (items.length > 0) {
+            layoutBlocks.push(createList(items, Boolean(block.ordered)));
+            totalItems += items.length;
+          }
+        }
+      }
+    }
+    if (layoutBlocks.length > 0) {
+      const warnings = [createWarning(
+        "lossy",
+        "PDF_LAYOUT_HEURISTIC",
+        "PDF text was reconstructed from PDF.js coordinates with heuristic layout analysis (font-size for headings, y-gap for paragraphs, line-prefix for lists). Visual fidelity is not preserved."
+      )];
+      return createDocumentModel({
+        title,
+        sourceFormat: format,
+        blocks: layoutBlocks,
+        metadata: withWarnings({
+          pdf: {
+            extraction: "pdfjs-layout",
+            engine: pdfJsPayload.engine || "pdfjs-layout",
+            blockCount: layoutBlocks.length,
+            textItemCount: totalItems,
+            pageCount: pdfJsPayload.pages.length,
+            fileName,
+          },
+        }, warnings),
+      });
+    }
+  }
+
   const textObjects = extractTextObjects(source);
   const pdfObjects = extractPdfObjects(source);
   const cmapsByObject = buildCMapsByObject(pdfObjects);
