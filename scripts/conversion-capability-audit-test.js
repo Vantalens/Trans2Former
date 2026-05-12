@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 
-import { convertContent, getAllowedOutputFormats, listFormats } from "../public/browser-transformer.js";
+import {
+  convertContent,
+  getAllowedOutputFormats,
+  getFormatCapabilities,
+  getRouteTemperature,
+  isModelReachable,
+  listFormats,
+} from "../public/browser-transformer.js";
 import { decodeTextBytes } from "../public/core/text-decoding.js";
 import { createDocumentModel, createHeading, createParagraph, getPlainText } from "../public/core/document-model.js";
 import { createReadableInputDisplay, shouldUseLargeTextPreview } from "../public/core/input-state.js";
@@ -130,3 +137,44 @@ assert.equal(ofdResult.metadata.ofd.container, "zip");
 assert.match(ofdResult.plainText, /标题/);
 
 console.log("Conversion capability audit passed: writable matrix is stable, placeholder image outputs are hidden, and GBK/UTF-8 text decoding preserves Chinese content.");
+
+// Capability Registry / RoutePlanner（P8-M1）：声明每个格式归属的规范模型，
+// 跨模型走 mapper。这里断言路径温度计算和 capability 暴露字段满足设计。
+const capabilities = getFormatCapabilities();
+const capabilityByFormat = new Map(capabilities.map((entry) => [entry.format, entry]));
+assert.deepEqual(capabilityByFormat.get("md").inputModels, ["SemanticDoc"]);
+assert.deepEqual(capabilityByFormat.get("md").outputModels, ["SemanticDoc"]);
+assert.deepEqual(capabilityByFormat.get("csv").inputModels, ["WorkbookModel"]);
+assert.deepEqual(capabilityByFormat.get("xlsx").outputModels, ["WorkbookModel"]);
+assert.deepEqual(capabilityByFormat.get("pptx").inputModels, ["SlideModel"]);
+assert.deepEqual(capabilityByFormat.get("pdf").inputModels, ["FixedLayoutModel"]);
+assert.deepEqual(capabilityByFormat.get("ofd").inputModels, ["FixedLayoutModel"]);
+
+// hot：reader / writer 共享同一模型
+assert.equal(getRouteTemperature("md", "html"), "hot");
+assert.equal(getRouteTemperature("md", "docx"), "hot");
+assert.equal(getRouteTemperature("csv", "xlsx"), "hot");
+assert.equal(getRouteTemperature("pptx", "pptx"), "hot");
+
+// warm：经过一次 low-loss mapper（WorkbookModel ↔ SemanticDoc）
+assert.equal(getRouteTemperature("csv", "md"), "warm");
+assert.equal(getRouteTemperature("md", "csv"), "warm");
+assert.equal(getRouteTemperature("xlsx", "html"), "warm");
+
+// cold：经过一次 medium/high-loss mapper（SlideModel/FixedLayoutModel → SemanticDoc）
+assert.equal(getRouteTemperature("pptx", "md"), "cold");
+assert.equal(getRouteTemperature("pdf", "md"), "cold");
+assert.equal(getRouteTemperature("pdf", "docx"), "cold");
+
+// 模型可达性：当前所有产品矩阵中允许的路径在新机制下也都可达
+for (const from of listFormats().input) {
+  for (const to of getAllowedOutputFormats(from)) {
+    assert.equal(
+      isModelReachable(from, to),
+      true,
+      `RoutePlanner 应当能通过模型 + mapper 找到 ${from} -> ${to} 的路径`
+    );
+  }
+}
+
+console.log("Capability Registry / RoutePlanner test passed: model annotations and route temperatures cover the current product matrix.");

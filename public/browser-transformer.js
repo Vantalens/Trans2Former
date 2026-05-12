@@ -44,6 +44,8 @@ registry.registerFormat("md", {
   extension: "md",
   mime: "text/markdown;charset=utf-8",
   label: "Markdown",
+  inputModels: ["SemanticDoc"],
+  outputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("html", {
@@ -52,6 +54,8 @@ registry.registerFormat("html", {
   extension: "html",
   mime: "text/html;charset=utf-8",
   label: "HTML",
+  inputModels: ["SemanticDoc"],
+  outputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("txt", {
@@ -60,6 +64,8 @@ registry.registerFormat("txt", {
   extension: "txt",
   mime: "text/plain;charset=utf-8",
   label: "TXT",
+  inputModels: ["SemanticDoc"],
+  outputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("json", {
@@ -68,6 +74,8 @@ registry.registerFormat("json", {
   extension: "json",
   mime: "application/json;charset=utf-8",
   label: "JSON",
+  inputModels: ["SemanticDoc"],
+  outputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("csv", {
@@ -77,6 +85,8 @@ registry.registerFormat("csv", {
   mime: "text/csv;charset=utf-8",
   label: "CSV",
   note: "以第一行作为表头导入 DocumentModel table",
+  inputModels: ["WorkbookModel"],
+  outputModels: ["WorkbookModel"],
 });
 
 registry.registerFormat("xml", {
@@ -86,6 +96,8 @@ registry.registerFormat("xml", {
   mime: "application/xml;charset=utf-8",
   label: "XML",
   note: "当前保留 raw XML 并提取可读文本结构",
+  inputModels: ["SemanticDoc"],
+  outputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("png", {
@@ -98,6 +110,7 @@ registry.registerFormat("png", {
   warnings: ["PNG_INPUT_ASSET_ONLY"],
   resourceBudget: { maxInputBytes: 25 * 1024 * 1024, maxRuntimeMemoryMb: 512 },
   degradation: "输入作为图片资产保存；文档到图片输出必须等待真实本地渲染器，不能用占位图冒充。",
+  inputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("docx", {
@@ -111,6 +124,8 @@ registry.registerFormat("docx", {
   warnings: ["DOCX_COMPLEX_LAYOUT_APPROXIMATED", "DOCX_FLOATING_OBJECTS_DEGRADED"],
   resourceBudget: { maxInputBytes: 50 * 1024 * 1024, maxRuntimeMemoryMb: 768 },
   degradation: "保留正文结构和基础样式；复杂分页、修订、浮动对象和宏不进入核心包。",
+  inputModels: ["SemanticDoc"],
+  outputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("doc", {
@@ -123,6 +138,7 @@ registry.registerFormat("doc", {
   warnings: ["DOC_TEXT_EXTRACTED", "DOC_LAYOUT_APPROXIMATED"],
   resourceBudget: { maxInputBytes: 50 * 1024 * 1024, maxRuntimeMemoryMb: 256 },
   degradation: "旧版 DOC 仅做尽力文本抽取；复杂排版、表格、图片和修订降级为纯文本。",
+  inputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("xlsx", {
@@ -136,6 +152,8 @@ registry.registerFormat("xlsx", {
   warnings: ["XLSX_FORMULA_CACHE_ONLY", "XLSX_MERGED_CELLS_APPROXIMATED"],
   resourceBudget: { maxInputBytes: 30 * 1024 * 1024, maxRuntimeMemoryMb: 512 },
   degradation: "读取单元格显示值和表格结构；公式执行、图表和宏不进入核心包。",
+  inputModels: ["WorkbookModel"],
+  outputModels: ["WorkbookModel"],
 });
 
 registry.registerFormat("epub", {
@@ -149,6 +167,8 @@ registry.registerFormat("epub", {
   warnings: ["EPUB_CSS_APPROXIMATED", "EPUB_MEDIA_REFERENCED"],
   resourceBudget: { maxInputBytes: 80 * 1024 * 1024, maxRuntimeMemoryMb: 768 },
   degradation: "按 spine 读取 XHTML 结构；交互脚本、复杂 CSS 和 DRM 内容降级。",
+  inputModels: ["SemanticDoc"],
+  outputModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("pptx", {
@@ -162,6 +182,8 @@ registry.registerFormat("pptx", {
   warnings: ["PPTX_LAYOUT_APPROXIMATED", "PPTX_ANIMATION_IGNORED"],
   resourceBudget: { maxInputBytes: 80 * 1024 * 1024, maxRuntimeMemoryMb: 1024 },
   degradation: "读取幻灯片文本、表格和图片引用；动画、母版精确布局和媒体播放降级。",
+  inputModels: ["SlideModel"],
+  outputModels: ["SlideModel"],
 });
 
 registry.registerFormat("pdf", {
@@ -175,6 +197,8 @@ registry.registerFormat("pdf", {
   warnings: ["PDF_TEXT_ORDER_APPROXIMATED", "PDF_SCAN_REQUIRES_LOCAL_OCR_PLUGIN"],
   resourceBudget: { maxInputBytes: 50 * 1024 * 1024, maxRuntimeMemoryMb: 1024 },
   degradation: "文本型 PDF 可抽取；扫描件、复杂版面和表格恢复依赖本地插件。",
+  inputModels: ["FixedLayoutModel"],
+  outputModels: ["SemanticDoc", "FixedLayoutModel"],
 });
 
 registry.registerFormat("ofd", {
@@ -187,7 +211,29 @@ registry.registerFormat("ofd", {
   warnings: ["OFD_L1_PLUGIN_REQUIRED", "OFD_RENDER_PLUGIN_REQUIRED"],
   resourceBudget: { maxInputBytes: 80 * 1024 * 1024, maxRuntimeMemoryMb: 1024 },
   degradation: "核心包仅登记容器和 metadata；页面树、文本、图片、签章和渲染必须走本地 OFD 插件。",
+  inputModels: ["FixedLayoutModel"],
 });
+
+// 跨模型 mapper：P8-M1 阶段只声明拓扑，真实 fn 在 P8-M3/M4 落地。
+// 当前所有 reader/writer 实质上还共用 SemanticDoc，mapper 用来给 RoutePlanner
+// 提供"模型可达性"判断，让 csv/xlsx → md、pptx → md、pdf → md 这类跨类
+// 路径在 capability 视图中明确标注 warm/cold 温度。详见 docs/CONVERSION_ROUTING.md。
+registry.registerMapper({ from: "WorkbookModel", to: "SemanticDoc", lossLevel: "low",
+  forcedWarnings: ["MODEL_STYLE_DROPPED", "MODEL_FORMULA_AS_VALUE"] });
+registry.registerMapper({ from: "SemanticDoc", to: "WorkbookModel", lossLevel: "low",
+  forcedWarnings: ["MODEL_NO_FORMULA_INFO"] });
+registry.registerMapper({ from: "SlideModel", to: "SemanticDoc", lossLevel: "medium",
+  forcedWarnings: ["MODEL_VISUAL_LAYOUT_DROPPED"] });
+registry.registerMapper({ from: "SemanticDoc", to: "SlideModel", lossLevel: "medium",
+  forcedWarnings: ["MODEL_LAYOUT_AUTO_GENERATED"] });
+registry.registerMapper({ from: "FixedLayoutModel", to: "SemanticDoc", lossLevel: "high",
+  forcedWarnings: ["MODEL_VISUAL_FIDELITY_LOST", "MODEL_TEXT_ORDER_HEURISTIC"] });
+registry.registerMapper({ from: "SemanticDoc", to: "FixedLayoutModel", lossLevel: "medium",
+  forcedWarnings: ["MODEL_PAGINATION_AUTO_GENERATED"] });
+registry.registerMapper({ from: "WorkbookModel", to: "FixedLayoutModel", lossLevel: "medium",
+  forcedWarnings: ["MODEL_SHEET_TO_PAGE_PRINT_ONLY"] });
+registry.registerMapper({ from: "SlideModel", to: "FixedLayoutModel", lossLevel: "medium",
+  forcedWarnings: ["MODEL_ANIMATION_DROPPED"] });
 
 export function listFormats() {
   return registry.listFormats();
@@ -196,6 +242,14 @@ export function listFormats() {
 export { normalizeFormat };
 export { getAllowedOutputFormats };
 export { expandPdfContentForTextExtraction };
+
+export function getRouteTemperature(from, to) {
+  return registry.getRouteTemperature(from, to);
+}
+
+export function isModelReachable(from, to) {
+  return registry.isModelReachable(from, to);
+}
 
 export function detectFormatFromName(fileName) {
   const ext = String(fileName || "").split(".").pop()?.toLowerCase() || "";
