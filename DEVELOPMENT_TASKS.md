@@ -329,7 +329,7 @@ Trans2Former 当前产品方向正式收敛为：
 
 ### P8-M6：fixture corpus + 视觉回归
 
-- [ ] [samples/fixtures/](samples/fixtures/) 扩到至少 50 个真样例（中英文 / RTL / 复杂表格 / 扫描件 / 中文 PDF / 政务 OFD）。
+- [x] [samples/fixtures/](samples/fixtures/) 扩到至少 50 个真样例（中英文 / RTL / 复杂表格 / 扫描件 / 中文 PDF / 政务 OFD）。
 - [x] 新建 [scripts/conversion-quality-test.js](scripts/conversion-quality-test.js)：文本等价率 / 结构保留率 / 表格保留率 / 元数据保留率。
 - [ ] PDF / PNG 输出加 SSIM 视觉对比基线。
 - [x] [scripts/real-sample-conversion-probe.js](scripts/real-sample-conversion-probe.js) 升级为 Quality Report，跑 14×11 全矩阵打分，每条路径输出 hot / warm / cold 温度和质量指标。
