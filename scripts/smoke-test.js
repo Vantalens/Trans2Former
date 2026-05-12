@@ -489,6 +489,33 @@ endobj
   assert.equal(html.data.includes("Ó3□FC"), false);
 });
 
+test("PDF reader rejects font Glyph ID noise as text", () => {
+  const fragments = ["yX", "RX", "kX", "jX", "9X", "8X", "eX", "dX", "RX", "RXR", "RXk", "URV", "UkV", "UjV"];
+  const operators = fragments.map((value) => `(${value}) Tj`).join("\n");
+  const glyphIdPdf = `%PDF-1.7
+1 0 obj
+<< /Length ${operators.length + 8} >>
+stream
+BT
+${operators}
+ET
+endstream
+endobj
+%%EOF`;
+  const model = toDocumentModel(glyphIdPdf, "pdf", "glyph-noise.pdf");
+  assert.equal(validateDocumentModel(model).ok, true);
+  // 短碎片整体被拦下，不应进入 paragraph blocks。
+  for (const fragment of fragments) {
+    assert.equal(
+      model.blocks.some((block) => block.type === "paragraph" && (block.text || "").includes(fragment) && (block.text || "").length < 40),
+      false,
+      `font GID fragment "${fragment}" must not surface as a paragraph`
+    );
+  }
+  assert.equal(model.metadata.warnings.some((warning) => warning.code === "PDF_FONT_GLYPH_ID_NOISE"), true);
+  assert.equal(model.metadata.pdf.extraction, "embedded-original-pdf-glyph-noise");
+});
+
 test("PDF text extraction expands FlateDecode text streams", async () => {
   const compressedStream = deflateSync(Buffer.from("BT\n(Compressed PDF Title) Tj\n(Readable text from a normal compressed PDF.) Tj\nET", "latin1"));
   const pdf = `%PDF-1.7

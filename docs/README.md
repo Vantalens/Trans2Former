@@ -9,7 +9,9 @@
 3. [DESKTOP_APP_ARCHITECTURE.md](DESKTOP_APP_ARCHITECTURE.md)：Tauri 桌面壳、Web-GUI、体验标准、版本控制和插件隔离架构。
 4. [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md)：P7 桌面发布、安装包、checksum、平台 smoke 和插件补丁包规则。
 5. [CONVERSION_PATHS.md](CONVERSION_PATHS.md)：输入格式到输出格式的产品路径矩阵。
-6. [FORMAT_ROADMAP.md](FORMAT_ROADMAP.md)：格式覆盖矩阵、格式优先级和建议执行顺序。
+6. [MULTI_MODEL_ARCHITECTURE.md](MULTI_MODEL_ARCHITECTURE.md)：P8 多模型架构（SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel / AssetGraph）。
+7. [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md)：P8 Capability Registry + Route Planner，路径矩阵自动派生。
+8. [FORMAT_ROADMAP.md](FORMAT_ROADMAP.md)：格式覆盖矩阵、格式优先级和建议执行顺序。
 7. [DOCUMENT_MODEL_SCHEMA.md](DOCUMENT_MODEL_SCHEMA.md)：`DocumentModel` 的结构说明。
 8. [CONVERSION_POLICY.md](CONVERSION_POLICY.md)：不可逆转换、降级和 warnings 策略。
 9. [BASIC_FORMAT_QUALITY.md](BASIC_FORMAT_QUALITY.md)：P0 基础格式 before/after、保真范围和降级说明。
@@ -46,6 +48,8 @@
 | [PROJECT_ASSESSMENT_2026-05-03.md](PROJECT_ASSESSMENT_2026-05-03.md) | 当前项目评估、问题清单和优化后的开发方向 |
 | [BASIC_FORMAT_QUALITY.md](BASIC_FORMAT_QUALITY.md) | P0 基础格式质量、样例和可解释降级 |
 | [CONVERSION_PATHS.md](CONVERSION_PATHS.md) | 输入到输出的产品路径矩阵 |
+| [MULTI_MODEL_ARCHITECTURE.md](MULTI_MODEL_ARCHITECTURE.md) | P8 多模型架构：五个规范模型 + 共享资产图 |
+| [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md) | P8 Capability Registry + Route Planner + External Engine Bridge |
 | [HEAVY_FORMAT_CAPABILITY_NOTES.md](HEAVY_FORMAT_CAPABILITY_NOTES.md) | 重格式 capability note、fixture 分层和 P4/P6 回归入口 |
 | [DESKTOP_APP_ARCHITECTURE.md](DESKTOP_APP_ARCHITECTURE.md) | 桌面 Web-GUI 架构、体验标准、模块、权限和版本策略 |
 | [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md) | P7 桌面安装包、平台 smoke、自动更新、文件关联和插件补丁包发布规则 |

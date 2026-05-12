@@ -1,6 +1,6 @@
 # Trans2Former Development Tasks
 
-最后更新：2026-05-09
+最后更新：2026-05-12
 
 维护规则：
 
@@ -38,11 +38,15 @@ Trans2Former 当前产品方向正式收敛为：
 
 ## 下一步执行顺序
 
-1. P7：桌面发布与产品化。安装包、签名、自动更新、平台 smoke、文件关联和桌面权限体验。
-2. 发布前回归：继续保持 `npm test`、`git diff --check`、`npm run release:prepare` 和 release manifest ignore 验证。
+1. P8：多模型架构与转换路由。把 `DocumentModel` 升级为五个规范模型（SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel / AssetGraph），用 Capability Registry + Route Planner 自动派生路径矩阵。短期先做 PDF 坐标启发式版面分析，作为 FixedLayoutModel 的前置验证。
+2. P7：桌面发布与产品化。安装包、签名、自动更新、平台 smoke、文件关联和桌面权限体验。
+3. 发布前回归：继续保持 `npm test`、`git diff --check`、`npm run release:prepare` 和 release manifest ignore 验证。
 
 ## 最近验收修复
 
+- 2026-05-12：工作台 UI 重构为双栏主区 + 底部抽屉。原右侧 utility-pane（9 张 report-card 高低不平）整体并入底部 `<details>` 抽屉，内部三个 tab（质量 / 插件 / 版本）以 `auto-fill minmax(260px,1fr)` 控宽度。顶栏新增紧凑进度组件（status chip + 细条 + %），独立进度条行删除。插件 / 安全入口统一走顶栏"更多"菜单，点击自动展开抽屉、切到对应 tab、滚到目标卡片，避免顶栏与右栏双重冗余。浏览器 smoke 测试更新为新结构断言（`bottom-drawer` / `topbar-progress` / `drawer-tab`）。
+- 2026-05-12：修复 HTML / XML / 纯文本转换乱码。HTML reader 重写为 Node + 浏览器统一的轻量 tokenizer，识别 block（h1-6/p/blockquote/pre/ul/ol/table/img）和 inline（strong/em/a/code/img/br/del）标签，不再依赖 `DOMParser` 也不再用 `textContent` 吞掉内联格式。Markdown writer 把非 markdown 的 raw block 包成 fenced code、HTML writer 输出 pre/code，避免 XML/JSON → MD/HTML 输出空白或残缺。XML reader 不再额外塞残缺 summary paragraph。`getPlainText` 给列表加 -/1. 标记并保留缩进，TXT 输出不再丢失列表语义。新增 `scripts/real-sample-conversion-probe.js` 用真样例端到端回归，避免单测覆盖盲区。
+- 2026-05-12：PDF 抽取加固与审查问题修复。`extractPdfObjects` 一次扫描复用，`buildCMapsByObject` / `buildFontCMapLookup` 不再 N×M 重复扫描；`inflatePdfStream` 加单流 64MB / 总量 128MB 上限，边解边累计超限即 cancel，避免 zip-bomb；回落分支嵌入 PDF 数据 URL 加 4MB 上限避免 HTML 输出体积炸弹；PDFJS payload 哨兵中以 `base64:` 前缀包 JSON，避免抽出文本含哨兵字面量截断；`bytesToLatin1` 分块替代 spread 防大数组炸栈；`escapeHtmlAttribute` 复用 shared `escapeHtml`；`useSystemFonts:false` 避免 Tauri 下主线程卡 OS 字体枚举；`expandPdfContentForTextExtraction` 各分支返回类型统一为 string。`local-security-test` 的 `fetch` 白名单从子串黑名单改为正则白名单：要求 `releaseUrl.startsWith("/plugin-patches/")` 守卫 + `fetch(releaseUrl)` 调用 + 禁止外部 scheme + 禁止未守卫的模板字符串插值。
 - 2026-05-09：接入本地 PDF.js 文本抽取引擎；PDF 上传阶段优先走 optional `pdfjs-dist` / `/vendor/pdfjs/` 的 `getTextContent()`，抽取结果以结构化 payload 进入现有转换链路，失败时才回落到轻量核心解析器。PDF.js vendor 保持本地加载和资源预算约束。
 - 2026-05-09：修复 PDF ToUnicode 识别串用问题；CMap 不再作为全局映射套到所有 `<hex> Tj/TJ` 文本上，而是优先按当前 `/F... Tf` 字体绑定对应 `/ToUnicode`，多 CMap 但无法绑定时拒绝输出猜测文本，避免错误识别污染转换结果。
 - 2026-05-09：修复插件补丁包入口只下载/打开但不进入已安装状态的问题；可信 catalog 中随 release 提供的 `.t2f-plugin.json` 现在可从插件面板一键读取、校验、导入并启用，已安装插件和能力列表会立即刷新。
@@ -54,6 +58,8 @@ Trans2Former 当前产品方向正式收敛为：
 ## 文档入口
 
 - 当前项目评估：[docs/PROJECT_ASSESSMENT_2026-05-03.md](docs/PROJECT_ASSESSMENT_2026-05-03.md)
+- 多模型架构：[docs/MULTI_MODEL_ARCHITECTURE.md](docs/MULTI_MODEL_ARCHITECTURE.md)
+- 转换路由：[docs/CONVERSION_ROUTING.md](docs/CONVERSION_ROUTING.md)
 - 产品定位和零上传原则：[docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md)
 - 桌面 Web-GUI 架构：[docs/DESKTOP_APP_ARCHITECTURE.md](docs/DESKTOP_APP_ARCHITECTURE.md)
 - 格式路线：[docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)
@@ -268,6 +274,73 @@ Trans2Former 当前产品方向正式收敛为：
 - [x] 安装包和更新通道不接触用户文档。
 - [x] 平台 smoke 证明核心 GUI、转换、导出和插件管理入口可用。
 
+## P8：多模型架构与转换路由
+
+状态：方案落地，分阶段实施。
+
+目标：把单一 `DocumentModel` 升级为 SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel / AssetGraph 五个并列规范模型，用 Capability Registry + Route Planner 自动派生 14×11 路径矩阵，跨模型走显式 mapper 并强制 warning。设计依据：[docs/MULTI_MODEL_ARCHITECTURE.md](docs/MULTI_MODEL_ARCHITECTURE.md) 和 [docs/CONVERSION_ROUTING.md](docs/CONVERSION_ROUTING.md)。
+
+### P8-S0：PDF 坐标启发式版面分析（短期收益，不依赖架构）
+
+- [ ] PDF reader 利用 PDF.js textContent 的坐标信息：按字号聚类识别 heading 层级。
+- [ ] 按 y 间距识别段落分行，按 x 坐标聚类识别 list / multi-column。
+- [ ] 启发式输出仍写进现有 `DocumentModel`，不等 FixedLayoutModel 落地，先把"线性代数复习讲义"这类真样例从乱码升级到可读。
+- [ ] 新增 [scripts/real-sample-conversion-probe.js](scripts/real-sample-conversion-probe.js) 对至少 3 份真 PDF 的回归断言。
+
+### P8-M1：Capability Registry 重构（零行为变化）
+
+- [ ] [public/core/format-registry.js](public/core/format-registry.js) 新增 `inputModels[]` / `outputModels[]` 字段，沿用现有 reader/writer 注册接口。
+- [ ] 实现 `RoutePlanner.getAllowedOutputs(from)` 基于模型自动派生路径，与现有 `ALLOWED_OUTPUTS_BY_INPUT` 双跑对比断言。
+- [ ] [scripts/conversion-capability-audit-test.js](scripts/conversion-capability-audit-test.js) 验证新旧矩阵完全一致。
+- [ ] 删除硬编码 `ALLOWED_OUTPUTS_BY_INPUT`，[docs/CONVERSION_PATHS.md](docs/CONVERSION_PATHS.md) 改为引用 Planner 输出。
+
+### P8-M2：SemanticDoc + AssetGraph 拆分（行为兼容）
+
+- [ ] 新建 [public/core/models/semantic-doc.js](public/core/models/semantic-doc.js)，迁移 9 种 block，新增 inline 节点（strong / em / link / code-inline / del / sup / sub）。
+- [ ] 新建 [public/core/models/asset-graph.js](public/core/models/asset-graph.js)，把 `model.assets[]` 抽到顶层共享。
+- [ ] HTML reader 输出 inline 节点（不再把 `**bold**` 字面量塞进 paragraph.text）。
+- [ ] markdown writer 把 inline 节点序列化回 markdown 标记。
+- [ ] 老 `createDocumentModel` / `createParagraph(text)` API 保留兼容，内部转新结构。
+
+### P8-M3：WorkbookModel + SlideModel
+
+- [ ] 新建 [public/core/models/workbook-model.js](public/core/models/workbook-model.js)：sheets / cells / merges / formula cache。
+- [ ] 新建 [public/core/models/slide-model.js](public/core/models/slide-model.js)：slides / shapes / notes / layout。
+- [ ] csv / xlsx reader 输出 WorkbookModel，pptx reader 输出 SlideModel。
+- [ ] 跨模型 mapper：`workbookToSemantic` / `semanticToWorkbook` / `slideToSemantic` / `semanticToSlide`，每个 mapper 强制发降级 warning。
+- [ ] xlsx writer 直接消费 WorkbookModel；pptx writer 直接消费 SlideModel。
+
+### P8-M4：FixedLayoutModel + PDF/OFD 升级
+
+- [ ] 新建 [public/core/models/fixed-layout.js](public/core/models/fixed-layout.js)：pages / textRuns / annotations / signatures / bbox。
+- [ ] PDF reader 升级输出 FixedLayoutModel（textRuns + bbox + fontSize + fontWeight）。
+- [ ] FixedLayoutModel ↔ SemanticDoc mapper（保守降级，强制 `MODEL_VISUAL_FIDELITY_LOST`）。
+- [ ] OFD reader 升级到 L1，输出 FixedLayoutModel。
+- [ ] PDF 输出双路：程序化（SemanticDoc → pdf-lib）+ 高保真（FixedLayoutModel → 重新组版）。
+
+### P8-M5：External Engine Bridge Plugin
+
+- [ ] [docs/PLUGIN_DISTRIBUTION.md](docs/PLUGIN_DISTRIBUTION.md) 增加 `engine-bridge` 插件类型，manifest 字段 `bridges[]` / `requiresLocalBinary` / `securityScope`。
+- [ ] 桌面端通过 Tauri sidecar 调用本地 LibreOffice / Pandoc / Calibre / ofdrw，浏览器端不暴露。
+- [ ] Route Planner 优先选 bridge 路径（温度 hot），bridge 失败自动回落到核心 mapper。
+- [ ] bridge 调用全程 local-only，调用前后写 provenance / qualityReport。
+
+### P8-M6：fixture corpus + 视觉回归
+
+- [ ] [samples/fixtures/](samples/fixtures/) 扩到至少 50 个真样例（中英文 / RTL / 复杂表格 / 扫描件 / 中文 PDF / 政务 OFD）。
+- [ ] 新建 [scripts/conversion-quality-test.js](scripts/conversion-quality-test.js)：文本等价率 / 结构保留率 / 表格保留率 / 元数据保留率。
+- [ ] PDF / PNG 输出加 SSIM 视觉对比基线。
+- [ ] [scripts/real-sample-conversion-probe.js](scripts/real-sample-conversion-probe.js) 升级为 Quality Report，跑 14×11 全矩阵打分，每条路径输出 hot / warm / cold 温度和质量指标。
+
+### P8 验收门槛
+
+- [ ] 现有 100+ 路径行为不退化，新机制下矩阵自动派生与旧表一致。
+- [ ] HTML → Markdown 真样例 round-trip 保留 inline 格式（bold / italic / link）。
+- [ ] xlsx → xlsx round-trip 保留公式缓存和合并单元格。
+- [ ] PDF（含中文）→ Markdown 不再吐字体 GID 噪音，标题层级、段落分行、列表可识别。
+- [ ] 14×11 全矩阵质量报告自动生成，hot / warm / cold 路径区分明确。
+- [ ] external engine bridge 插件可装可拆，不装也能用，装了质量提升可量化。
+
 ## 删除或降级路线
 
 - [x] URL / YouTube URL：删除，不是文件格式，且必然联网。
@@ -285,6 +358,8 @@ Trans2Former 当前产品方向正式收敛为：
 
 ## 当前主要不足
 
+- [ ] 单一 `DocumentModel` 表达力有限，对工作簿、幻灯片、固定页面等跨类对象的转换易丢信息；P8 多模型架构正在落地。
+- [ ] PDF / OFD / 扫描件的版面恢复仍偏弱，PDF reader 仅做坐标启发式，FixedLayoutModel 与本地 OCR/layout 插件待 P8-M4 合入。
 - [ ] 平台安装包真实产出、签名/公证和跨平台 smoke 仍需在对应 Windows/macOS/Linux 构建环境执行。
 
 ## 已完成基础盘归档

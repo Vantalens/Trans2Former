@@ -103,9 +103,11 @@
 
 ### 修复
 
+- 修复 HTML / XML / 纯文本转换乱码：HTML reader 重写为 Node + 浏览器统一的轻量 tokenizer，识别 block 与 inline 标签（strong / em / a / code / img / br / del），不再依赖 `DOMParser` 也不再用 `textContent` 吞掉内联格式；XML / JSON 等 raw block 在 markdown writer 包成 fenced code、在 HTML writer 输出 pre/code，避免 XML → MD / HTML 输出空白；XML reader 不再额外塞残缺 summary paragraph；`getPlainText` 给列表加 `-` / `1.` 标记，TXT 输出保留列表语义。
+- 修复 PDF 抽取性能与安全：`extractPdfObjects` 一次扫描复用，O(N²) → O(N)；`inflatePdfStream` 加单流 64MB / 总量 128MB 上限避免 zip-bomb；嵌入 PDF 数据 URL 加 4MB 上限避免 HTML 输出体积炸弹；PDFJS payload 哨兵中改用 `base64:` 包 JSON 避免抽出文本含哨兵字面量截断；`bytesToLatin1` 分块替代 spread；`useSystemFonts:false` 避免 Tauri 主线程卡 OS 字体枚举。
 - 修复 PDF 输入预览和 PDF -> HTML 输出可能把 PDF 二进制对象噪声误判为正文的问题；上传 PDF 时会本地解压常见 `/FlateDecode` 文本流以提取可编辑文本，无法提取时保留原 PDF 嵌入式预览/HTML 输出，并显示明确降级说明和 warning，不再输出乱码正文。
 - 修复 PDF 工作台前端体验：插件/安全入口和插件报告模块默认可见，二进制输入摘要采用紧凑布局，转换成功后自动切换到结果视图并启用下载。
-- 重构工作台布局：将主转换区和插件/质量信息区分离为三栏结构，降低默认界面噪音并保留插件模块可见性。
+- 重构工作台布局为双栏主区 + 底部抽屉：原右侧 utility-pane（9 张高低不平的 report-card）整体并入底部 `<details>` 抽屉，内部三个 tab（质量 / 插件 / 版本）以 `auto-fill minmax(260px,1fr)` 控宽度；顶栏并入紧凑进度组件，独立进度条行删除；插件 / 安全入口统一走顶栏"更多"，自动展开抽屉并切到对应 tab。
 
 ### 安全
 

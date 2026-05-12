@@ -138,6 +138,44 @@ function isCrediblePdfText(text) {
   return printableRatio(value) >= 0.85 && hasReadableContent(value);
 }
 
+// 当 PDF 没有 ToUnicode CMap 时，从 BT...ET 抽出来的"文本"很可能是字体 Glyph ID 直接
+// 以 latin1 解码，看起来像 "yX RX kX jX 9X" 这种短碎片。单条 isCrediblePdfText 拦不住
+// （每个都是合法 ASCII），必须在整组层面判断。
+function looksLikeFontGlyphIdNoise(strings) {
+  if (!Array.isArray(strings) || strings.length < 8) return false;
+  const trimmed = strings.map((value) => String(value || "").trim()).filter(Boolean);
+  if (trimmed.length < 8) return false;
+
+  let shortFragments = 0;
+  let asciiNoSpace = 0;
+  let asciiOnly = 0;
+  const charFrequency = new Map();
+  let totalChars = 0;
+  for (const value of trimmed) {
+    const length = [...value].length;
+    if (length <= 4) shortFragments += 1;
+    if (/^[\x21-\x7e]+$/.test(value) && !value.includes(" ")) asciiNoSpace += 1;
+    if (/^[\x21-\x7e]+$/.test(value)) asciiOnly += 1;
+    for (const char of value) {
+      charFrequency.set(char, (charFrequency.get(char) || 0) + 1);
+      totalChars += 1;
+    }
+  }
+  const dominantChar = totalChars ? Math.max(0, ...charFrequency.values()) / totalChars : 0;
+  const shortRatio = shortFragments / trimmed.length;
+  const asciiNoSpaceRatio = asciiNoSpace / trimmed.length;
+  const asciiOnlyRatio = asciiOnly / trimmed.length;
+
+  // 三种典型字体 GID 乱码模式：
+  // 1) 大半都是 ≤4 字符的短碎片
+  // 2) 全 ASCII 不含空格，且没有任何超过 6 字符的"词"
+  // 3) 单一字符（往往是 X / R）占比异常高
+  if (shortRatio >= 0.6) return true;
+  if (asciiNoSpaceRatio >= 0.85 && trimmed.every((value) => [...value].length <= 6)) return true;
+  if (asciiOnlyRatio >= 0.9 && dominantChar >= 0.25) return true;
+  return false;
+}
+
 function extractTextObjects(source) {
   return [...String(source || "").matchAll(/\bBT\b([\s\S]*?)\bET\b/g)].map((match) => match[1]);
 }
@@ -331,7 +369,15 @@ function appendTextFragment(buffer, fragment) {
 
 async function loadPdfJs() {
   if (typeof window !== "undefined") {
-    return await import("/vendor/pdfjs/pdf.min.mjs");
+    const pdfjs = await import("/vendor/pdfjs/pdf.min.mjs");
+    // PDF.js 5.x 即使开启 worker，也必须先把 GlobalWorkerOptions.workerSrc 指到
+    // 真实可加载的 worker 脚本，否则 getDocument 第一行就抛 "No GlobalWorkerOptions
+    // .workerSrc specified" 或 "Setting up fake worker failed"，导致整个 PDF.js
+    // 路径完全失效、回落到核心解析器输出字体 GID 乱码。
+    if (pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs/pdf.worker.min.mjs";
+    }
+    return pdfjs;
   }
   return await import("pdfjs-dist/legacy/build/pdf.mjs");
 }
@@ -341,26 +387,30 @@ function getPdfJsAssetOptions() {
     return {
       cMapUrl: "/vendor/pdfjs/cmaps/",
       cMapPacked: true,
+      standardFontDataUrl: "/vendor/pdfjs/standard_fonts/",
     };
   }
   return {
     cMapUrl: new URL("../../node_modules/pdfjs-dist/cmaps/", import.meta.url).href,
     cMapPacked: true,
+    standardFontDataUrl: new URL("../../node_modules/pdfjs-dist/standard_fonts/", import.meta.url).href,
   };
 }
 
 async function extractTextWithPdfJs(content) {
+  let loadingTask = null;
+  let document = null;
   try {
     const pdfjs = await loadPdfJs();
-    const loadingTask = pdfjs.getDocument({
+    loadingTask = pdfjs.getDocument({
       data: coercePdfBytes(content),
-      disableWorker: true,
       isEvalSupported: false,
       useSystemFonts: false,
       useWorkerFetch: false,
+      verbosity: 0,
       ...getPdfJsAssetOptions(),
     });
-    const document = await loadingTask.promise;
+    document = await loadingTask.promise;
     const pages = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
@@ -381,10 +431,17 @@ async function extractTextWithPdfJs(content) {
       if (line.trim()) lines.push(line.trim());
       const text = lines.join("\n").trim();
       if (text) pages.push({ pageNumber, text });
+      page.cleanup();
     }
     await document.destroy();
     return pages;
-  } catch {
+  } catch (error) {
+    if (typeof console !== "undefined" && console.warn) {
+      console.warn("[trans2former] PDF.js extraction failed, falling back to core parser:", error?.message || error);
+    }
+    if (document) {
+      try { await document.destroy(); } catch { /* ignore */ }
+    }
     return [];
   }
 }
@@ -500,12 +557,16 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
   const cmapsByObject = buildCMapsByObject(pdfObjects);
   const fontCMaps = buildFontCMapLookup(pdfObjects, cmapsByObject);
   const fallbackCmap = cmapsByObject.size <= 1 ? parseToUnicodeCMap(source) : null;
-  const strings = pdfJsPayload
+  const rawStrings = pdfJsPayload
     ? pdfJsPayload.pages.flatMap((page) => String(page.text || "").split(/\n+/).map((line) => line.trim()).filter(isCrediblePdfText))
     : textObjects.flatMap((textObject) => [
     ...extractLiteralTextOperators(textObject),
     ...extractHexTextOperators(textObject, chooseCMap(textObject, fontCMaps, fallbackCmap)),
   ]);
+  // 仅当走核心解析器（无 PDF.js payload）时启用 GID 乱码兜底；PDF.js 的输出已经过
+  // ToUnicode 解码，短句不应被误伤。
+  const fontGlyphIdNoise = !pdfJsPayload && looksLikeFontGlyphIdNoise(rawStrings);
+  const strings = fontGlyphIdNoise ? [] : rawStrings;
   const blocks = [];
   if (strings.length > 0) {
     blocks.push(createHeading(1, strings[0]));
@@ -527,8 +588,10 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
   if (strings.length === 0) {
     warnings.push(createWarning(
       "unsupported",
-      "PDF_NO_CREDIBLE_TEXT",
-      "No credible PDF text operators were extracted; binary/compressed data was not exposed as document text."
+      fontGlyphIdNoise ? "PDF_FONT_GLYPH_ID_NOISE" : "PDF_NO_CREDIBLE_TEXT",
+      fontGlyphIdNoise
+        ? "PDF text operators decode to font Glyph IDs without ToUnicode mapping; readable text was not produced. Install a local OCR/PDF plugin or use a copyable-text PDF."
+        : "No credible PDF text operators were extracted; binary/compressed data was not exposed as document text."
     ));
   }
 
@@ -538,7 +601,13 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
     blocks,
     metadata: withWarnings({
       pdf: {
-        extraction: pdfJsPayload ? "pdfjs-text-content" : strings.length > 0 ? "literal-text-operators" : "embedded-original-pdf",
+        extraction: pdfJsPayload
+          ? "pdfjs-text-content"
+          : strings.length > 0
+            ? "literal-text-operators"
+            : fontGlyphIdNoise
+              ? "embedded-original-pdf-glyph-noise"
+              : "embedded-original-pdf",
         engine: pdfJsPayload?.engine || "core-mvp",
         textItemCount: strings.length,
         pageCount: pdfJsPayload?.pages?.length || undefined,

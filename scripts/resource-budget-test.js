@@ -7,7 +7,10 @@ const BUDGETS = [
   { path: "public/formats", maxBytes: 512 * 1024 },
   { path: "public/workers", maxBytes: 128 * 1024 },
   { path: "scripts", maxBytes: 512 * 1024 },
-  { path: "public", maxBytes: 2 * 1024 * 1024 },
+  { path: "public", maxBytes: 2 * 1024 * 1024, exclude: ["public/vendor"] },
+  // vendored PDF.js（main + worker + cmaps + standard_fonts）属于按需的可选引擎，
+  // 不应挤占核心主预算，但本身仍要有上限避免漂移。
+  { path: "public/vendor", maxBytes: 6 * 1024 * 1024 },
 ];
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -59,10 +62,14 @@ async function listFiles(directory) {
   return files;
 }
 
-async function directorySize(directory) {
+async function directorySize(directory, excludePaths = []) {
   const files = await listFiles(directory);
+  const excluded = excludePaths.map((value) => path.resolve(value));
   let total = 0;
   for (const file of files) {
+    if (excluded.some((prefix) => file === prefix || file.startsWith(`${prefix}${path.sep}`))) {
+      continue;
+    }
     total += (await stat(file)).size;
   }
   return total;
@@ -74,7 +81,7 @@ function formatSize(bytes) {
 
 async function assertDirectoryBudgets() {
   for (const budget of BUDGETS) {
-    const bytes = await directorySize(path.resolve(budget.path));
+    const bytes = await directorySize(path.resolve(budget.path), budget.exclude || []);
     assert.equal(
       bytes <= budget.maxBytes,
       true,
@@ -117,9 +124,17 @@ async function assertCoreHasNoHeavyImports() {
         continue;
       }
       if (forbidden === "pdfjs-dist" && path.relative(process.cwd(), file).replaceAll("\\", "/") === "public/formats/pdf.js") {
+        // 允许的可选 PDF.js 引擎使用形态：
+        // 1) Node 端用 legacy build，浏览器端用 vendored modern build（dynamic import）
+        // 2) 浏览器路径必须设置 GlobalWorkerOptions.workerSrc 到本地 worker
+        // 3) 关闭 eval、关闭 system fonts、不通过 worker fetch 远端
         const optionalPdfEngine = content.includes('import("pdfjs-dist/legacy/build/pdf.mjs")')
           && content.includes('import("/vendor/pdfjs/pdf.min.mjs")')
-          && content.includes("disableWorker: true");
+          && content.includes('GlobalWorkerOptions.workerSrc')
+          && content.includes('"/vendor/pdfjs/pdf.worker.min.mjs"')
+          && content.includes('isEvalSupported: false')
+          && content.includes('useSystemFonts: false')
+          && content.includes('useWorkerFetch: false');
         if (optionalPdfEngine) continue;
       }
       assert.equal(
