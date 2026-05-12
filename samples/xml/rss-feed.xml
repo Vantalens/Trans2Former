@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title>技术博客</title>
+        <link>https://blog.example.com</link>
+        <description>分享技术文章和教程</description>
+        <language>zh-CN</language>
+        <lastBuildDate>Mon, 12 May 2026 10:00:00 GMT</lastBuildDate>
+
+        <item>
+            <title>如何使用 Markdown 编写文档</title>
+            <link>https://blog.example.com/markdown-guide</link>
+            <description>本文介绍 Markdown 的基本语法和使用技巧。</description>
+            <author>张三</author>
+            <pubDate>Mon, 12 May 2026 09:00:00 GMT</pubDate>
+            <category>教程</category>
+        </item>
+
+        <item>
+            <title>JavaScript 异步编程详解</title>
+            <link>https://blog.example.com/async-javascript</link>
+            <description>深入理解 Promise、async/await 和事件循环。</description>
+            <author>李四</author>
+            <pubDate>Sun, 11 May 2026 15:00:00 GMT</pubDate>
+            <category>编程</category>
+        </item>
+
+        <item>
+            <title>CSS Grid 布局完全指南</title>
+            <link>https://blog.example.com/css-grid</link>
+            <description>学习如何使用 CSS Grid 创建复杂的网页布局。</description>
+            <author>王五</author>
+            <pubDate>Sat, 10 May 2026 12:00:00 GMT</pubDate>
+            <category>前端</category>
+        </item>
+    </channel>
+</rss>

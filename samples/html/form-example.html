@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>表单示例</title>
+</head>
+<body>
+    <h1>用户注册表单</h1>
+    <form action="/register" method="post">
+        <fieldset>
+            <legend>基本信息</legend>
+
+            <label for="username">用户名：</label>
+            <input type="text" id="username" name="username" required>
+            <br><br>
+
+            <label for="email">邮箱：</label>
+            <input type="email" id="email" name="email" required>
+            <br><br>
+
+            <label for="password">密码：</label>
+            <input type="password" id="password" name="password" required>
+            <br><br>
+
+            <label for="age">年龄：</label>
+            <input type="number" id="age" name="age" min="18" max="100">
+            <br><br>
+        </fieldset>
+
+        <fieldset>
+            <legend>个人偏好</legend>
+
+            <label>性别：</label>
+            <input type="radio" id="male" name="gender" value="male">
+            <label for="male">男</label>
+            <input type="radio" id="female" name="gender" value="female">
+            <label for="female">女</label>
+            <br><br>
+
+            <label>兴趣爱好：</label><br>
+            <input type="checkbox" id="reading" name="hobbies" value="reading">
+            <label for="reading">阅读</label><br>
+            <input type="checkbox" id="sports" name="hobbies" value="sports">
+            <label for="sports">运动</label><br>
+            <input type="checkbox" id="music" name="hobbies" value="music">
+            <label for="music">音乐</label><br>
+            <br>
+
+            <label for="country">国家：</label>
+            <select id="country" name="country">
+                <option value="">请选择</option>
+                <option value="cn">中国</option>
+                <option value="us">美国</option>
+                <option value="uk">英国</option>
+            </select>
+            <br><br>
+
+            <label for="bio">个人简介：</label><br>
+            <textarea id="bio" name="bio" rows="4" cols="50"></textarea>
+            <br><br>
+        </fieldset>
+
+        <button type="submit">提交</button>
+        <button type="reset">重置</button>
+    </form>
+</body>
+</html>

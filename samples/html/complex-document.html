@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>复杂 HTML 文档示例</title>
+</head>
+<body>
+    <header>
+        <h1>网站标题</h1>
+        <nav>
+            <ul>
+                <li><a href="#section1">第一节</a></li>
+                <li><a href="#section2">第二节</a></li>
+                <li><a href="#section3">第三节</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <article id="section1">
+            <h2>第一节：格式化文本</h2>
+            <p>这是一段包含<strong>粗体</strong>、<em>斜体</em>和<code>代码</code>的文本。</p>
+            <p>这是一个<a href="https://example.com">链接示例</a>。</p>
+
+            <blockquote>
+                <p>这是一段引用文本。</p>
+                <footer>— 引用来源</footer>
+            </blockquote>
+        </article>
+
+        <article id="section2">
+            <h2>第二节：列表和表格</h2>
+
+            <h3>无序列表</h3>
+            <ul>
+                <li>项目 1</li>
+                <li>项目 2
+                    <ul>
+                        <li>子项目 2.1</li>
+                        <li>子项目 2.2</li>
+                    </ul>
+                </li>
+                <li>项目 3</li>
+            </ul>
+
+            <h3>有序列表</h3>
+            <ol>
+                <li>第一步</li>
+                <li>第二步</li>
+                <li>第三步</li>
+            </ol>
+
+            <h3>数据表格</h3>
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>姓名</th>
+                        <th>年龄</th>
+                        <th>城市</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>张三</td>
+                        <td>25</td>
+                        <td>北京</td>
+                    </tr>
+                    <tr>
+                        <td>李四</td>
+                        <td>30</td>
+                        <td>上海</td>
+                    </tr>
+                </tbody>
+            </table>
+        </article>
+
+        <article id="section3">
+            <h2>第三节：代码示例</h2>
+            <pre><code>function greet(name) {
+    console.log("Hello, " + name);
+}
+
+greet("World");</code></pre>
+        </article>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 示例网站</p>
+    </footer>
+</body>
+</html>

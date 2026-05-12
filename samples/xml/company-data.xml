@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<company xmlns:hr="http://example.com/hr" xmlns:fin="http://example.com/finance">
+    <hr:employees>
+        <hr:employee id="E001">
+            <hr:name>张三</hr:name>
+            <hr:department>技术部</hr:department>
+            <hr:position>工程师</hr:position>
+            <hr:hireDate>2020-01-15</hr:hireDate>
+        </hr:employee>
+        <hr:employee id="E002">
+            <hr:name>李四</hr:name>
+            <hr:department>市场部</hr:department>
+            <hr:position>经理</hr:position>
+            <hr:hireDate>2019-06-01</hr:hireDate>
+        </hr:employee>
+    </hr:employees>
+    <fin:budget>
+        <fin:department name="技术部">
+            <fin:amount currency="CNY">1000000</fin:amount>
+            <fin:year>2026</fin:year>
+        </fin:department>
+        <fin:department name="市场部">
+            <fin:amount currency="CNY">800000</fin:amount>
+            <fin:year>2026</fin:year>
+        </fin:department>
+    </fin:budget>
+</company>

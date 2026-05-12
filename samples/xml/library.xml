@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library>
+    <section name="计算机科学">
+        <book isbn="978-0-123456-78-9">
+            <title>算法导论</title>
+            <authors>
+                <author>Thomas H. Cormen</author>
+                <author>Charles E. Leiserson</author>
+            </authors>
+            <publisher>机械工业出版社</publisher>
+            <year>2012</year>
+            <pages>1312</pages>
+            <price currency="CNY">128.00</price>
+            <available>true</available>
+        </book>
+        <book isbn="978-0-987654-32-1">
+            <title>深入理解计算机系统</title>
+            <authors>
+                <author>Randal E. Bryant</author>
+                <author>David R. O'Hallaron</author>
+            </authors>
+            <publisher>机械工业出版社</publisher>
+            <year>2015</year>
+            <pages>736</pages>
+            <price currency="CNY">139.00</price>
+            <available>true</available>
+        </book>
+    </section>
+    <section name="数学">
+        <book isbn="978-1-234567-89-0">
+            <title>线性代数及其应用</title>
+            <authors>
+                <author>David C. Lay</author>
+            </authors>
+            <publisher>人民邮电出版社</publisher>
+            <year>2018</year>
+            <pages>528</pages>
+            <price currency="CNY">89.00</price>
+            <available>false</available>
+        </book>
+    </section>
+</library>

@@ -1,0 +1,34 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "张三",
+      "email": "zhangsan@example.com",
+      "age": 25,
+      "city": "北京",
+      "active": true
+    },
+    {
+      "id": 2,
+      "name": "李四",
+      "email": "lisi@example.com",
+      "age": 30,
+      "city": "上海",
+      "active": true
+    },
+    {
+      "id": 3,
+      "name": "王五",
+      "email": "wangwu@example.com",
+      "age": 28,
+      "city": "广州",
+      "active": false
+    }
+  ],
+  "metadata": {
+    "total": 3,
+    "page": 1,
+    "pageSize": 10,
+    "timestamp": "2026-05-12T10:00:00Z"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "config": {
+    "app": {
+      "name": "Trans2Former",
+      "version": "1.0.0",
+      "environment": "production",
+      "debug": false
+    },
+    "server": {
+      "host": "localhost",
+      "port": 3000,
+      "protocol": "https",
+      "timeout": 30000
+    },
+    "database": {
+      "type": "postgresql",
+      "host": "db.example.com",
+      "port": 5432,
+      "name": "trans2former_db",
+      "pool": {
+        "min": 2,
+        "max": 10
+      }
+    },
+    "cache": {
+      "enabled": true,
+      "type": "redis",
+      "host": "cache.example.com",
+      "port": 6379,
+      "ttl": 3600
+    },
+    "logging": {
+      "level": "info",
+      "format": "json",
+      "outputs": ["console", "file"],
+      "file": {
+        "path": "/var/log/trans2former",
+        "maxSize": "100MB",
+        "maxFiles": 10
+      }
+    },
+    "security": {
+      "cors": {
+        "enabled": true,
+        "origins": ["https://example.com"]
+      },
+      "rateLimit": {
+        "enabled": true,
+        "maxRequests": 100,
+        "windowMs": 60000
+      }
+    }
+  }
+}

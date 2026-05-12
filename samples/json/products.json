@@ -1,0 +1,48 @@
+{
+  "products": [
+    {
+      "id": "P001",
+      "name": "笔记本电脑",
+      "category": "电子产品",
+      "price": 5999.00,
+      "stock": 50,
+      "specifications": {
+        "brand": "品牌A",
+        "model": "Model X",
+        "cpu": "Intel i7",
+        "ram": "16GB",
+        "storage": "512GB SSD"
+      },
+      "tags": ["电脑", "办公", "学习"]
+    },
+    {
+      "id": "P002",
+      "name": "智能手机",
+      "category": "电子产品",
+      "price": 3999.00,
+      "stock": 100,
+      "specifications": {
+        "brand": "品牌B",
+        "model": "Phone Y",
+        "screen": "6.5英寸",
+        "camera": "48MP",
+        "battery": "4500mAh"
+      },
+      "tags": ["手机", "通讯", "娱乐"]
+    },
+    {
+      "id": "P003",
+      "name": "无线耳机",
+      "category": "配件",
+      "price": 299.00,
+      "stock": 200,
+      "specifications": {
+        "brand": "品牌C",
+        "type": "入耳式",
+        "bluetooth": "5.0",
+        "battery": "24小时"
+      },
+      "tags": ["耳机", "音乐", "运动"]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+这是一个包含长行的文本文件，用于测试文本处理能力。
+
+第一行是一个非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常长的行。
+
+第二行包含URL：https://www.example.com/very/long/path/to/resource?param1=value1&param2=value2&param3=value3&param4=value4&param5=value5&param6=value6&param7=value7&param8=value8&param9=value9&param10=value10
+
+第三行包含代码：const veryLongVariableName = someFunction(parameter1, parameter2, parameter3, parameter4, parameter5, parameter6, parameter7, parameter8, parameter9, parameter10);
+
+第四行包含中文：这是一段很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的中文文本。
+
+第五行是正常长度的文本。
+
+第六行包含特殊字符：!@#$%^&*()_+-=[]{}|;':",./<>?`~
+
+第七行包含混合内容：This is English text 这是中文文本 123456789 !@#$%^&*()
+
+第八行是空行后的文本。
