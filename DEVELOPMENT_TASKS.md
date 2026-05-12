@@ -44,6 +44,7 @@ Trans2Former 当前产品方向正式收敛为：
 
 ## 最近验收修复
 
+- 2026-05-12：P8-M4 高保真 PDF 输出双路实现。新增 public/formats/pdf-output-high-fidelity.js，直接消费 FixedLayoutModel，按 textRun.bbox 精确定位每个文本片段，保留原始坐标、字体、尺寸和 annotations。pdf-output.js 升级为智能路由：优先使用高保真路径（FixedLayoutModel → 精确坐标重现），回落到程序化路径（SemanticDoc → 重新排版）。Producer 标记区分 High-Fidelity vs 普通 Trans2Former。新增 P8-M4 测试验证 FixedLayoutModel 坐标保留和 PDF round-trip 高保真路径。所有 44 个测试组通过。
 - 2026-05-12：P8-M7 结构化 inline 节点 + 公式/合并单元格保留。DOCX reader 新增 extractInlinesFromParagraph 和 extractRunInlines，识别 hyperlink、bold/italic/del/code 属性，输出 strong/em/del/code/link inline 节点，链接不再降级为 "文本 (URL)" 字符串。PDF reader 新增 itemsToInlines，从 PDF.js textContent.items 提取 fontName 识别 bold/italic。XLSX writer 新增 extractCachedValue 单独提取公式缓存值，sheetXml 从 WorkbookModel.formulas 回写 `<f>expression</f><v>cachedValue</v>`，从 WorkbookModel.merges 回写 `<mergeCells>` 节点，xlsx → xlsx round-trip 保留公式表达式和合并单元格范围。新增 P9-C 和 P9-B 测试，所有 43 个测试组通过。新增 public/core/models/mappers.js 实现跨模型 mapper（workbookToSemantic / semanticToWorkbook / slideToSemantic / semanticToSlide / fixedLayoutToSemantic / semanticToFixedLayout）。
 - 2026-05-12：工作台 UI 重构为双栏主区 + 底部抽屉。原右侧 utility-pane（9 张 report-card 高低不平）整体并入底部 `<details>` 抽屉，内部三个 tab（质量 / 插件 / 版本）以 `auto-fill minmax(260px,1fr)` 控宽度。顶栏新增紧凑进度组件（status chip + 细条 + %），独立进度条行删除。插件 / 安全入口统一走顶栏"更多"菜单，点击自动展开抽屉、切到对应 tab、滚到目标卡片，避免顶栏与右栏双重冗余。浏览器 smoke 测试更新为新结构断言（`bottom-drawer` / `topbar-progress` / `drawer-tab`）。
 - 2026-05-12：修复 HTML / XML / 纯文本转换乱码。HTML reader 重写为 Node + 浏览器统一的轻量 tokenizer，识别 block（h1-6/p/blockquote/pre/ul/ol/table/img）和 inline（strong/em/a/code/img/br/del）标签，不再依赖 `DOMParser` 也不再用 `textContent` 吞掉内联格式。Markdown writer 把非 markdown 的 raw block 包成 fenced code、HTML writer 输出 pre/code，避免 XML/JSON → MD/HTML 输出空白或残缺。XML reader 不再额外塞残缺 summary paragraph。`getPlainText` 给列表加 -/1. 标记并保留缩进，TXT 输出不再丢失列表语义。新增 `scripts/real-sample-conversion-probe.js` 用真样例端到端回归，避免单测覆盖盲区。
@@ -317,7 +318,7 @@ Trans2Former 当前产品方向正式收敛为：
 - [x] PDF reader 升级输出 FixedLayoutModel（textRuns + bbox + fontSize + fontWeight）。
 - [x] FixedLayoutModel ↔ SemanticDoc mapper（保守降级，强制 `MODEL_VISUAL_FIDELITY_LOST`）。
 - [x] OFD reader 升级到 L1，输出 FixedLayoutModel。
-- [ ] PDF 输出双路：程序化（SemanticDoc → pdf-lib）+ 高保真（FixedLayoutModel → 重新组版）。
+- [x] PDF 输出双路：程序化（SemanticDoc → pdf-lib）+ 高保真（FixedLayoutModel → 重新组版）。
 
 ### P8-M5：External Engine Bridge Plugin
 
