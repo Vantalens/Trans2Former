@@ -52,9 +52,9 @@
         </section>
 
         <div class="topbar-actions">
-          <button id="transformButton" class="primary-button" type="button">转换</button>
-          <button id="cancelTransformButton" class="ghost-button" type="button" disabled hidden>取消</button>
-          <a id="downloadOutputButton" class="ghost-button disabled" href="#" download>下载结果</a>
+          <button id="transformButton" class="primary-button" type="button" title="开始转换文档">转换</button>
+          <button id="cancelTransformButton" class="ghost-button" type="button" disabled hidden title="取消当前转换">取消</button>
+          <a id="downloadOutputButton" class="ghost-button disabled" href="#" download title="下载转换结果">下载结果</a>
           <details class="auxiliary-actions">
             <summary aria-label="更多操作">更多</summary>
             <div class="auxiliary-menu">
@@ -147,7 +147,7 @@
                 <input id="autoPreviewCheckbox" type="checkbox" />
                 自动预览
               </label>
-              <button id="refreshPreviewButton" class="ghost-button" type="button">刷新预览</button>
+              <button id="refreshPreviewButton" class="ghost-button" type="button" title="刷新预览内容">刷新预览</button>
               <label class="compact-field large-preview-field" hidden>
                 <span>大文件预览</span>
                 <select id="largePreviewModeSelect">
@@ -160,8 +160,8 @@
           </div>
 
           <nav id="workbenchTabs" class="workbench-tabs" aria-label="工作台视图">
-            <button class="tab-button is-active" type="button" data-tab-target="inputPreviewPanel">预览</button>
-            <button class="tab-button" type="button" data-tab-target="outputPreviewPanel">结果</button>
+            <button class="tab-button is-active" type="button" data-tab-target="inputPreviewPanel" title="查看输入文档预览">预览</button>
+            <button class="tab-button" type="button" data-tab-target="outputPreviewPanel" title="查看转换结果">结果</button>
           </nav>
 
           <div class="viewer-grid single-view">
@@ -182,7 +182,7 @@
             <article id="outputPreviewPanel" class="viewer-card workbench-panel">
               <div class="viewer-card-header">
                 <span>转换结果</span>
-                <button id="openPdfPreviewButton" class="mini-button" type="button">打开 PDF</button>
+                <button id="openPdfPreviewButton" class="mini-button" type="button" title="在新窗口打开 PDF 预览">打开 PDF</button>
               </div>
               <section id="outputEditorPanel" class="output-editor-panel" hidden>
                 <div class="output-editor-header">
@@ -191,9 +191,9 @@
                     <span id="outputDraftMeta">等待转换</span>
                   </div>
                   <div class="output-editor-actions">
-                    <button id="outputCheckpointButton" class="mini-button" type="button" disabled>检查点</button>
-                    <button id="outputUndoButton" class="mini-button" type="button" disabled>撤销</button>
-                    <button id="outputRedoButton" class="mini-button" type="button" disabled>重做</button>
+                    <button id="outputCheckpointButton" class="mini-button" type="button" disabled title="保存当前编辑为检查点">检查点</button>
+                    <button id="outputUndoButton" class="mini-button" type="button" disabled title="撤销上一步编辑">撤销</button>
+                    <button id="outputRedoButton" class="mini-button" type="button" disabled title="重做上一步撤销">重做</button>
                   </div>
                 </div>
                 <textarea id="outputEditor" spellcheck="false" placeholder="转换结果会显示在这里，可直接编辑文本输出" disabled></textarea>
@@ -205,7 +205,7 @@
                     <strong>转换失败</strong>
                     <span id="errorDetailsSummary">等待转换</span>
                   </div>
-                  <button id="copyErrorDiagnosticsButton" class="mini-button" type="button">复制诊断</button>
+                  <button id="copyErrorDiagnosticsButton" class="mini-button" type="button" title="复制错误诊断信息">复制诊断</button>
                 </div>
                 <dl class="error-details-grid">
                   <div><dt>分类</dt><dd id="errorCategory">-</dd></div>
