@@ -1,4 +1,5 @@
 import { createAssetReference, createDocumentModel, createHeading, createParagraph, createTable } from "../core/document-model.js";
+import { createSlideModel } from "../core/models/slide-model.js";
 import { createAssetStore } from "../core/asset-store.js";
 import { bytesToDataUrl } from "../core/binary-utils.js";
 import { readZipEntries } from "../core/zip-container.js";
@@ -72,7 +73,7 @@ function parseSlide(xml, index, relationships, zip, assetStore) {
   }
   blocks.push(...parsePictures(xml, relationships, zip, assetStore));
   blocks.push(...parseTables(xml));
-  return blocks;
+  return { blocks, texts };
 }
 
 export function readPptx({ content, title = "presentation", fileName = "", format = "pptx" }) {
@@ -84,23 +85,36 @@ export function readPptx({ content, title = "presentation", fileName = "", forma
     .map((relationship) => relationship.resolvedTarget)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const blocks = [];
+  const slideRecords = [];
   let notesSlideCount = 0;
   let masterReferenceCount = 0;
   slideTargets.forEach((target, index) => {
     const slideRels = parseRelationships(zip.getText(`${target.split("/").slice(0, -1).join("/")}/_rels/${target.split("/").pop()}.rels`), target);
-    blocks.push(...parseSlide(zip.getText(target), index + 1, slideRels, zip, assetStore));
+    const slideXml = zip.getText(target);
+    const parsed = parseSlide(slideXml, index + 1, slideRels, zip, assetStore);
+    blocks.push(...parsed.blocks);
+    let notes = "";
     for (const relationship of slideRels.values()) {
       if (relationship.type.endsWith("/notesSlide") || relationship.type === "notesSlide") {
         notesSlideCount += 1;
         const notesText = extractTextTags(zip.getText(relationship.resolvedTarget), "a:t").trim();
-        if (notesText) blocks.push(createParagraph(`Speaker notes: ${notesText}`));
+        if (notesText) {
+          blocks.push(createParagraph(`Speaker notes: ${notesText}`));
+          notes = notesText;
+        }
       }
       if (relationship.type.endsWith("/slideMaster") || relationship.type === "slideMaster") {
         masterReferenceCount += 1;
       }
     }
+    slideRecords.push({
+      pageNumber: index + 1,
+      title: parsed.texts[0] || "",
+      shapes: parsed.texts.map((text) => ({ type: "text", text })),
+      notes,
+    });
   });
-  return createDocumentModel({
+  const model = createDocumentModel({
     title,
     sourceFormat: format,
     blocks,
@@ -118,6 +132,11 @@ export function readPptx({ content, title = "presentation", fileName = "", forma
       },
     },
   });
+  // P8-M3：在顶层挂 SlideModel，让 mapper / writer 直接消费 slide-level 结构。
+  model.slides = createSlideModel({
+    slides: slideRecords,
+  });
+  return model;
 }
 
 function slideTextBlocks(model) {

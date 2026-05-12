@@ -791,6 +791,16 @@ test("ConversionError normalizes parse, validate, and convert failures", () => {
   assert.equal(normalized.code, "PREVIEW_RENDER_ERROR");
 });
 
+test("CSV reader attaches WorkbookModel (P8-M3)", () => {
+  const csv = "name,score\n张三,90\n李四,85\n";
+  const model = toDocumentModel(csv, "csv", "scores.csv");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.workbook.schemaVersion, "trans2former.workbook.v1");
+  assert.equal(model.workbook.sheets.length, 1);
+  assert.deepEqual(model.workbook.sheets[0].headers, ["name", "score"]);
+  assert.deepEqual(model.workbook.sheets[0].rows, [["张三", "90"], ["李四", "85"]]);
+});
+
 test("HTML reader emits structured inline nodes (P8-M2)", () => {
   const html = `<!doctype html><html><body>
     <h1>Title with <em>emphasis</em></h1>

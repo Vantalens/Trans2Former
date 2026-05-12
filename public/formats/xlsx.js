@@ -1,4 +1,5 @@
 import { createDocumentModel, createHeading, createTable } from "../core/document-model.js";
+import { createWorkbookModel } from "../core/models/workbook-model.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
 import { bytesToDataUrl } from "../core/binary-utils.js";
 import { readZipEntries } from "../core/zip-container.js";
@@ -57,16 +58,38 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
     warnings.push(createWarning("lossy", "XLSX_MERGED_CELLS_APPROXIMATED", "XLSX merged cells were flattened into the DocumentModel table shape."));
   }
   const rows = [];
+  const cells = [];
+  const formulas = [];
   for (const rowMatch of String(xml || "").matchAll(/<row\b[\s\S]*?<\/row>/g)) {
     const row = [];
     for (const cellMatch of rowMatch[0].matchAll(/<c\b[\s\S]*?<\/c>/g)) {
-      const ref = getAttr(cellMatch[0].match(/<c\b[^>]*>/)?.[0] || "", "r");
-      row[columnIndex(ref)] = cellValue(cellMatch[0], sharedStrings, styleFormats, counters);
+      const cellXml = cellMatch[0];
+      const ref = getAttr(cellXml.match(/<c\b[^>]*>/)?.[0] || "", "r");
+      const formula = stripTags(cellXml.match(/<f\b[\s\S]*?<\/f>/)?.[0] || "");
+      const value = cellValue(cellXml, sharedStrings, styleFormats, counters);
+      row[columnIndex(ref)] = value;
+      cells.push({ ref, value, formula });
+      if (formula) {
+        formulas.push({ ref, expression: formula, cachedValue: value });
+      }
     }
     rows.push(row.map((cell) => String(cell ?? "")));
   }
+  const merges = [...String(xml || "").matchAll(/<mergeCell\b[^>]*ref="([^"]+)"[^>]*\/?>/g)]
+    .map((match) => {
+      const [from, to] = match[1].split(":");
+      return { from: from || "", to: to || from || "" };
+    });
   const headers = rows.shift() || [];
-  return headers.length > 0 ? createTable(headers, rows) : null;
+  const table = headers.length > 0 ? createTable(headers, rows) : null;
+  return {
+    table,
+    sheetCells: cells,
+    sheetFormulas: formulas,
+    sheetMerges: merges,
+    headers,
+    rows,
+  };
 }
 
 export function readXlsx({ content, title = "workbook", fileName = "", format = "xlsx" }) {
@@ -78,6 +101,7 @@ export function readXlsx({ content, title = "workbook", fileName = "", format = 
   const warnings = [];
   const counters = { formulaCellCount: 0 };
   const blocks = [];
+  const workbookSheets = [];
   let sheetCount = 0;
 
   for (const sheetMatch of workbookXml.matchAll(/<sheet\b[^>]*\/?>/g)) {
@@ -88,12 +112,20 @@ export function readXlsx({ content, title = "workbook", fileName = "", format = 
     const sheetXml = zip.getText(target);
     if (!sheetXml) continue;
     blocks.push(createHeading(2, name));
-    const table = parseSheet(sheetXml, sharedStrings, styleFormats, counters, warnings);
-    if (table) blocks.push(table);
+    const parsed = parseSheet(sheetXml, sharedStrings, styleFormats, counters, warnings);
+    if (parsed.table) blocks.push(parsed.table);
+    workbookSheets.push({
+      name,
+      headers: parsed.headers,
+      rows: parsed.rows,
+      cells: parsed.sheetCells,
+      formulas: parsed.sheetFormulas,
+      merges: parsed.sheetMerges,
+    });
     sheetCount += 1;
   }
 
-  return createDocumentModel({
+  const model = createDocumentModel({
     title,
     sourceFormat: format,
     blocks,
@@ -109,6 +141,12 @@ export function readXlsx({ content, title = "workbook", fileName = "", format = 
       },
     }, warnings),
   });
+  // P8-M3：在顶层挂 WorkbookModel，让需要 cell-level 信息（公式 cache、merge）
+  // 的 writer / mapper 不必从 SemanticDoc.table 反推。
+  model.workbook = createWorkbookModel({
+    sheets: workbookSheets,
+  });
+  return model;
 }
 
 function columnName(index) {

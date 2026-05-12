@@ -1,5 +1,6 @@
 import { createDocumentModel, createTable } from "../core/document-model.js";
 import { getPlainText } from "../core/document-model.js";
+import { createWorkbookModel } from "../core/models/workbook-model.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
 
 function parseCsvRecords(content) {
@@ -85,12 +86,17 @@ export function readCsv({ content, title = "table", format = "csv" }) {
   if (parsed.sawQuotedNewline) {
     warnings.push(createWarning("info", "CSV_MULTILINE_FIELD", "CSV quoted multiline fields were normalized to LF newlines."));
   }
-  return createDocumentModel({
+  const model = createDocumentModel({
     title,
     sourceFormat: format,
     blocks: [createTable(headers, rows)],
     metadata: withWarnings({}, warnings),
   });
+  // P8-M3：CSV 也产出 WorkbookModel，作为 mapper 链路的 reader 起点。
+  model.workbook = createWorkbookModel({
+    sheets: [{ name: title || "Sheet 1", headers, rows }],
+  });
+  return model;
 }
 
 export function writeCsv({ model }) {
