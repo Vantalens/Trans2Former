@@ -1,4 +1,5 @@
 import { createDocumentModel, createHeading, createList, createParagraph, createRawBlock } from "../core/document-model.js";
+import { createFixedLayoutModel } from "../core/models/fixed-layout.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
 import { escapeHtml } from "./text-utils.js";
 
@@ -414,6 +415,7 @@ async function extractTextWithPdfJs(content) {
     const pages = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
+      const viewport = page.getViewport ? page.getViewport({ scale: 1 }) : null;
       const textContent = await page.getTextContent({
         disableNormalization: false,
         includeMarkedContent: false,
@@ -424,6 +426,7 @@ async function extractTextWithPdfJs(content) {
           str: item.str,
           x: item.transform?.[4] ?? 0,
           y: item.transform?.[5] ?? 0,
+          width: Number(item.width) || 0,
           height: item.height || Math.abs(item.transform?.[3] ?? 0) || 12,
           fontName: String(item.fontName || ""),
         }));
@@ -431,10 +434,24 @@ async function extractTextWithPdfJs(content) {
       const fallbackText = pageBlocks.length === 0
         ? (textContent.items || []).map((item) => (typeof item.str === "string" ? item.str : "")).join(" ").replace(/\s+/g, " ").trim()
         : "";
+      // P8-M4：同时收集 FixedLayoutModel 的 textRuns + page size，供 model.fixedLayout 使用。
+      const textRuns = items.map((item) => ({
+        text: item.str,
+        bbox: { x: item.x, y: item.y, w: item.width, h: item.height },
+        fontName: item.fontName,
+        fontSize: item.height,
+      }));
+      const annotations = await collectPdfJsAnnotations(page);
+      const layoutPage = {
+        pageNumber,
+        size: viewport ? { width: viewport.width, height: viewport.height, unit: "pt" } : { width: 0, height: 0, unit: "pt" },
+        textRuns,
+        annotations,
+      };
       if (pageBlocks.length > 0) {
-        pages.push({ pageNumber, blocks: pageBlocks });
+        pages.push({ pageNumber, blocks: pageBlocks, layout: layoutPage });
       } else if (fallbackText) {
-        pages.push({ pageNumber, text: fallbackText });
+        pages.push({ pageNumber, text: fallbackText, layout: layoutPage });
       }
       page.cleanup();
     }
@@ -447,6 +464,28 @@ async function extractTextWithPdfJs(content) {
     if (document) {
       try { await document.destroy(); } catch { /* ignore */ }
     }
+    return [];
+  }
+}
+
+async function collectPdfJsAnnotations(page) {
+  if (!page.getAnnotations) return [];
+  try {
+    const raw = await page.getAnnotations();
+    return (raw || [])
+      .filter((annotation) => annotation && annotation.subtype)
+      .map((annotation) => ({
+        type: String(annotation.subtype || ""),
+        bbox: Array.isArray(annotation.rect) ? {
+          x: annotation.rect[0],
+          y: annotation.rect[1],
+          w: annotation.rect[2] - annotation.rect[0],
+          h: annotation.rect[3] - annotation.rect[1],
+        } : null,
+        target: String(annotation.url || annotation.dest || ""),
+        text: String(annotation.contents || annotation.title || ""),
+      }));
+  } catch {
     return [];
   }
 }
@@ -702,7 +741,7 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
         "PDF_LAYOUT_HEURISTIC",
         "PDF text was reconstructed from PDF.js coordinates with heuristic layout analysis (font-size for headings, y-gap for paragraphs, line-prefix for lists). Visual fidelity is not preserved."
       )];
-      return createDocumentModel({
+      const model = createDocumentModel({
         title,
         sourceFormat: format,
         blocks: layoutBlocks,
@@ -717,6 +756,15 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
           },
         }, warnings),
       });
+      // P8-M4：在顶层挂 FixedLayoutModel，让需要保留视觉布局的 mapper / writer
+      // 直接消费 textRuns + bbox + annotations，而不是从 SemanticDoc 反推。
+      const layoutPages = pdfJsPayload.pages
+        .filter((page) => page && page.layout)
+        .map((page) => page.layout);
+      if (layoutPages.length > 0) {
+        model.fixedLayout = createFixedLayoutModel({ pages: layoutPages });
+      }
+      return model;
     }
   }
 

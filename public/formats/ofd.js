@@ -1,4 +1,5 @@
 import { createDocumentModel, createParagraph } from "../core/document-model.js";
+import { createFixedLayoutModel } from "../core/models/fixed-layout.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
 import { readZipEntries } from "../core/zip-container.js";
 
@@ -34,7 +35,7 @@ export function readOfdL0({ content, title = "document", fileName = "", format =
     createWarning("unsupported", "OFD_RENDER_PLUGIN_REQUIRED", "OFD rendering to PNG/PDF requires a local renderer plugin and visual regression."),
   ];
 
-  return createDocumentModel({
+  const model = createDocumentModel({
     title: ofdTitle,
     sourceFormat: format,
     blocks: [
@@ -54,4 +55,11 @@ export function readOfdL0({ content, title = "document", fileName = "", format =
       },
     }, warnings),
   });
+  // P8-M4：OFD L0 阶段先挂空 FixedLayoutModel 占位，让 capability 视图能识别
+  // 模型存在但 pages 为空；L1+ 由本地 OFD 插件填充 textRuns / annotations。
+  model.fixedLayout = createFixedLayoutModel({
+    pages: [],
+    metadata: { level: "L0", awaitsPlugin: true },
+  });
+  return model;
 }

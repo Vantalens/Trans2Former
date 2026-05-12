@@ -529,6 +529,15 @@ test("PDF reader consumes pdfjs-layout payload with structured blocks", () => {
           { type: "list", ordered: false, items: ["线性独立", "线性相关", "基与维数"] },
           { type: "paragraph", text: "下面给出若干例题。" },
         ],
+        layout: {
+          pageNumber: 1,
+          size: { width: 595, height: 842, unit: "pt" },
+          textRuns: [
+            { text: "线性代数复习讲义", bbox: { x: 80, y: 760, w: 350, h: 28 }, fontName: "STSong", fontSize: 28 },
+            { text: "向量空间的定义和基本性质。", bbox: { x: 80, y: 600, w: 350, h: 12 }, fontName: "STSong", fontSize: 12 },
+          ],
+          annotations: [],
+        },
       },
     ],
   };
@@ -547,6 +556,13 @@ test("PDF reader consumes pdfjs-layout payload with structured blocks", () => {
   assert.equal(model.metadata.pdf.extraction, "pdfjs-layout");
   assert.equal(model.metadata.warnings.some((warning) => warning.code === "PDF_LAYOUT_HEURISTIC"), true);
   assert.equal(model.metadata.warnings.some((warning) => warning.code === "PDF_NO_CREDIBLE_TEXT"), false);
+
+  // P8-M4：FixedLayoutModel 应当一并挂在顶层
+  assert.equal(model.fixedLayout.schemaVersion, "trans2former.fixedlayout.v1");
+  assert.equal(model.fixedLayout.pages.length, 1);
+  assert.equal(model.fixedLayout.pages[0].size.width, 595);
+  assert.equal(model.fixedLayout.pages[0].textRuns.length, 2);
+  assert.equal(model.fixedLayout.pages[0].textRuns[0].fontSize, 28);
 });
 
 test("PDF text extraction expands FlateDecode text streams", async () => {
