@@ -2,7 +2,7 @@
 
 版本：v0.2.0
 状态：生效
-最后更新：2026-04-26
+最后更新：2026-05-09
 
 ## 目标
 
@@ -30,7 +30,8 @@ optional-plugin
 
 - 默认只包含 `core + format-basic`。
 - `format-basic` 必须保持小而可用，内置热门轻量格式，不能退化为空壳。
-- DOCX/XLSX/EPUB/PDF/PPTX 的 P3 输入能力已作为轻量、无重依赖路径进入 `format-basic`。
+- DOCX/XLSX/EPUB/PDF/PPTX 的 P3 输入能力已作为基础路径进入 `format-basic`。
+- PDF 文本抽取允许使用 optional `pdfjs-dist` + 本地 vendored `/public/vendor/pdfjs/`，但必须保持本地加载、低于当前 public 总预算，且不得变成默认 `dependencies`。
 - 高保真输出、OCR、本地模型、OFD 和重渲染器必须插件化或按需加载。
 - `optional-plugin` 必须默认关闭。
 - 云端文档处理、远程转换、远程 OCR、远程转写、远程 AI 增强不提供。
@@ -46,6 +47,7 @@ optional-plugin
 - `scripts`: <= 0.50 MB
 - `public` total: <= 2.00 MB
 - production dependencies: <= 5 个
+- `pdfjs-dist`: 只能在 `optionalDependencies` 中出现，并由 `scripts/sync-pdfjs-vendor.js` 同步到本地 vendor。
 
 这些预算是当前阶段的护栏，不是最终能力上限。未来引入重格式时，应放入插件包或按需加载目录，并同步调整预算。
 
@@ -72,7 +74,7 @@ optional-plugin
 
 - 高频需求明确。
 - 新增体积不突破默认预算。
-- 不引入 PDF/OCR/Office/AI 等重依赖。
+- 不引入 OCR/Office/AI 等重依赖；PDF.js 作为 PDF 基础文本抽取的例外，必须 optional + local vendor + 受预算测试约束。
 - 可完全本地运行，不需要默认网络访问。
 - 有样例、快照、warnings、安全测试和质量基准。
 

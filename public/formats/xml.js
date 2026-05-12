@@ -155,7 +155,7 @@ export function readXml({ content, title = "xml", format = "xml" }) {
     return createDocumentModel({
       title,
       sourceFormat: format,
-      blocks: [createRawBlock("xml", source), createParagraph(parsed.text || stripHtml(source))],
+      blocks: [createRawBlock("xml", source)],
       metadata: withWarnings({ rawXml: source, ...parsed.metadata }, parsed.warnings),
     });
   }
@@ -165,7 +165,6 @@ export function readXml({ content, title = "xml", format = "xml" }) {
   if (parserErrorNode) {
     throw parserError(parserErrorNode.textContent.trim(), format);
   }
-  const text = walkXmlNode(doc.documentElement).join("\n");
   const domMetadata = extractDomMetadata(doc.documentElement);
   const warnings = Object.keys(domMetadata.attributes).length > 0
     ? [createWarning("info", "XML_ATTRIBUTES_EXTRACTED", "XML attributes were extracted into metadata and readable preview text.")]
@@ -173,7 +172,7 @@ export function readXml({ content, title = "xml", format = "xml" }) {
   return createDocumentModel({
     title,
     sourceFormat: format,
-    blocks: [createRawBlock("xml", source), createParagraph(text)],
+    blocks: [createRawBlock("xml", source)],
     metadata: withWarnings({
       rootElement: doc.documentElement.tagName,
       namespaces: domMetadata.namespaces,

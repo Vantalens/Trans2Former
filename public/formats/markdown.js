@@ -246,10 +246,14 @@ export function writeMarkdown({ model, options = {} }) {
         return `![${block.alt || block.title || "asset"}](asset:${block.assetId})`;
       }
       if (block.type === "raw") {
-        if (block.format !== "md" && block.format !== "markdown") {
+        if (block.format === "md" || block.format === "markdown") {
+          return block.content;
+        }
+        if (block.format === "html") {
           return "";
         }
-        return block.content;
+        const fenceLang = String(block.format || "").replace(/[^a-zA-Z0-9_+\-]/g, "");
+        return `\`\`\`${fenceLang}\n${block.content}\n\`\`\``;
       }
       return "";
     })
@@ -322,6 +326,11 @@ export function blockToHtml(block) {
   }
   if (block.type === "raw" && block.format === "html") {
     return block.content;
+  }
+  if (block.type === "raw" && block.format && block.format !== "md" && block.format !== "markdown") {
+    const lang = String(block.format).replace(/[^a-zA-Z0-9_+\-]/g, "");
+    const langClass = lang ? ` class="language-${escapeHtml(lang)}"` : "";
+    return `<pre><code${langClass}>${escapeHtml(block.content)}</code></pre>`;
   }
   return "";
 }

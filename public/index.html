@@ -41,7 +41,7 @@
           <button id="transformButton" class="primary-button" type="button">转换</button>
           <button id="cancelTransformButton" class="ghost-button" type="button" disabled hidden>取消</button>
           <a id="downloadOutputButton" class="ghost-button disabled" href="#" download>下载结果</a>
-          <details class="auxiliary-actions" hidden>
+          <details class="auxiliary-actions">
             <summary aria-label="更多操作">更多</summary>
             <div class="auxiliary-menu">
               <button id="pluginManagerButton" class="menu-button" type="button">插件管理</button>
@@ -216,7 +216,10 @@
             </article>
           </div>
 
-          <details id="bottomReportPanel" class="bottom-report-panel" aria-label="报告面板" hidden>
+        </section>
+
+        <aside class="utility-pane" aria-label="插件与质量信息">
+          <details id="bottomReportPanel" class="bottom-report-panel" aria-label="报告面板" open>
             <summary>
               <span>质量、版本与插件</span>
               <small>Warnings / Quality / Diff / Versions / Plugins</small>
@@ -272,7 +275,7 @@
               </article>
             </div>
           </details>
-        </section>
+        </aside>
       </main>
     </div>
 

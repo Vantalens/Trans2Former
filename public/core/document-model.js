@@ -102,7 +102,13 @@ export function getPlainText(model) {
         return block.text;
       }
       if (block.type === "list") {
-        return block.items.join("\n");
+        return block.items.map((item, index) => {
+          const ordered = block.ordered;
+          const depth = Math.max(0, Number(block.itemMeta?.[index]?.depth) || 0);
+          const indent = "  ".repeat(depth);
+          const marker = ordered && depth === 0 ? `${index + 1}.` : "-";
+          return `${indent}${marker} ${item}`;
+        }).join("\n");
       }
       if (block.type === "code") {
         return block.code;
@@ -117,6 +123,9 @@ export function getPlainText(model) {
         return block.alt || block.title || block.assetId;
       }
       if (block.type === "raw") {
+        if (block.format === "html") {
+          return "";
+        }
         return block.content;
       }
       return "";

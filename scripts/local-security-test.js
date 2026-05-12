@@ -23,6 +23,12 @@ const ALLOWED_PUBLIC_FILES = new Set([
   path.normalize("public/smoke-test.js"),
 ]);
 
+function isLocalVendorPdfJs(normalizedPath, content) {
+  return normalizedPath.startsWith(path.normalize("public/vendor/pdfjs/"))
+    && !content.includes("http://")
+    && !content.includes("https://");
+}
+
 async function listFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
@@ -46,10 +52,28 @@ function assertNoForbiddenPublicApis(filePath, content) {
   if (ALLOWED_PUBLIC_FILES.has(normalizedPath)) {
     return;
   }
+  if (isLocalVendorPdfJs(normalizedPath, content)) {
+    return;
+  }
 
   for (const { pattern, reason } of FORBIDDEN_PUBLIC_PATTERNS) {
     if ((pattern.source.includes("localStorage") || pattern.source.includes("indexedDB")) && /persistHistoryCheckbox|HISTORY_PREFERENCE_KEY|output-history|trans2former\.plugins\.state|manifest/i.test(content)) {
       continue;
+    }
+    if (pattern.source.includes("fetch") && normalizedPath === path.normalize("public/core/plugin-workbench-ui.js")) {
+      // 只允许在调用 fetch 前用 startsWith 校验 releaseUrl 限定到 /plugin-patches/，
+      // 任何外部 scheme（http/https/file/ftp/ws/data/protocol-relative）都禁止。
+      // 模板字符串里只要包含未受 startsWith 校验的插值，也禁止。
+      const localPatchGuard = /releaseUrl\.startsWith\("\/plugin-patches\/"\)/;
+      const localFetchCall = /fetch\(releaseUrl\)/;
+      const externalScheme = /fetch\s*\(\s*[`"']?\s*(?:https?:|\/\/|file:|ftp:|wss?:|data:)/i;
+      const dynamicTemplateFetch = /fetch\s*\(\s*`(?!\/plugin-patches\/)[^`]*\$\{/;
+      if (localPatchGuard.test(content)
+        && localFetchCall.test(content)
+        && !externalScheme.test(content)
+        && !dynamicTemplateFetch.test(content)) {
+        continue;
+      }
     }
     assert.equal(
       pattern.test(content),

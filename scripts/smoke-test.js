@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { deflateRawSync } from "node:zlib";
+import { deflateRawSync, deflateSync } from "node:zlib";
 
 import {
   convertContent,
+  expandPdfContentForTextExtraction,
   getAllowedOutputFormats,
   listFormats,
   renderPreviewHtml,
@@ -466,6 +467,117 @@ test("PDF text extraction MVP reads literal text operators", () => {
   assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Hello PDF")), true);
 });
 
+test("PDF reader does not expose binary object noise as text", () => {
+  const noisyPdf = `%PDF-1.7
+1 0 obj
+<< /Length 95 >>
+stream
+binary prefix (Ó3□FC\u0000\u0001mió7×□|Ô±fRª³□}2□H$□µÑ˜=□m5ÉáUô) Tj binary suffix
+endstream
+endobj
+%%EOF`;
+  const model = toDocumentModel(noisyPdf, "pdf", "binary-noise.pdf");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks.some((block) => String(block.text || "").includes("Ó3□FC")), false);
+  assert.equal(model.blocks[0].type, "paragraph");
+  assert.match(model.blocks[0].text, /这是有效 PDF/);
+  assert.equal(model.blocks.some((block) => block.type === "raw" && block.format === "html" && block.content.includes("application/pdf")), true);
+  assert.equal(model.metadata.warnings.some((warning) => warning.code === "PDF_NO_CREDIBLE_TEXT"), true);
+
+  const html = convertContent({ content: noisyPdf, from: "pdf", to: "html", title: "binary-noise.pdf" });
+  assert.equal(html.data.includes('type="application/pdf"'), true);
+  assert.equal(html.data.includes("Ó3□FC"), false);
+});
+
+test("PDF text extraction expands FlateDecode text streams", async () => {
+  const compressedStream = deflateSync(Buffer.from("BT\n(Compressed PDF Title) Tj\n(Readable text from a normal compressed PDF.) Tj\nET", "latin1"));
+  const pdf = `%PDF-1.7
+1 0 obj
+<< /Length ${compressedStream.length} /Filter /FlateDecode >>
+stream
+${compressedStream.toString("latin1")}
+endstream
+endobj
+%%EOF`;
+  const expanded = await expandPdfContentForTextExtraction(pdf);
+  const model = toDocumentModel(expanded, "pdf", "compressed.pdf");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks[0].type, "heading");
+  assert.equal(model.blocks[0].text, "Compressed PDF Title");
+  assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("normal compressed PDF")), true);
+});
+
+test("PDF text extraction decodes ToUnicode CMap hex text streams", async () => {
+  const cmapStream = `2 beginbfchar
+<0001> <7EBF>
+<0002> <6027>
+endbfchar`;
+  const textStream = "BT\n<00010002> Tj\nET";
+  const compressedCmap = deflateSync(Buffer.from(cmapStream, "latin1"));
+  const compressedText = deflateSync(Buffer.from(textStream, "latin1"));
+  const pdf = `%PDF-1.7
+1 0 obj
+<< /Length ${compressedCmap.length} /Filter /FlateDecode >>
+stream
+${compressedCmap.toString("latin1")}
+endstream
+endobj
+2 0 obj
+<< /Length ${compressedText.length} /Filter /FlateDecode >>
+stream
+${compressedText.toString("latin1")}
+endstream
+endobj
+%%EOF`;
+  const expanded = await expandPdfContentForTextExtraction(pdf);
+  const model = toDocumentModel(expanded, "pdf", "cmap.pdf");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks[0].text, "线性");
+});
+
+test("PDF text extraction does not apply unrelated ToUnicode CMaps globally", async () => {
+  const firstCmap = `1 beginbfchar
+<0001> <9519>
+endbfchar`;
+  const secondCmap = `1 beginbfchar
+<0001> <5BF9>
+endbfchar`;
+  const textStream = "BT\n/F2 12 Tf\n<0001> Tj\nET";
+  const compressedFirst = deflateSync(Buffer.from(firstCmap, "latin1"));
+  const compressedSecond = deflateSync(Buffer.from(secondCmap, "latin1"));
+  const compressedText = deflateSync(Buffer.from(textStream, "latin1"));
+  const pdf = `%PDF-1.7
+10 0 obj
+<< /Length ${compressedFirst.length} /Filter /FlateDecode >>
+stream
+${compressedFirst.toString("latin1")}
+endstream
+endobj
+11 0 obj
+<< /Length ${compressedSecond.length} /Filter /FlateDecode >>
+stream
+${compressedSecond.toString("latin1")}
+endstream
+endobj
+20 0 obj
+<< /Type /Font /BaseFont /F1 /ToUnicode 10 0 R >>
+endobj
+21 0 obj
+<< /Type /Font /BaseFont /F2 /ToUnicode 11 0 R >>
+endobj
+30 0 obj
+<< /Length ${compressedText.length} /Filter /FlateDecode >>
+stream
+${compressedText.toString("latin1")}
+endstream
+endobj
+%%EOF`;
+  const expanded = await expandPdfContentForTextExtraction(pdf);
+  const model = toDocumentModel(expanded, "pdf", "font-scoped-cmap.pdf");
+  assert.equal(validateDocumentModel(model).ok, true);
+  assert.equal(model.blocks[0].text, "对");
+});
+
 test("P4 DOCX output generates a local OOXML package from DocumentModel", () => {
   const output = convertContent({ content: "# Export Title\n\nHello **DOCX**.\n\n| Name | Value |\n| --- | --- |\n| A | 1 |", from: "md", to: "docx", title: "export.docx" });
   assertValidOutput(output, "docx", "markdown to docx");
@@ -751,12 +863,12 @@ test("XML and PNG inputs convert through the DocumentModel pipeline", () => {
 test("XML parser reports namespaces, attributes, and parser errors without DOMParser", () => {
   const xmlContent = '<doc xmlns:ofd="urn:ofd" id="root"><ofd:item type="a">A</ofd:item></doc>';
   const xmlModel = toDocumentModel(xmlContent, "xml", "xml-edge");
-  const readable = xmlModel.blocks.find((block) => block.type === "paragraph").text;
+  const rawBlock = xmlModel.blocks.find((block) => block.type === "raw" && block.format === "xml");
 
   assert.equal(xmlModel.metadata.rootElement, "doc");
   assert.deepEqual(xmlModel.metadata.namespaces, [{ prefix: "ofd", uri: "urn:ofd" }]);
   assert.equal(xmlModel.metadata.attributes.doc.id, "root");
-  assert.equal(readable.includes('<ofd:item type="a">'), true);
+  assert.equal(rawBlock.content.includes('<ofd:item type="a">'), true);
   assert.equal(xmlModel.metadata.warnings.some((warning) => warning.severity === "info" && warning.code === "XML_ATTRIBUTES_EXTRACTED"), true);
 
   assert.throws(

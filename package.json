@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/web-server.js",
     "web": "node src/web-server.js",
-    "release:prepare": "node scripts/prepare-release.js",
+    "vendor:pdfjs": "node scripts/sync-pdfjs-vendor.js",
+    "release:prepare": "node scripts/sync-pdfjs-vendor.js && node scripts/prepare-release.js",
     "desktop:check": "node scripts/desktop-shell-test.js",
     "desktop:dev": "npm exec @tauri-apps/cli -- dev",
     "desktop:build": "npm exec @tauri-apps/cli -- build",
@@ -34,5 +35,8 @@
   "bugs": {
     "url": "https://github.com/Vantalens/Trans2Former/issues"
   },
-  "homepage": "https://github.com/Vantalens/Trans2Former#readme"
+  "homepage": "https://github.com/Vantalens/Trans2Former#readme",
+  "optionalDependencies": {
+    "pdfjs-dist": "^5.7.284"
+  }
 }

@@ -50,6 +50,21 @@ function parsePluginImportPackage(text) {
   };
 }
 
+async function fetchPluginImportPackage(manifest) {
+  const releaseUrl = String(manifest?.releaseUrl || "");
+  const localPatch = manifest?.distribution?.packageType === "trans2former.plugin.patch.v1"
+    && manifest?.distribution?.offlineInstall === true
+    && releaseUrl.startsWith("/plugin-patches/");
+  if (!localPatch) {
+    return null;
+  }
+  const response = await fetch(releaseUrl);
+  if (!response.ok) {
+    throw new Error(`插件补丁包读取失败: ${response.status}`);
+  }
+  return parsePluginImportPackage(await response.text());
+}
+
 export function createPluginWorkbenchUi({
   catalog,
   elements,
@@ -160,8 +175,22 @@ export function createPluginWorkbenchUi({
   async function importPluginFromFile(file) {
     const text = await file.text();
     const record = await importLocalPluginPackage(parsePluginImportPackage(text));
-    upsert(record);
-    setStatus(`插件已导入并完成 manifest/hash 校验：${record.name}`, "success");
+    const enabledRecord = setPluginEnabled(record, true);
+    upsert(enabledRecord);
+    setStatus(`插件已导入、校验并启用：${enabledRecord.name}`, "success");
+  }
+
+  async function importPluginFromCatalog(manifest) {
+    const pluginPackage = await fetchPluginImportPackage(manifest);
+    if (!pluginPackage) {
+      openPluginRelease(manifest, { openExternal, documentContext: getDocumentContext() });
+      setStatus("已打开插件 Release；安装模式不会读取当前文档", "success");
+      return;
+    }
+    const record = await importLocalPluginPackage(pluginPackage);
+    const enabledRecord = setPluginEnabled(record, true);
+    upsert(enabledRecord);
+    setStatus(`插件补丁包已导入、校验并启用：${enabledRecord.name}`, "success");
   }
 
   function handlePanelClick(event) {
@@ -171,12 +200,7 @@ export function createPluginWorkbenchUi({
     const uninstall = event.target.closest("[data-plugin-uninstall]");
     if (download) {
       const manifest = catalog.find((item) => item.id === download.dataset.pluginDownload) || findPlugin(download.dataset.pluginDownload)?.manifest;
-      try {
-        openPluginRelease(manifest, { openExternal, documentContext: getDocumentContext() });
-        setStatus("已打开插件 GitHub Release；安装模式不会读取当前文档", "success");
-      } catch (error) {
-        setStatus(error.message, "error");
-      }
+      importPluginFromCatalog(manifest).catch((error) => setStatus(error.message, "error"));
     } else if (toggle && findPlugin(toggle.dataset.pluginToggle)) {
       const plugin = findPlugin(toggle.dataset.pluginToggle);
       upsert(setPluginEnabled(plugin, !plugin.enabled));
@@ -192,5 +216,5 @@ export function createPluginWorkbenchUi({
     }
   }
 
-  return { render, importPluginFromFile, handlePanelClick };
+  return { render, importPluginFromFile, handlePanelClick, importPluginFromCatalog };
 }

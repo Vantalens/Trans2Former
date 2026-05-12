@@ -29,9 +29,11 @@ import {
   summarizeQualityReport,
 } from "./core/workbench-state.js";
 import { readBlobAsDecodedText } from "./core/text-decoding.js";
+import { expandPdfContentForTextExtraction } from "./formats/pdf.js";
 import { TRUSTED_PLUGIN_CATALOG } from "./plugin-catalog.js";
 
 const inputContent = document.getElementById("inputContent");
+const sourcePane = document.querySelector(".source-pane");
 const fileInput = document.getElementById("fileInput");
 const dropZone = document.getElementById("dropZone");
 const fileMeta = document.getElementById("fileMeta");
@@ -821,7 +823,10 @@ function getActiveInputContent() {
 }
 
 function syncInputEditorMode(format = fromFormatSelect.value) {
-  inputContent.readOnly = isBinaryInputFormat(format);
+  const binary = isBinaryInputFormat(format);
+  inputContent.readOnly = binary;
+  inputContent.classList.toggle("is-binary-input", binary);
+  sourcePane?.classList.toggle("is-binary-input", binary);
 }
 
 function createReadableInputDisplay(rawContent, format, fileName) {
@@ -1126,7 +1131,11 @@ async function handleFile(file) {
     const queueItem = registerQueuedFile(file, detectedFormat);
     Object.assign(queueItem, { status: "reading", attempts: queueItem.attempts + 1, error: "" });
     renderFileQueue();
-    const content = BINARY_INPUT_FORMATS.has(detectedFormat) ? await readFileAsDataUrl(file) : await readFileAsTextChunked(file);
+    let content = BINARY_INPUT_FORMATS.has(detectedFormat) ? await readFileAsDataUrl(file) : await readFileAsTextChunked(file);
+    if (detectedFormat === "pdf") {
+      setStatus("正在解压 PDF 文本流", "info");
+      content = await expandPdfContentForTextExtraction(content);
+    }
     fromFormatSelect.value = detectedFormat;
     syncFormatOptions();
     updateActiveQueueItem({ status: "ready" });
@@ -1282,6 +1291,7 @@ async function transformContent() {
       } else {
         updateOutputPreviewVisibility(false);
       }
+      showWorkbenchTab("outputPreviewPanel");
       updateDownloadState(true);
       setOutputMeta(`二进制输出已生成 · ${result.mime} · ${outputDirectoryLabel}`);
       updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
@@ -1305,6 +1315,7 @@ async function transformContent() {
       downloadOutputButton.textContent = "下载打印版 HTML";
 
       updateOutputPreviewVisibility(true);
+      showWorkbenchTab("outputPreviewPanel");
       updateDownloadState(true);
       setOutputMeta(`已生成浏览器打印页面 · ${outputDirectoryLabel}`);
       updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
@@ -1321,6 +1332,7 @@ async function transformContent() {
 
     updateDownloadState(true);
     renderOutputPreview(result.data);
+    showWorkbenchTab("outputPreviewPanel");
     updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
     updateActiveQueueItem({ status: "done" });
     setStatus("浏览器端转换成功", "success");

@@ -1,6 +1,28 @@
 import assert from "node:assert/strict";
+import net from "node:net";
 
 import { startWebServer } from "../src/web-server.js";
+
+const FETCH_SAFE_PORT_START = 49152;
+const FETCH_SAFE_PORT_END = 49232;
+
+async function isPortAvailable(port) {
+  return await new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, "127.0.0.1");
+  });
+}
+
+async function findFetchSafePort() {
+  for (let port = FETCH_SAFE_PORT_START; port <= FETCH_SAFE_PORT_END; port += 1) {
+    if (await isPortAvailable(port)) return port;
+  }
+  throw new Error("No fetch-safe local port is available for browser smoke test");
+}
 
 async function fetchText(baseUrl, pathname) {
   const response = await fetch(`${baseUrl}${pathname}`);
@@ -8,7 +30,7 @@ async function fetchText(baseUrl, pathname) {
   return response.text();
 }
 
-const { server, port } = await startWebServer(0);
+const { server, port } = await startWebServer(await findFetchSafePort());
 const baseUrl = `http://127.0.0.1:${port}`;
 
 try {
@@ -48,13 +70,14 @@ try {
   assert.equal(indexHtml.includes("id=\"pluginInstalledList\""), true, "P3 workbench should expose installed plugin lifecycle list");
   assert.equal(indexHtml.includes("id=\"pluginCapabilityList\""), true, "P3 workbench should expose plugin capability discovery");
   assert.equal(indexHtml.includes("id=\"pluginSecuritySummary\""), true, "P3 workbench should expose plugin mode isolation summary");
+  assert.equal(indexHtml.includes("class=\"utility-pane\""), true, "workbench should separate plugin and quality modules from the main conversion flow");
   assert.equal(indexHtml.includes("<details id=\"fileQueuePanel\""), true, "modern workbench should keep file queue collapsed by default");
   assert.equal(indexHtml.includes("<details id=\"fileQueuePanel\" class=\"queue-panel\" aria-label=\"文件队列\" hidden>"), true, "primary UI should hide batch queue from the default user path");
-  assert.equal(indexHtml.includes("<details id=\"bottomReportPanel\""), true, "modern workbench should keep reports and plugin metadata collapsed by default");
-  assert.equal(indexHtml.includes("<details id=\"bottomReportPanel\" class=\"bottom-report-panel\" aria-label=\"报告面板\" hidden>"), true, "primary UI should hide diagnostics and plugin reports by default");
-  assert.equal(indexHtml.includes("workspace-primary"), true, "modern workbench should expose a simple primary two-pane workflow");
+  assert.equal(indexHtml.includes("<details id=\"bottomReportPanel\""), true, "modern workbench should expose reports and plugin metadata");
+  assert.equal(indexHtml.includes("<details id=\"bottomReportPanel\" class=\"bottom-report-panel\" aria-label=\"报告面板\" open>"), true, "plugin module should be visible in the default workbench");
+  assert.equal(indexHtml.includes("workspace-primary"), true, "modern workbench should expose a focused primary workflow");
   assert.equal(indexHtml.includes("class=\"auxiliary-actions\""), true, "modern workbench should group secondary actions away from the primary command path");
-  assert.equal(indexHtml.includes("class=\"auxiliary-actions\" hidden"), true, "primary UI should hide maintenance actions by default");
+  assert.equal(indexHtml.includes("class=\"auxiliary-actions\" hidden"), false, "plugin and security actions should be reachable from the default workbench");
   assert.equal(indexHtml.includes("class=\"output-settings\""), true, "modern workbench should keep export settings behind disclosure");
   assert.equal(indexHtml.includes("class=\"viewer-grid single-view\""), true, "modern workbench should show one right-side work view at a time");
 
@@ -82,11 +105,15 @@ try {
   const appJs = await fetchText(baseUrl, "/app.js");
   const pluginWorkbenchJs = await fetchText(baseUrl, "/core/plugin-workbench-ui.js");
   const fileQueueJs = await fetchText(baseUrl, "/core/file-queue-ui.js");
+  const pdfFormatJs = await fetchText(baseUrl, "/formats/pdf.js");
+  const pdfJsVendor = await fetchText(baseUrl, "/vendor/pdfjs/pdf.min.mjs");
   assert.equal(appJs.includes("renderErrorDetails"), true, "main app should render structured conversion errors");
   assert.equal(appJs.includes("sanitizeErrorDiagnostics"), true, "main app should sanitize copied diagnostics");
   assert.equal(appJs.includes("updateConversionProgress"), true, "main app should update staged conversion progress");
   assert.equal(appJs.includes("resetGeneratedOutput"), true, "main app should centralize generated output cleanup");
   assert.equal(appJs.includes("resetGeneratedOutput(\"已取消，未保留输出\")"), true, "cancel action should clear stale output and download URLs");
+  assert.equal(appJs.includes("showWorkbenchTab(\"outputPreviewPanel\")"), true, "successful conversion should switch to the output view");
+  assert.equal(appJs.includes("sourcePane?.classList.toggle(\"is-binary-input\", binary)"), true, "binary inputs should use compact source-pane layout");
   assert.equal(appJs.includes("requestIdleCallback"), true, "preview rendering should be scheduled through idle callback when available");
   assert.equal(appJs.includes("readFileAsTextChunked"), true, "large text files should enter through chunked reading");
   assert.equal(appJs.includes("LARGE_FILE_PREVIEW_BYTES"), true, "large file preview policy should be explicit");
@@ -104,7 +131,7 @@ try {
   assert.equal(appJs.includes("currentInputContent"), true, "binary uploads should keep raw conversion payload separate from editor display text");
   assert.equal(appJs.includes("getActiveInputContent"), true, "conversion and preview should read the active raw payload, not textarea display text");
   assert.equal(appJs.includes("createReadableInputDisplay"), true, "binary uploads should render extracted readable text instead of base64 data URLs");
-  assert.equal(appJs.includes("inputContent.readOnly = isBinaryInputFormat"), true, "binary upload previews should be read-only to avoid editing extracted display text as raw binary");
+  assert.equal(appJs.includes("inputContent.readOnly = binary"), true, "binary upload previews should be read-only to avoid editing extracted display text as raw binary");
   assert.equal(appJs.includes("registerQueuedFileState"), true, "main app should delegate queued file state to a reusable module");
   assert.equal(fileQueueJs.includes("createQueueItem"), true, "file queue module should track queued files as reusable workbench state");
   assert.equal(appJs.includes("renderDocumentModelPanel"), true, "main app should render DocumentModel inspection");
@@ -117,10 +144,16 @@ try {
   assert.equal(appJs.includes("TRUSTED_PLUGIN_CATALOG"), true, "P3 should expose a trusted GitHub Releases plugin catalog");
   assert.equal(appJs.includes("createPluginWorkbenchUi"), true, "main app should delegate plugin UI lifecycle to a module");
   assert.equal(pluginWorkbenchJs.includes("importLocalPluginPackage"), true, "P3 should wire local plugin package import");
+  assert.equal(pluginWorkbenchJs.includes("fetchPluginImportPackage"), true, "P3 plugin catalog patch buttons should import local patch packages directly");
+  assert.equal(pluginWorkbenchJs.includes("setPluginEnabled(record, true)"), true, "P3 local plugin imports should be enabled immediately after integrity verification");
   assert.equal(pluginWorkbenchJs.includes("openPluginRelease"), true, "P3 should keep plugin downloads in install mode");
   assert.equal(pluginWorkbenchJs.includes("setPluginEnabled"), true, "P3 should support enable and disable lifecycle controls");
   assert.equal(pluginWorkbenchJs.includes("rollbackPlugin"), true, "P3 should support rollback lifecycle controls");
   assert.equal(pluginWorkbenchJs.includes("discoverPluginCapabilities"), true, "P3 should expose plugin capability discovery");
+  assert.equal(pdfFormatJs.includes("pdfjs-dist/legacy/build/pdf.mjs"), true, "PDF input should use a local PDF.js engine under Node/test runtime");
+  assert.equal(pdfFormatJs.includes("/vendor/pdfjs/pdf.min.mjs"), true, "PDF input should use the vendored PDF.js engine in browsers");
+  assert.equal(pdfFormatJs.includes("PDFJS_TEXT_START"), true, "PDF.js extraction should feed structured text into the existing conversion pipeline");
+  assert.equal(pdfJsVendor.includes("getDocument"), true, "vendored PDF.js runtime should be served locally");
   assert.equal(appJs.includes("docx"), true, "main app should accept DOCX input");
   for (const format of ["doc", "xlsx", "epub", "pdf", "pptx"]) {
     assert.equal(appJs.includes(format), true, `main app should accept ${format.toUpperCase()} input`);

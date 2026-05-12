@@ -7,7 +7,7 @@ import { readHtml, writeHtml } from "./formats/html.js";
 import { writeDocx } from "./formats/docx-output.js";
 import { readJson, writeJson } from "./formats/json.js";
 import { modelToBodyHtml, readMarkdown, writeMarkdown } from "./formats/markdown.js";
-import { readPdf } from "./formats/pdf.js";
+import { expandPdfContentForTextExtraction, readPdf } from "./formats/pdf.js";
 import { writePdfBinary } from "./formats/pdf-output.js";
 import { readPng } from "./formats/png.js";
 import { readText, writeText } from "./formats/plain-text.js";
@@ -195,6 +195,7 @@ export function listFormats() {
 
 export { normalizeFormat };
 export { getAllowedOutputFormats };
+export { expandPdfContentForTextExtraction };
 
 export function detectFormatFromName(fileName) {
   const ext = String(fileName || "").split(".").pop()?.toLowerCase() || "";

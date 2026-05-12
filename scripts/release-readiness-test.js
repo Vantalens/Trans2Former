@@ -12,7 +12,9 @@ const REQUIRED_FILES = [
   "package.json",
   "docs/RELEASE_PREP.md",
   "docs/DESKTOP_RELEASE_PLAN.md",
+  "scripts/sync-pdfjs-vendor.js",
   "scripts/prepare-release.js",
+  "public/vendor/pdfjs/pdf.min.mjs",
   "public/plugin-patches/ofd-local-reader-0.2.0.t2f-plugin.json",
   "public/plugin-patches/local-ocr-basic-0.1.0.t2f-plugin.json",
 ];
@@ -22,7 +24,8 @@ for (const file of REQUIRED_FILES) {
 }
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
-assert.equal(packageJson.scripts["release:prepare"], "node scripts/prepare-release.js");
+assert.equal(packageJson.scripts["vendor:pdfjs"], "node scripts/sync-pdfjs-vendor.js");
+assert.equal(packageJson.scripts["release:prepare"], "node scripts/sync-pdfjs-vendor.js && node scripts/prepare-release.js");
 
 const releasePrep = await readFile("docs/RELEASE_PREP.md", "utf8");
 for (const requiredText of [
@@ -40,6 +43,10 @@ const script = await readFile("scripts/prepare-release.js", "utf8");
 assert.equal(script.includes("const releaseRoot = path.join(ROOT, \"release\")"), true);
 assert.equal(script.includes("npm test"), true);
 assert.equal(script.includes("pluginPatchAssets"), true);
+
+const vendorScript = await readFile("scripts/sync-pdfjs-vendor.js", "utf8");
+assert.equal(vendorScript.includes("pdfjs-dist"), true);
+assert.equal(vendorScript.includes("public"), true);
 
 const gitignore = await readFile(".gitignore", "utf8");
 assert.equal(gitignore.includes("/release/"), true, "local release directory should stay out of git");

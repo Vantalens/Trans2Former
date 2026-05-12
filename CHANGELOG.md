@@ -6,6 +6,7 @@
 
 ### 新增
 
+- 新增本地 PDF.js 文本抽取引擎：PDF 上传阶段优先使用 optional `pdfjs-dist` / `/vendor/pdfjs/` 的 `getTextContent()`，失败时才回落到轻量核心解析器。
 - 新增文本输出编辑器、实时预览、undo / redo 和 checkpoint 基线，输出草稿可在工作台内直接编辑并回写下载链接。
 - 新增 Markdown output profile、version diff（文本 + block id）、warnings resolved 状态和关闭后持久版本历史 opt-in。
 - 新增 `samples/` 样例集，覆盖 Markdown、HTML、TXT、JSON、CSV、XML、PNG 当前输入格式。
@@ -43,6 +44,7 @@
 - 新增 XLSX input MVP `public/formats/xlsx.js`，支持工作表和共享字符串到表格。
 - 新增 EPUB input MVP `public/formats/epub.js`，支持 OPF spine 和 XHTML 结构提取。
 - 新增 PDF text extraction MVP `public/formats/pdf.js`，支持简单 literal text operators。
+- 新增 PDF ToUnicode CMap + hex text operator 抽取，覆盖常见中文 PDF 的 CID 映射文本流，并按字体绑定 CMap，避免多字体 PDF 串用映射导致错误识别。
 - 新增 PPTX input MVP `public/formats/pptx.js`，支持幻灯片标题和文本框提取。
 - 新增 `docs/OOXML_CONTAINER.md`、`docs/DOCX_INPUT_MVP.md`、`docs/XLSX_INPUT_MVP.md`、`docs/EPUB_INPUT_MVP.md`、`docs/PDF_TEXT_EXTRACTION_MVP.md` 和 `docs/PPTX_INPUT_MVP.md`。
 - 新增 ZIP deflate 解压、central directory 校验、路径穿越防护、entry 数量/展开体积/压缩比预算。
@@ -72,6 +74,7 @@
 
 ### 变更
 
+- 插件下载面板中的 release patch 按钮改为一键导入：本地读取 `.t2f-plugin.json`、校验 manifest/hash、导入并启用，已安装插件和能力列表即时刷新。
 - 产品方向从纯浏览器 Web 应用调整为 Trans2Former Desktop：Tauri 桌面 Web-GUI 专业格式转换工作台，当前 Web 应用作为核心验证底座保留。
 - OFD 从“远期研究/不进近期路线”升级为 P5 战略攻坚格式，目标是本地高保真、质量报告和可解释降级。
 - `DEVELOPMENT_TASKS.md` 已重排为 Desktop P0-P5：桌面工作台、编辑体验、低内存响应、插件隔离、重格式插件和 OFD/高保真攻坚。
@@ -97,6 +100,12 @@
 - `npm test` 现在运行核心 smoke、转换快照、浏览器自检静态服务检查、本地安全 smoke test、资源预算 smoke test、插件安全 smoke test 和 release readiness test。
 - `DEVELOPMENT_TASKS.md` 已整理为任务看板，长期原则和格式矩阵移入 `docs/` 专题文档。
 - Worker 错误现在透传结构化错误字段，便于 UI 渲染。
+
+### 修复
+
+- 修复 PDF 输入预览和 PDF -> HTML 输出可能把 PDF 二进制对象噪声误判为正文的问题；上传 PDF 时会本地解压常见 `/FlateDecode` 文本流以提取可编辑文本，无法提取时保留原 PDF 嵌入式预览/HTML 输出，并显示明确降级说明和 warning，不再输出乱码正文。
+- 修复 PDF 工作台前端体验：插件/安全入口和插件报告模块默认可见，二进制输入摘要采用紧凑布局，转换成功后自动切换到结果视图并启用下载。
+- 重构工作台布局：将主转换区和插件/质量信息区分离为三栏结构，降低默认界面噪音并保留插件模块可见性。
 
 ### 安全
 

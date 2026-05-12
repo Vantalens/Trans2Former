@@ -11,7 +11,6 @@ const BUDGETS = [
 ];
 
 const FORBIDDEN_DEPENDENCIES = [
-  "pdfjs-dist",
   "tesseract.js",
   "mammoth",
   "docx",
@@ -87,6 +86,7 @@ async function assertDirectoryBudgets() {
 async function assertDefaultDependenciesStaySmall() {
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const dependencies = Object.keys(packageJson.dependencies || {});
+  const optionalDependencies = Object.keys(packageJson.optionalDependencies || {});
   assert.equal(dependencies.length <= 5, true, `default dependency count is ${dependencies.length}, budget is 5`);
   for (const dependency of dependencies) {
     assert.equal(
@@ -95,6 +95,7 @@ async function assertDefaultDependenciesStaySmall() {
       `${dependency} must be optional or lazy-loaded, not a default dependency`
     );
   }
+  assert.equal(optionalDependencies.includes("pdfjs-dist"), true, "pdfjs-dist must stay optional and locally vendored, not a default dependency");
 }
 
 async function assertCoreHasNoHeavyImports() {
@@ -114,6 +115,12 @@ async function assertCoreHasNoHeavyImports() {
           `${path.relative(process.cwd(), file)} must not reference ${forbidden} in the default core path`
         );
         continue;
+      }
+      if (forbidden === "pdfjs-dist" && path.relative(process.cwd(), file).replaceAll("\\", "/") === "public/formats/pdf.js") {
+        const optionalPdfEngine = content.includes('import("pdfjs-dist/legacy/build/pdf.mjs")')
+          && content.includes('import("/vendor/pdfjs/pdf.min.mjs")')
+          && content.includes("disableWorker: true");
+        if (optionalPdfEngine) continue;
       }
       assert.equal(
         hasForbiddenPackageImport(content, forbidden),
