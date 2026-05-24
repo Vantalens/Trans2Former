@@ -3,10 +3,6 @@ import { getPlainText } from "../core/document-model.js";
 import { writePdfHighFidelity } from "./pdf-output-high-fidelity.js";
 import { stripMarkdownInlineSyntax } from "./text-utils.js";
 
-function escapePdfText(value) {
-  return String(value ?? "").replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
-}
-
 function utf16BeHex(value) {
   return [...String(value ?? "")]
     .map((char) => char.codePointAt(0))
@@ -23,37 +19,106 @@ function pdfUnicodeString(value) {
   return `<FEFF${utf16BeHex(value)}>`;
 }
 
+const PDF_MAX_LINE_LEN_ASCII = 80;
+const PDF_MAX_LINE_LEN_CJK = 38;
+
+function isCjkChar(char) {
+  const code = char.codePointAt(0);
+  return (code >= 0x3000 && code <= 0x9fff)
+    || (code >= 0xac00 && code <= 0xd7af)
+    || (code >= 0xff00 && code <= 0xffef);
+}
+
+function wrapPdfLine(line) {
+  if (!line) return [];
+  const chunks = [];
+  let buffer = "";
+  let width = 0;
+  for (const char of line) {
+    const charWidth = isCjkChar(char) ? 2 : 1;
+    if (width + charWidth > PDF_MAX_LINE_LEN_ASCII) {
+      if (buffer) chunks.push(buffer);
+      buffer = char;
+      width = charWidth;
+    } else {
+      buffer += char;
+      width += charWidth;
+    }
+    if (buffer.length >= PDF_MAX_LINE_LEN_CJK && isCjkChar(char) && width >= PDF_MAX_LINE_LEN_ASCII - 1) {
+      chunks.push(buffer);
+      buffer = "";
+      width = 0;
+    }
+  }
+  if (buffer) chunks.push(buffer);
+  return chunks;
+}
+
+const URL_PATTERN = /https?:\/\/[^\s<>"'）)】」』]+/g;
+
 function linesForPdf(model) {
   const text = stripMarkdownInlineSyntax(getPlainText(model)).replace(/\r\n?/g, "\n");
   const lines = [];
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
-    const chunks = line.match(/.{1,80}/g) || [line];
-    lines.push(...chunks);
+    lines.push(...wrapPdfLine(line));
   }
   return lines;
+}
+
+function escapePdfTextLiteral(value) {
+  return String(value ?? "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function collectUrlsFromLines(lines) {
+  const matches = [];
+  lines.forEach((line, lineIndex) => {
+    const found = line.match(URL_PATTERN);
+    if (found) {
+      for (const url of found) {
+        matches.push({ url, lineIndex });
+      }
+    }
+  });
+  return matches;
 }
 
 function buildPdfBytes(model, title) {
   const allLines = linesForPdf(model);
   const pages = [];
-  for (let offset = 0; offset < allLines.length || offset === 0; offset += 42) {
-    pages.push(allLines.slice(offset, offset + 42));
+  if (allLines.length === 0) {
+    pages.push([]);
+  } else {
+    for (let offset = 0; offset < allLines.length; offset += 42) {
+      pages.push(allLines.slice(offset, offset + 42));
+    }
   }
-  const fontObjectNumber = 3 + pages.length * 3;
-  const cidFontObjectNumber = fontObjectNumber + 1;
-  const fontDescriptorObjectNumber = fontObjectNumber + 2;
-  const infoObjectNumber = fontObjectNumber + 3;
-  const pageObjectNumbers = pages.map((_, index) => 3 + index * 3);
+  const pageAnnotCounts = pages.map((lines) => collectUrlsFromLines(lines).length);
+  let cursor = 3;
+  const pageObjectNumbers = [];
+  const contentObjectNumbers = [];
+  const annotObjectNumbers = [];
+  pages.forEach((_, index) => {
+    pageObjectNumbers.push(cursor++);
+    contentObjectNumbers.push(cursor++);
+    const annotsForPage = [];
+    for (let annotIndex = 0; annotIndex < pageAnnotCounts[index]; annotIndex += 1) {
+      annotsForPage.push(cursor++);
+    }
+    annotObjectNumbers.push(annotsForPage);
+  });
+  const fontObjectNumber = cursor++;
+  const cidFontObjectNumber = cursor++;
+  const fontDescriptorObjectNumber = cursor++;
+  const infoObjectNumber = cursor++;
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     `<< /Type /Pages /Kids [${pageObjectNumbers.map((number) => `${number} 0 R`).join(" ")}] /Count ${pages.length} >>`,
   ];
 
+  const annotObjectsToAppend = [];
+
   pages.forEach((lines, index) => {
-    const pageObjectNumber = 3 + index * 3;
-    const contentObjectNumber = pageObjectNumber + 1;
-    const annotationObjectNumber = pageObjectNumber + 2;
     const content = [
       "BT",
       "/F1 12 Tf",
@@ -62,11 +127,21 @@ function buildPdfBytes(model, title) {
       ...lines.map((line) => `<${utf16BeHex(line)}> Tj T*`),
       "ET",
     ].join("\n");
-    const firstLink = lines.join(" ").match(/https?:\/\/[^\s)]+/)?.[0] || "https" + "://example.com";
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >> /Contents ${contentObjectNumber} 0 R /Annots [${annotationObjectNumber} 0 R] >>`);
+    const annotIds = annotObjectNumbers[index];
+    const annotsRefs = annotIds.length > 0
+      ? ` /Annots [${annotIds.map((id) => `${id} 0 R`).join(" ")}]`
+      : "";
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >>${annotsRefs} /Contents ${contentObjectNumbers[index]} 0 R >>`);
     objects.push(`<< /Length ${textToBytes(content).length} >>\nstream\n${content}\nendstream`);
-    objects.push(`<< /Type /Annot /Subtype /Link /Rect [72 730 260 748] /Border [0 0 0] /A << /S /URI /URI (${escapePdfText(firstLink)}) >> >>`);
+    const urls = collectUrlsFromLines(lines);
+    urls.forEach(({ url, lineIndex }) => {
+      const y = 760 - lineIndex * 16;
+      const rect = `[72 ${y - 4} 540 ${y + 12}]`;
+      annotObjectsToAppend.push(`<< /Type /Annot /Subtype /Link /Rect ${rect} /Border [0 0 0] /A << /Type /Action /S /URI /URI (${escapePdfTextLiteral(url)}) >> >>`);
+    });
   });
+
+  objects.push(...annotObjectsToAppend);
 
   objects.push(`<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [${cidFontObjectNumber} 0 R] >>`);
   objects.push(`<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor ${fontDescriptorObjectNumber} 0 R /DW 1000 >>`);

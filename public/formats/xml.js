@@ -1,7 +1,7 @@
 import { ConversionError } from "../core/conversion-error.js";
 import { createDocumentModel, createParagraph, createRawBlock } from "../core/document-model.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
-import { escapeHtml, stripHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
+import { escapeHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
 
 function parseAttributes(rawAttributes = "") {
   const attributes = {};
@@ -28,6 +28,10 @@ function formatOpenTag(tagName, attributes) {
     .map(([name, value]) => ` ${name}="${value}"`)
     .join("");
   return `<${tagName}${attributeText}>`;
+}
+
+function safeCdata(text) {
+  return String(text ?? "").replaceAll("]]>", "]]]]><![CDATA[>");
 }
 
 function parserError(message, format) {
@@ -148,14 +152,40 @@ function extractDomMetadata(root) {
   return { namespaces, attributes };
 }
 
+function extractTextLeavesFromDom(node, lines = []) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent.trim();
+    if (text) lines.push(text);
+    return lines;
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return lines;
+  }
+  Array.from(node.childNodes).forEach((child) => extractTextLeavesFromDom(child, lines));
+  return lines;
+}
+
+function extractTextLeavesFromSummary(textPreview) {
+  // parseXmlSummary 的输出每行可能是 tag 行（以 < 开头）也可能是文本行——丢掉 tag 行。
+  return String(textPreview ?? "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("<"));
+}
+
 export function readXml({ content, title = "xml", format = "xml" }) {
   const source = String(content ?? "");
   if (typeof DOMParser === "undefined") {
     const parsed = parseXmlSummary(source, format);
+    const textLeaves = extractTextLeavesFromSummary(parsed.text);
+    const blocks = textLeaves.length > 0
+      ? textLeaves.map((line) => createParagraph(line))
+      : [createParagraph("(no text content)")];
+    blocks.push(createRawBlock("xml", source));
     return createDocumentModel({
       title,
       sourceFormat: format,
-      blocks: [createRawBlock("xml", source)],
+      blocks,
       metadata: withWarnings({ rawXml: source, ...parsed.metadata }, parsed.warnings),
     });
   }
@@ -169,10 +199,15 @@ export function readXml({ content, title = "xml", format = "xml" }) {
   const warnings = Object.keys(domMetadata.attributes).length > 0
     ? [createWarning("info", "XML_ATTRIBUTES_EXTRACTED", "XML attributes were extracted into metadata and readable preview text.")]
     : [];
+  const leaves = extractTextLeavesFromDom(doc.documentElement);
+  const blocks = leaves.length > 0
+    ? leaves.map((text) => createParagraph(text))
+    : [createParagraph("(no text content)")];
+  blocks.push(createRawBlock("xml", source));
   return createDocumentModel({
     title,
     sourceFormat: format,
-    blocks: [createRawBlock("xml", source)],
+    blocks,
     metadata: withWarnings({
       rootElement: doc.documentElement.tagName,
       namespaces: domMetadata.namespaces,
@@ -186,7 +221,7 @@ export function writeXml({ model, title = model.title }) {
     if (block.type === "heading") return `    <heading level="${block.level}">${escapeHtml(stripMarkdownInlineSyntax(block.text))}</heading>`;
     if (block.type === "paragraph") return `    <paragraph>${escapeHtml(stripMarkdownInlineSyntax(block.text))}</paragraph>`;
     if (block.type === "quote") return `    <quote>${escapeHtml(stripMarkdownInlineSyntax(block.text))}</quote>`;
-    if (block.type === "code") return `    <code language="${escapeHtml(block.language)}"><![CDATA[\n${block.code}\n    ]]></code>`;
+    if (block.type === "code") return `    <code language="${escapeHtml(block.language)}"><![CDATA[\n${safeCdata(block.code)}\n    ]]></code>`;
     if (block.type === "table") {
       const header = [
         "      <headers>",
@@ -202,7 +237,7 @@ export function writeXml({ model, title = model.title }) {
     }
     if (block.type === "image") return `    <image src="${escapeHtml(block.src)}" alt="${escapeHtml(block.alt)}" />`;
     if (block.type === "asset") return `    <asset-ref id="${escapeHtml(block.assetId)}" alt="${escapeHtml(block.alt)}" />`;
-    if (block.type === "raw") return `    <raw index="${index}" format="${escapeHtml(block.format)}"><![CDATA[${block.content}]]></raw>`;
+    if (block.type === "raw") return `    <raw index="${index}" format="${escapeHtml(block.format)}"><![CDATA[${safeCdata(block.content)}]]></raw>`;
     return "";
   }).filter(Boolean).join("\n");
 

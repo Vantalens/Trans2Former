@@ -86,7 +86,7 @@ const QUALITY_TARGETS = [
     to: "md",
     keywords: ["中文纯文本样例", "第一段", "第二段"],
     expectedTemperature: "hot",
-    structureMin: { heading: 1, paragraph: 1 },
+    structureMin: { paragraph: 2 },
   },
   {
     name: "JSON object → MD（fenced code 包装）",

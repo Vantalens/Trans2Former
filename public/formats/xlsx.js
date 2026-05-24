@@ -174,10 +174,39 @@ function columnName(index) {
   return name;
 }
 
+const INVALID_SHEET_NAME_CHARS = /[\\\/\?\*\[\]\:]/g;
+
+function sanitizeSheetName(name, fallback = "Sheet") {
+  const cleaned = String(name ?? "").replace(INVALID_SHEET_NAME_CHARS, " ").trim();
+  if (!cleaned) return fallback;
+  return cleaned.length > 31 ? cleaned.slice(0, 31) : cleaned;
+}
+
 function modelRows(model) {
   const table = model.blocks.find((block) => block.type === "table");
   if (table) return [table.headers, ...(table.rows || [])];
-  return [["Text"], ...getPlainText(model).split(/\n{1,2}/).filter(Boolean).map((text) => [text])];
+  return [["Text"], ...getPlainText(model).split(/\n{2,}/).filter(Boolean).map((text) => [text])];
+}
+
+function collectSheetsFromModel(model) {
+  if (model.workbook?.sheets?.length) {
+    return model.workbook.sheets.map((sheet, index) => ({
+      name: sanitizeSheetName(sheet.name, `Sheet ${index + 1}`),
+      headers: sheet.headers || [],
+      rows: sheet.rows || [],
+      formulas: sheet.formulas || [],
+      merges: sheet.merges || [],
+    }));
+  }
+  const rows = modelRows(model);
+  const headers = rows[0] || [];
+  return [{
+    name: sanitizeSheetName(model.title, "Sheet 1"),
+    headers,
+    rows: rows.slice(1),
+    formulas: [],
+    merges: [],
+  }];
 }
 
 function generateStylesXml() {
@@ -264,9 +293,23 @@ ${rowXml}
 export function writeXlsx({ model, title = model.title }) {
   const NS = "http" + "://schemas.openxmlformats.org";
   const DC_NS = "http" + "://purl.org/dc/elements/1.1/";
-  const rows = modelRows(model);
+  const sheets = collectSheetsFromModel(model);
 
-  // 构建字符串表
+  // 去重 sheet 名称，避免 Excel 拒绝打开
+  const usedNames = new Set();
+  sheets.forEach((sheet, index) => {
+    let candidate = sheet.name;
+    let suffix = 2;
+    while (usedNames.has(candidate.toLowerCase())) {
+      const base = sheet.name.slice(0, 31 - String(suffix).length - 1);
+      candidate = `${base} ${suffix}`;
+      suffix += 1;
+    }
+    sheets[index] = { ...sheet, name: candidate };
+    usedNames.add(candidate.toLowerCase());
+  });
+
+  // 构建字符串表（所有 sheet 共享）
   const stringIndex = new Map();
   const stringArray = [];
   function getStringIndex(str) {
@@ -278,17 +321,39 @@ export function writeXlsx({ model, title = model.title }) {
     return stringIndex.get(strStr);
   }
 
-  rows.forEach(row => {
-    row.forEach(cell => getStringIndex(stripMarkdownInlineSyntax(cell)));
+  const sheetRowsList = sheets.map((sheet) => {
+    const rows = [sheet.headers, ...(sheet.rows || [])];
+    rows.forEach(row => {
+      row.forEach(cell => getStringIndex(stripMarkdownInlineSyntax(cell)));
+    });
+    return rows;
   });
 
-  // 生成 sharedStrings.xml
+  const totalCellCount = sheetRowsList.reduce((sum, rows) => sum + rows.reduce((rowSum, row) => rowSum + row.length, 0), 0);
   const sharedStringsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<sst xmlns="${NS}/spreadsheetml/2006/main" count="${rows.reduce((sum, r) => sum + r.length, 0)}" uniqueCount="${stringArray.length}">
-${stringArray.map(str => `  <si><t>${escapeHtml(str)}</t></si>`).join('\n')}
+<sst xmlns="${NS}/spreadsheetml/2006/main" count="${totalCellCount}" uniqueCount="${stringArray.length}">
+${stringArray.map(str => `  <si><t xml:space="preserve">${escapeHtml(str)}</t></si>`).join('\n')}
 </sst>`;
 
-  const zipBytes = writeStoredZip([
+  const sheetEntries = sheets.map((sheet, index) => ({
+    sheetNumber: index + 1,
+    name: sheet.name,
+    relId: `rId${index + 10}`,
+    rows: sheetRowsList[index],
+    workbookSheet: sheet,
+  }));
+
+  const workbookSheetsXml = sheetEntries
+    .map((entry) => `<sheet name="${escapeHtml(entry.name)}" sheetId="${entry.sheetNumber}" r:id="${entry.relId}"/>`)
+    .join("");
+  const workbookRelsXml = sheetEntries
+    .map((entry) => `  <Relationship Id="${entry.relId}" Type="${NS}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${entry.sheetNumber}.xml"/>`)
+    .join("\n");
+  const contentTypeOverrides = sheetEntries
+    .map((entry) => `  <Override PartName="/xl/worksheets/sheet${entry.sheetNumber}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`)
+    .join("\n");
+
+  const files = [
     {
       name: "[Content_Types].xml",
       data: `<?xml version="1.0" encoding="UTF-8"?>
@@ -296,7 +361,7 @@ ${stringArray.map(str => `  <si><t>${escapeHtml(str)}</t></si>`).join('\n')}
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+${contentTypeOverrides}
   <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
   <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
@@ -314,9 +379,9 @@ ${stringArray.map(str => `  <si><t>${escapeHtml(str)}</t></si>`).join('\n')}
       name: "xl/_rels/workbook.xml.rels",
       data: `<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="${NS}/package/2006/relationships">
-  <Relationship Id="rId1" Type="${NS}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="${NS}/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
-  <Relationship Id="rId3" Type="${NS}/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+${workbookRelsXml}
+  <Relationship Id="rIdSharedStrings" Type="${NS}/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+  <Relationship Id="rIdStyles" Type="${NS}/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`,
     },
     {
@@ -325,12 +390,17 @@ ${stringArray.map(str => `  <si><t>${escapeHtml(str)}</t></si>`).join('\n')}
     },
     {
       name: "xl/workbook.xml",
-      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${NS}/officeDocument/2006/relationships"><sheets><sheet name="DocumentModel" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${NS}/officeDocument/2006/relationships"><sheets>${workbookSheetsXml}</sheets></workbook>`,
     },
     { name: "xl/sharedStrings.xml", data: sharedStringsXml },
     { name: "xl/styles.xml", data: generateStylesXml() },
-    { name: "xl/worksheets/sheet1.xml", data: sheetXml(rows, stringIndex, { workbookSheet: model.workbook?.sheets?.[0] }) },
-  ]);
+    ...sheetEntries.map((entry) => ({
+      name: `xl/worksheets/sheet${entry.sheetNumber}.xml`,
+      data: sheetXml(entry.rows, stringIndex, { workbookSheet: entry.workbookSheet }),
+    })),
+  ];
+
+  const zipBytes = writeStoredZip(files);
   return {
     type: "binary",
     format: "xlsx",

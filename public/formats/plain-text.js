@@ -1,4 +1,4 @@
-import { createDocumentModel, createHeading, createParagraph } from "../core/document-model.js";
+import { createDocumentModel, createParagraph } from "../core/document-model.js";
 import { getPlainText } from "../core/document-model.js";
 import { stripMarkdownInlineSyntax } from "./text-utils.js";
 
@@ -8,12 +8,7 @@ export function readText({ content, title = "document", format = "txt" }) {
     .split(/\n{2,}/)
     .map((chunk) => chunk.trim())
     .filter(Boolean)
-    .map((chunk, index) => {
-      if (index === 0 && chunk.length < 80 && !/[.!?。！？]$/.test(chunk)) {
-        return createHeading(1, chunk);
-      }
-      return createParagraph(chunk.replace(/\n/g, " "));
-    });
+    .map((chunk) => createParagraph(chunk.replace(/\n/g, " ")));
 
   return createDocumentModel({ title, sourceFormat: format, blocks });
 }

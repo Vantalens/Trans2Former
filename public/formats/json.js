@@ -1,9 +1,44 @@
 import { assertValidDocumentModel } from "../core/document-schema.js";
 import { ConversionError } from "../core/conversion-error.js";
-import { createCodeBlock, createDocumentModel, createHeading } from "../core/document-model.js";
-import { getPlainText } from "../core/document-model.js";
+import { createCodeBlock, createDocumentModel, createHeading, createTable, getPlainText } from "../core/document-model.js";
+import { createWorkbookModel } from "../core/models/workbook-model.js";
 import { writeMarkdown } from "./markdown.js";
 import { stripMarkdownInlineSyntax } from "./text-utils.js";
+
+function isFlatScalar(value) {
+  return value === null
+    || typeof value === "string"
+    || typeof value === "number"
+    || typeof value === "boolean";
+}
+
+function toCellString(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function tryArrayOfObjectsAsTable(parsed) {
+  if (!Array.isArray(parsed) || parsed.length === 0) return null;
+  const headers = new Set();
+  for (const row of parsed) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+    for (const key of Object.keys(row)) {
+      if (!isFlatScalar(row[key]) && typeof row[key] !== "object") return null;
+      headers.add(key);
+    }
+  }
+  if (headers.size === 0) return null;
+  const headerList = [...headers];
+  const rows = parsed.map((row) => headerList.map((key) => toCellString(row[key])));
+  return { headers: headerList, rows };
+}
+
+function tryArrayOfScalarsAsTable(parsed) {
+  if (!Array.isArray(parsed) || parsed.length === 0) return null;
+  if (!parsed.every(isFlatScalar)) return null;
+  return { headers: ["value"], rows: parsed.map((value) => [toCellString(value)]) };
+}
 
 export function readJson({ content, title = "document", format = "json" }) {
   let parsed;
@@ -26,6 +61,22 @@ export function readJson({ content, title = "document", format = "json" }) {
       assets: parsed.assets || [],
       metadata: parsed.metadata || {},
     });
+  }
+
+  const objectTable = tryArrayOfObjectsAsTable(parsed);
+  const scalarTable = !objectTable ? tryArrayOfScalarsAsTable(parsed) : null;
+  const tabular = objectTable || scalarTable;
+  if (tabular) {
+    const model = createDocumentModel({
+      title,
+      sourceFormat: format,
+      blocks: [createTable(tabular.headers, tabular.rows)],
+      metadata: { originalJson: parsed },
+    });
+    model.workbook = createWorkbookModel({
+      sheets: [{ name: title || "Sheet 1", headers: tabular.headers, rows: tabular.rows }],
+    });
+    return model;
   }
 
   return createDocumentModel({

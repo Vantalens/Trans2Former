@@ -98,7 +98,7 @@ try {
 
   const registryJs = await fetchText(baseUrl, "/core/format-registry.js");
   assert.equal(registryJs.includes("getAllowedOutputFormats"), true, "format registry should expose the conversion path matrix");
-  assert.equal(registryJs.includes('docx: ["md", "html", "txt", "json", "docx", "pdf"]'), true, "DOCX should not expose PPTX as an output path");
+  assert.equal(registryJs.includes('docx: ["md", "html", "txt", "json", "xml", "docx", "pdf"]'), true, "DOCX should not expose PPTX as an output path");
   assert.equal(registryJs.includes('png: ["html", "txt", "json", "pdf"]'), true, "PNG should stay input-only apart from readable/document outputs");
 
   const appJs = await fetchText(baseUrl, "/app.js");

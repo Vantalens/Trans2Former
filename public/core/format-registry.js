@@ -18,18 +18,18 @@ const FORMAT_ALIASES = {
 const PRODUCT_MATRIX_BY_INPUT = {
   md: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"],
   html: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"],
-  txt: ["md", "html", "txt", "json", "docx", "pdf", "epub"],
+  txt: ["md", "html", "txt", "json", "xml", "docx", "pdf", "epub"],
   json: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"],
-  xml: ["md", "html", "txt", "json", "pdf"],
-  csv: ["md", "csv", "xlsx", "html", "txt", "json", "pdf"],
-  xlsx: ["md", "csv", "xlsx", "html", "txt", "json", "pdf"],
-  doc: ["md", "html", "txt", "json", "docx", "pdf"],
-  docx: ["md", "html", "txt", "json", "docx", "pdf"],
-  epub: ["md", "html", "txt", "json", "docx", "pdf", "epub"],
-  pdf: ["md", "html", "txt", "json", "docx", "pdf"],
-  pptx: ["md", "html", "txt", "json", "pdf"],
+  xml: ["md", "html", "txt", "json", "xml", "pdf"],
+  csv: ["md", "csv", "xlsx", "html", "txt", "json", "xml", "pdf"],
+  xlsx: ["md", "csv", "xlsx", "html", "txt", "json", "xml", "pdf"],
+  doc: ["md", "html", "txt", "json", "xml", "docx", "pdf"],
+  docx: ["md", "html", "txt", "json", "xml", "docx", "pdf"],
+  epub: ["md", "html", "txt", "json", "xml", "docx", "pdf", "epub"],
+  pdf: ["md", "html", "txt", "json", "xml", "docx", "pdf"],
+  pptx: ["md", "html", "txt", "json", "xml", "pdf", "pptx"],
   png: ["html", "txt", "json", "pdf"],
-  ofd: ["md", "html", "txt", "json", "pdf"],
+  ofd: ["md", "html", "txt", "json", "xml", "pdf"],
 };
 
 export function normalizeFormat(value) {

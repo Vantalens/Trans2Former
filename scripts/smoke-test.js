@@ -1073,7 +1073,9 @@ test("format writers emit clean target-format output without leaked markdown/int
 
   const docxZip = readZipEntries(convertContent({ content: markdown, from: "md", to: "docx", title: "sample" }).data);
   const wordXml = docxZip.getText("word/document.xml");
-  assert.equal(wordXml.includes("Hello world and code."), true);
+  assert.equal(wordXml.includes(">Hello<") || wordXml.includes(">Hello "), true);
+  assert.equal(wordXml.includes(">world<"), true);
+  assert.equal(wordXml.includes("<w:b/>"), true);
   assert.equal(wordXml.includes("**world**"), false);
   assert.equal(wordXml.includes("<w:tbl>\n"), true);
 
