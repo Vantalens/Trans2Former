@@ -6,7 +6,7 @@ import { readZipEntries } from "../core/zip-container.js";
 import { writeStoredZip } from "../core/zip-writer.js";
 import { getPlainText } from "../core/document-model.js";
 import { extractTextTags, getAttr, parseRelationships, resolvePartPath } from "./ooxml-utils.js";
-import { escapeHtml } from "./text-utils.js";
+import { escapeHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
 
 function bytesToBase64(bytes) {
   if (typeof btoa === "function") {
@@ -141,19 +141,31 @@ export function readPptx({ content, title = "presentation", fileName = "", forma
 
 function slideTextBlocks(model) {
   const text = getPlainText(model);
-  const lines = text.split(/\n+/).filter(Boolean);
+  const lines = stripMarkdownInlineSyntax(text).split(/\n+/).filter(Boolean);
   return lines.length > 0 ? lines : [model.title || "Document"];
 }
 
 function slideXml(model, title) {
   const NS = "http" + "://schemas.openxmlformats.org";
   const lines = slideTextBlocks(model).slice(0, 10);
-  const body = lines.map((line, index) => `<a:p><a:r><a:rPr lang="zh-CN" sz="${index === 0 ? 2800 : 1800}"/><a:t>${escapeHtml(line)}</a:t></a:r></a:p>`).join("");
+  const body = lines.map((line, index) => [
+    "        <a:p>",
+    `          <a:r><a:rPr lang="zh-CN" sz="${index === 0 ? 2800 : 1800}"/><a:t>${escapeHtml(line)}</a:t></a:r>`,
+    "        </a:p>",
+  ].join("\n")).join("\n");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="${NS}/drawingml/2006/main" xmlns:r="${NS}/officeDocument/2006/relationships" xmlns:p="${NS}/presentationml/2006/main">
   <p:cSld><p:spTree>
     <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
-    <p:sp><p:nvSpPr><p:cNvPr id="2" name="${escapeHtml(title)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${body}</p:txBody></p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="${escapeHtml(title)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr/>
+      <p:txBody>
+        <a:bodyPr/>
+        <a:lstStyle/>
+${body}
+      </p:txBody>
+    </p:sp>
   </p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
 </p:sld>`;
 }

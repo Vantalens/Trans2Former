@@ -334,7 +334,7 @@ export function readZipEntries(content) {
     const name = normalizeEntryPath(decoder.decode(bytes.slice(nameStart, nameStart + fileNameLength)));
 
     if ((flags & 0x08) !== 0) {
-      throw new ConversionError("ZIP data descriptor 暂未支持；请使用标准 OOXML 包或后续插件路径", {
+      throw new ConversionError("ZIP data descriptor 暂未支持；请使用标准 OOXML 包或后续核心增强路径", {
         category: "parse",
         code: "ZIP_DATA_DESCRIPTOR_UNSUPPORTED",
         format: "zip",

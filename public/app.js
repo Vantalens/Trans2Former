@@ -22,15 +22,11 @@ import {
   selectAllQueueItemsState,
 } from "./core/file-queue-ui.js";
 import {
-  createPluginWorkbenchUi,
-} from "./core/plugin-workbench-ui.js";
-import {
   buildExportFileName as buildWorkbenchExportFileName,
   summarizeQualityReport,
 } from "./core/workbench-state.js";
 import { readBlobAsDecodedText } from "./core/text-decoding.js";
 import { expandPdfContentForTextExtraction } from "./formats/pdf.js";
-import { TRUSTED_PLUGIN_CATALOG } from "./plugin-catalog.js";
 
 const inputContent = document.getElementById("inputContent");
 const sourcePane = document.querySelector(".source-pane");
@@ -84,15 +80,7 @@ const clearResolvedWarningsButton = document.getElementById("clearResolvedWarnin
 const qualityReportList = document.getElementById("qualityReportList");
 const diffSummary = document.getElementById("diffSummary");
 const versionsList = document.getElementById("versionsList");
-const pluginManagerButton = document.getElementById("pluginManagerButton");
 const securityCenterButton = document.getElementById("securityCenterButton");
-const importPluginInput = document.getElementById("importPluginInput");
-const importPluginButton = document.getElementById("importPluginButton");
-const pluginDownloadList = document.getElementById("pluginDownloadList");
-const pluginInstalledList = document.getElementById("pluginInstalledList");
-const pluginUpdateList = document.getElementById("pluginUpdateList");
-const pluginCapabilityList = document.getElementById("pluginCapabilityList");
-const pluginSecuritySummary = document.getElementById("pluginSecuritySummary");
 const workbenchTabs = document.getElementById("workbenchTabs");
 const wordCountEl = document.getElementById("wordCount");
 const lineCountEl = document.getElementById("lineCount");
@@ -157,6 +145,10 @@ const LARGE_PREVIEW_BLOCK_LIMIT = 80;
 const WORKER_TRANSFERABLE_THRESHOLD_BYTES = 1024 * 1024;
 const VIRTUAL_LIST_ITEM_LIMIT = 160;
 const EDITABLE_OUTPUT_FORMATS = new Set(["md", "html", "txt", "json", "csv", "xml"]);
+const INPUT_EDITOR_MIN_HEIGHT = 144;
+const INPUT_EDITOR_MAX_HEIGHT = 420;
+const BINARY_INPUT_EDITOR_MIN_HEIGHT = 118;
+const BINARY_INPUT_EDITOR_MAX_HEIGHT = 280;
 const HISTORY_PREFERENCE_KEY = "trans2former.history.optIn";
 const MARKDOWN_PROFILE_PREFERENCE_KEY = "trans2former.markdown.profile";
 const PROGRESS_STAGE_LABELS = {
@@ -814,6 +806,16 @@ function updateWordCount() {
   lineCountEl.textContent = `行数: ${text.split("\n").length}`;
 }
 
+function fitInputEditorHeight() {
+  const isBinary = inputContent.classList.contains("is-binary-input");
+  const minHeight = isBinary ? BINARY_INPUT_EDITOR_MIN_HEIGHT : INPUT_EDITOR_MIN_HEIGHT;
+  const maxHeight = isBinary ? BINARY_INPUT_EDITOR_MAX_HEIGHT : INPUT_EDITOR_MAX_HEIGHT;
+  inputContent.style.height = "auto";
+  const nextHeight = Math.min(maxHeight, Math.max(minHeight, inputContent.scrollHeight + 2));
+  inputContent.style.height = `${nextHeight}px`;
+  inputContent.style.overflowY = inputContent.scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
 function isBinaryInputFormat(format = fromFormatSelect.value) {
   return isBinaryInputFormatState(format, BINARY_INPUT_FORMATS);
 }
@@ -827,6 +829,7 @@ function syncInputEditorMode(format = fromFormatSelect.value) {
   inputContent.readOnly = binary;
   inputContent.classList.toggle("is-binary-input", binary);
   sourcePane?.classList.toggle("is-binary-input", binary);
+  fitInputEditorHeight();
 }
 
 function createReadableInputDisplay(rawContent, format, fileName) {
@@ -1073,6 +1076,7 @@ async function handleInputText(rawContent, fileName = currentFileName, { renderI
   currentInputContent = String(rawContent ?? "");
   inputContent.value = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName);
   syncInputEditorMode();
+  fitInputEditorHeight();
   setFileMeta(fileName);
   updateLargePreviewControls(currentInputContent.length);
   currentDocumentModel = null;
@@ -1393,6 +1397,7 @@ inputContent.addEventListener("input", () => {
   }
   schedulePreviewUpdate();
   updateWordCount();
+  fitInputEditorHeight();
   if (autoPreviewEnabled && inputContent.value.length > LARGE_DOC_THRESHOLD) {
     autoPreviewEnabled = false;
     autoPreviewCheckbox.checked = false;
@@ -1510,29 +1515,12 @@ retryFailedButton.addEventListener("click", retryFailedQueueItems);
 outputDirectoryButton.addEventListener("click", () => {
   chooseOutputDirectory().catch((error) => setStatus(error.message, "error"));
 });
-pluginManagerButton.addEventListener("click", () => {
-  openDrawerOnTab("drawerPluginsGroup");
-  document.getElementById("pluginDownloadPanel")?.scrollIntoView({ block: "nearest" });
-  setStatus("插件管理已展开，可下载、导入或回滚", "info");
-});
 securityCenterButton.addEventListener("click", () => {
-  openDrawerOnTab("drawerPluginsGroup");
-  document.getElementById("pluginSecurityPanel")?.scrollIntoView({ block: "nearest" });
-  setStatus("local-only · 插件 install mode 不读文档 · processing mode 禁联网", "success");
-});
-importPluginButton?.addEventListener("click", () => {
-  importPluginInput?.click();
-});
-importPluginInput?.addEventListener("change", (event) => {
-  const file = event.target.files?.[0];
-  if (!file) {
-    return;
-  }
-  pluginWorkbench.importPluginFromFile(file).catch((error) => setStatus(error.message, "error"));
-  event.target.value = "";
+  openDrawerOnTab("drawerQualityGroup");
+  document.getElementById("warningsPanel")?.scrollIntoView({ block: "nearest" });
+  setStatus("local-only · 所有内置转换在浏览器本地执行，不上传用户文档", "success");
 });
 document.getElementById("bottomReportPanel")?.addEventListener("click", (event) => {
-  pluginWorkbench.handlePanelClick(event);
   const drawerTab = event.target.closest("[data-drawer-tab]");
   if (drawerTab) {
     activateDrawerTab(drawerTab.dataset.drawerTab);
@@ -1625,6 +1613,7 @@ function bootstrapInitialSample() {
   currentInputContent = sampleMarkdown;
   inputContent.value = sampleMarkdown;
   syncInputEditorMode("md");
+  fitInputEditorHeight();
   setFileMeta("sample.md");
   fileQueue = [{
     id: "sample",
@@ -1647,20 +1636,6 @@ function bootstrapInitialSample() {
   setStatus("示例已加载，当前转换在浏览器端执行", "success");
 }
 
-const pluginWorkbench = createPluginWorkbenchUi({
-  catalog: TRUSTED_PLUGIN_CATALOG,
-  elements: {
-    downloadList: pluginDownloadList,
-    installedList: pluginInstalledList,
-    updateList: pluginUpdateList,
-    capabilityList: pluginCapabilityList,
-    securitySummary: pluginSecuritySummary,
-  },
-  setStatus,
-  getDocumentContext: () => ({ fileName: currentFileName }),
-  openExternal: (url) => window.open(url, "_blank", "noopener,noreferrer"),
-});
-
 syncFormatOptions();
 historyPersistenceEnabled = readHistoryPersistencePreference();
 if (persistHistoryCheckbox) {
@@ -1670,7 +1645,6 @@ markdownOutputProfile = readMarkdownProfilePreference();
 if (markdownProfileSelect) {
   markdownProfileSelect.value = markdownOutputProfile;
 }
-pluginWorkbench.render();
 bootstrapInitialSample();
 autoPreviewCheckbox.checked = false;
 syncMarkdownProfileControl();

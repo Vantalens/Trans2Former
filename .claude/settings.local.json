@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(npm test *)",
-      "Bash(curl -s http://localhost:8888/index.html)"
-    ]
-  }
-}

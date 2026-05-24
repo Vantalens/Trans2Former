@@ -6,10 +6,7 @@ import {
   getFormatCapabilities,
   getRouteTemperature,
   isModelReachable,
-  listEngineBridges,
   listFormats,
-  registerEngineBridge,
-  unregisterEngineBridgesFromSource,
 } from "../public/browser-transformer.js";
 import { decodeTextBytes } from "../public/core/text-decoding.js";
 import { createDocumentModel, createHeading, createParagraph, getPlainText } from "../public/core/document-model.js";
@@ -180,23 +177,7 @@ for (const from of listFormats().input) {
   }
 }
 
-console.log("Capability Registry / RoutePlanner test passed: model annotations and route temperatures cover the current product matrix.");
-
-// External Engine Bridge（P8-M5）：注册 engine-bridge 插件后，对应的 from→to
-// 路径温度应当变为 hot；移除 bridge 后回退到原有温度。
 const baseTemperature = getRouteTemperature("pdf", "docx");
 assert.equal(baseTemperature, "cold", "PDF -> DOCX 默认走 FixedLayoutModel→SemanticDoc 应当为 cold");
-registerEngineBridge({
-  from: "pdf",
-  to: "docx",
-  engine: "libreoffice",
-  lossLevel: "low",
-  source: "test-engine-bridge",
-});
-assert.equal(getRouteTemperature("pdf", "docx"), "hot", "注册 engine-bridge 后路径温度应当被升级为 hot");
-const bridges = listEngineBridges();
-assert.equal(bridges.some((bridge) => bridge.from === "pdf" && bridge.to === "docx" && bridge.engine === "libreoffice"), true);
-unregisterEngineBridgesFromSource("test-engine-bridge");
-assert.equal(getRouteTemperature("pdf", "docx"), baseTemperature, "卸载 bridge 后路径温度应当恢复为基线值");
 
-console.log("External Engine Bridge test passed: bridge registration upgrades route temperature and unregister restores baseline.");
+console.log("Capability Registry / RoutePlanner test passed: core model annotations and route temperatures cover the current product matrix.");

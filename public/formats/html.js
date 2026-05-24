@@ -458,6 +458,10 @@ export function readHtml({ content, title = "document", format = "html" }) {
 }
 
 export function renderHtmlDocument({ bodyHtml, title = "document" }) {
+  const formattedBody = String(bodyHtml || "")
+    .split("\n")
+    .map((line) => line ? `      ${line}` : "")
+    .join("\n");
   return `<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -477,7 +481,9 @@ export function renderHtmlDocument({ bodyHtml, title = "document" }) {
     </style>
   </head>
   <body>
-    <main>${bodyHtml}</main>
+    <main>
+${formattedBody}
+    </main>
   </body>
 </html>`;
 }

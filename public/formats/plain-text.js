@@ -1,5 +1,6 @@
 import { createDocumentModel, createHeading, createParagraph } from "../core/document-model.js";
 import { getPlainText } from "../core/document-model.js";
+import { stripMarkdownInlineSyntax } from "./text-utils.js";
 
 export function readText({ content, title = "document", format = "txt" }) {
   const blocks = String(content ?? "")
@@ -21,7 +22,7 @@ export function writeText({ model }) {
   return {
     type: "text",
     format: "txt",
-    data: `${getPlainText(model)}\n`,
+    data: `${stripMarkdownInlineSyntax(getPlainText(model))}\n`,
     mime: "text/plain;charset=utf-8",
   };
 }

@@ -1,7 +1,7 @@
 # 🎉 Trans2Former v2.0.0 发布成功！
 
-**发布日期**: 2026-05-12  
-**版本**: v2.0.0  
+**发布日期**: 2026-05-12
+**版本**: v2.0.0
 **状态**: ✅ **已推送到 GitHub**
 
 ---
@@ -30,15 +30,15 @@
 
 **Tag**: `v2.0.0` (已自动选择)
 
-**Release title**: 
+**Release title**:
 ```
-Trans2Former v2.0.0 - 生产就绪版本
+Trans2Former v2.0.0 - Web preview release
 ```
 
 **Description**: 复制以下内容
 
 ```markdown
-# Trans2Former v2.0.0 - 生产就绪版本
+# Trans2Former v2.0.0 - Web preview release
 
 🎉 **重大更新**: Trans2Former 2.0.0 完成了 P0-P8 所有核心功能开发！
 
@@ -139,7 +139,7 @@ npm test
 ✅ Release Readiness: 通过
 \`\`\`
 
-**测试覆盖率**: 100%
+**测试验证**: `npm test` 全链路通过，Smoke Test 44/44 个测试组通过。
 
 ## 🛡️ 数据安全
 
@@ -206,9 +206,9 @@ Trans2Former 严格遵守本地优先原则：
 
 **Made with ❤️ by Trans2Former Team**
 
-**发布日期**: 2026-05-12  
-**版本**: 2.0.0  
-**状态**: ✅ 生产就绪
+**发布日期**: 2026-05-12
+**版本**: 2.0.0
+**状态**: ✅ Web preview release 可发布；平台安装包、签名/公证和跨平台 smoke 仍需独立完成
 ```
 
 ### 步骤 3: 发布
@@ -226,6 +226,6 @@ Trans2Former v2.0.0 已成功推送到 GitHub！
 
 ---
 
-**推送时间**: 2026-05-12  
-**推送状态**: ✅ 成功  
+**推送时间**: 2026-05-12
+**推送状态**: ✅ 成功
 **下一步**: 创建 GitHub Release

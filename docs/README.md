@@ -6,8 +6,8 @@
 
 1. [PROJECT_ASSESSMENT_2026-05-03.md](PROJECT_ASSESSMENT_2026-05-03.md)：当前项目评估、问题清单和优化后的阶段方向。
 2. [PRODUCT_STRATEGY.md](PRODUCT_STRATEGY.md)：产品边界、市场路线、差异化亮点和数据安全底线。
-3. [DESKTOP_APP_ARCHITECTURE.md](DESKTOP_APP_ARCHITECTURE.md)：Tauri 桌面壳、Web-GUI、体验标准、版本控制和插件隔离架构。
-4. [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md)：P7 桌面发布、安装包、checksum、平台 smoke 和插件补丁包规则。
+3. [DESKTOP_APP_ARCHITECTURE.md](DESKTOP_APP_ARCHITECTURE.md)：Tauri 桌面壳、Web-GUI、体验标准、版本控制和本地处理架构。
+4. [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md)：P7 桌面发布、安装包、checksum、平台 smoke 和核心能力发布规则。
 5. [CONVERSION_PATHS.md](CONVERSION_PATHS.md)：输入格式到输出格式的产品路径矩阵。
 6. [MULTI_MODEL_ARCHITECTURE.md](MULTI_MODEL_ARCHITECTURE.md)：P8 多模型架构（SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel / AssetGraph）。
 7. [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md)：P8 Capability Registry + Route Planner，路径矩阵自动派生。
@@ -18,10 +18,8 @@
 10. [HEAVY_FORMAT_CAPABILITY_NOTES.md](HEAVY_FORMAT_CAPABILITY_NOTES.md)：重格式能力等级、warnings、资源预算和降级路径。
 11. [STRUCTURED_EDITING_MODEL.md](STRUCTURED_EDITING_MODEL.md)：桌面 Web-GUI 结构化编辑状态模型。
 12. [AI_READY_MARKDOWN.md](AI_READY_MARKDOWN.md)：AI/RAG 友好的 Markdown 输出准则。
-13. [SECURITY_POLICY.md](SECURITY_POLICY.md)：本地优先、零云端处理、安全模式和插件隔离规则。
-14. [PLUGIN_SECURITY_MODEL.md](PLUGIN_SECURITY_MODEL.md)：插件 manifest、权限隔离、本地模型插件和 no-network processing。
-15. [PLUGIN_DISTRIBUTION.md](PLUGIN_DISTRIBUTION.md)：release 插件补丁包、下载板块和更新板块规则。
-16. [RESOURCE_BUDGET.md](RESOURCE_BUDGET.md)：核心包体积、依赖和重格式插件化边界。
+13. [SECURITY_POLICY.md](SECURITY_POLICY.md)：本地优先、零云端处理、安全模式和核心内置处理规则。
+14. [RESOURCE_BUDGET.md](RESOURCE_BUDGET.md)：核心包体积、依赖和重格式本地模块边界。
 17. [DYNAMIC_CHUNKING_MERGE_DESIGN.md](DYNAMIC_CHUNKING_MERGE_DESIGN.md)：超大单文件动态分块与结构化合并设计。
 18. [OOXML_CONTAINER.md](OOXML_CONTAINER.md)：ZIP/OOXML 容器基础设施。
 19. [DOCX_INPUT_MVP.md](DOCX_INPUT_MVP.md)：DOCX input 支持范围和限制。
@@ -49,15 +47,12 @@
 | [BASIC_FORMAT_QUALITY.md](BASIC_FORMAT_QUALITY.md) | P0 基础格式质量、样例和可解释降级 |
 | [CONVERSION_PATHS.md](CONVERSION_PATHS.md) | 输入到输出的产品路径矩阵 |
 | [MULTI_MODEL_ARCHITECTURE.md](MULTI_MODEL_ARCHITECTURE.md) | P8 多模型架构：五个规范模型 + 共享资产图 |
-| [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md) | P8 Capability Registry + Route Planner + External Engine Bridge |
+| [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md) | P8 Capability Registry + Route Planner |
 | [HEAVY_FORMAT_CAPABILITY_NOTES.md](HEAVY_FORMAT_CAPABILITY_NOTES.md) | 重格式 capability note、fixture 分层和 P4/P6 回归入口 |
 | [DESKTOP_APP_ARCHITECTURE.md](DESKTOP_APP_ARCHITECTURE.md) | 桌面 Web-GUI 架构、体验标准、模块、权限和版本策略 |
-| [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md) | P7 桌面安装包、平台 smoke、自动更新、文件关联和插件补丁包发布规则 |
+| [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md) | P7 桌面安装包、平台 smoke、自动更新、文件关联和核心能力发布规则 |
 | [STRUCTURED_EDITING_MODEL.md](STRUCTURED_EDITING_MODEL.md) | P1 结构化编辑状态模型 |
 | [AI_READY_MARKDOWN.md](AI_READY_MARKDOWN.md) | AI-ready Markdown 输出准则 |
-| [PLUGIN_SECURITY_MODEL.md](PLUGIN_SECURITY_MODEL.md) | P2 插件安全模型 |
-| [PLUGIN_DISTRIBUTION.md](PLUGIN_DISTRIBUTION.md) | release 插件补丁包、下载和更新规则 |
-| [plugin-manifest.schema.json](plugin-manifest.schema.json) | 插件 manifest JSON Schema |
 | [OOXML_CONTAINER.md](OOXML_CONTAINER.md) | ZIP/OOXML 容器基础设施 |
 | [DOCX_INPUT_MVP.md](DOCX_INPUT_MVP.md) | DOCX input |
 | [XLSX_INPUT_MVP.md](XLSX_INPUT_MVP.md) | XLSX input |
@@ -80,4 +75,4 @@
 - `DEVELOPMENT_TASKS.md` 只记录可执行任务，不堆放长篇背景说明。
 - README 只保留用户和开发者快速入口，不复制完整路线图。
 - 修改支持格式、安全边界、资源预算、测试命令或运行方式时，同步更新相关专题文档和任务看板。
-- 模块化插件、热门基础格式免下载、按需下载、资源治理等开发规则统一维护在 `docs/development-standards/`。
+- 核心模块化、热门基础格式免下载、本地按需加载、资源治理等开发规则统一维护在 `docs/development-standards/`。

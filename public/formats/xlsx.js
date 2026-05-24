@@ -6,7 +6,7 @@ import { readZipEntries } from "../core/zip-container.js";
 import { writeStoredZip } from "../core/zip-writer.js";
 import { getPlainText } from "../core/document-model.js";
 import { getAttr, parseRelationships, resolvePartPath, stripTags } from "./ooxml-utils.js";
-import { escapeHtml } from "./text-utils.js";
+import { escapeHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
 
 function readSharedStrings(zip) {
   const xml = zip.getText("xl/sharedStrings.xml");
@@ -241,20 +241,24 @@ function sheetXml(rows, stringIndex, { workbookSheet = null } = {}) {
       if (formula) {
         const cachedValue = String(formula.cachedValue ?? cell ?? "").trim();
         const valueXml = cachedValue ? `<v>${escapeHtml(cachedValue)}</v>` : "";
-        return `<c r="${ref}"><f>${escapeHtml(formula.expression)}</f>${valueXml}</c>`;
+        return `        <c r="${ref}"><f>${escapeHtml(formula.expression)}</f>${valueXml}</c>`;
       }
-      const strIdx = stringIndex.get(String(cell || ""));
-      return `<c r="${ref}" t="s"><v>${strIdx}</v></c>`;
-    }).join("");
-    return `<row r="${rowIndex + 1}">${cells}</row>`;
-  }).join("");
+      const strIdx = stringIndex.get(stripMarkdownInlineSyntax(cell));
+      return `        <c r="${ref}" t="s"><v>${strIdx}</v></c>`;
+    }).join("\n");
+    return `      <row r="${rowIndex + 1}">\n${cells}\n      </row>`;
+  }).join("\n");
 
   const mergeXml = mergeRefs.length > 0
-    ? `<mergeCells count="${mergeRefs.length}">${mergeRefs.map((ref) => `<mergeCell ref="${escapeHtml(ref)}"/>`).join("")}</mergeCells>`
+    ? `\n  <mergeCells count="${mergeRefs.length}">\n${mergeRefs.map((ref) => `    <mergeCell ref="${escapeHtml(ref)}"/>`).join("\n")}\n  </mergeCells>`
     : "";
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="${NS}/spreadsheetml/2006/main"><sheetData>${rowXml}</sheetData>${mergeXml}</worksheet>`;
+<worksheet xmlns="${NS}/spreadsheetml/2006/main">
+  <sheetData>
+${rowXml}
+  </sheetData>${mergeXml}
+</worksheet>`;
 }
 
 export function writeXlsx({ model, title = model.title }) {
@@ -275,7 +279,7 @@ export function writeXlsx({ model, title = model.title }) {
   }
 
   rows.forEach(row => {
-    row.forEach(cell => getStringIndex(cell));
+    row.forEach(cell => getStringIndex(stripMarkdownInlineSyntax(cell)));
   });
 
   // 生成 sharedStrings.xml

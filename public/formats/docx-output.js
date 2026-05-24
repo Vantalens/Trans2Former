@@ -1,32 +1,59 @@
 import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
 import { writeStoredZip } from "../core/zip-writer.js";
-import { escapeHtml } from "./text-utils.js";
+import { escapeHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
 
 const NS = "http" + "://schemas.openxmlformats.org";
 const DC_NS = "http" + "://purl.org/dc/elements/1.1/";
 
 function xmlText(value) {
-  return escapeHtml(String(value ?? ""));
+  return escapeHtml(stripMarkdownInlineSyntax(value));
 }
 
 function paragraph(text) {
-  return `<w:p><w:r><w:t>${xmlText(text)}</w:t></w:r></w:p>`;
+  return [
+    "    <w:p>",
+    `      <w:r><w:t>${xmlText(text)}</w:t></w:r>`,
+    "    </w:p>",
+  ].join("\n");
 }
 
 function heading(block) {
-  return `<w:p><w:pPr><w:pStyle w:val="Heading${block.level}"/></w:pPr><w:r><w:t>${xmlText(block.text)}</w:t></w:r></w:p>`;
+  return [
+    "    <w:p>",
+    `      <w:pPr><w:pStyle w:val="Heading${block.level}"/></w:pPr>`,
+    `      <w:r><w:t>${xmlText(block.text)}</w:t></w:r>`,
+    "    </w:p>",
+  ].join("\n");
 }
 
 function table(block) {
   const rows = [block.headers, ...(block.rows || [])];
   const columnWidth = Math.max(1200, Math.floor(9000 / Math.max(1, block.headers.length || 1)));
-  return `<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPr>${rows.map((row) => `<w:tr>${row.map((cell) => `<w:tc><w:tcPr><w:tcW w:w="${columnWidth}" w:type="dxa"/></w:tcPr>${paragraph(cell)}</w:tc>`).join("")}</w:tr>`).join("")}</w:tbl>`;
+  const rowXml = rows.map((row) => [
+    "      <w:tr>",
+    ...row.map((cell) => [
+      "        <w:tc>",
+      `          <w:tcPr><w:tcW w:w="${columnWidth}" w:type="dxa"/></w:tcPr>`,
+      paragraph(cell).split("\n").map((line) => `  ${line}`).join("\n"),
+      "        </w:tc>",
+    ].join("\n")),
+    "      </w:tr>",
+  ].join("\n")).join("\n");
+  return [
+    "    <w:tbl>",
+    "      <w:tblPr>",
+    "        <w:tblW w:w=\"9000\" w:type=\"dxa\"/>",
+    "        <w:tblBorders><w:top w:val=\"single\" w:sz=\"4\"/><w:left w:val=\"single\" w:sz=\"4\"/><w:bottom w:val=\"single\" w:sz=\"4\"/><w:right w:val=\"single\" w:sz=\"4\"/><w:insideH w:val=\"single\" w:sz=\"4\"/><w:insideV w:val=\"single\" w:sz=\"4\"/></w:tblBorders>",
+    "      </w:tblPr>",
+    rowXml,
+    "    </w:tbl>",
+  ].join("\n");
 }
 
 function blockToWordXml(block) {
   if (block.type === "heading") return heading(block);
   if (block.type === "paragraph" || block.type === "quote") return paragraph(block.text);
-  if (block.type === "list") return (block.items || []).map((item, index) => paragraph(`${block.ordered ? `${index + 1}.` : "-"} ${item}`)).join("");
+  if (block.type === "list") return (block.items || []).map((item, index) => paragraph(`${block.ordered ? `${index + 1}.` : "-"} ${item}`)).join("\n");
   if (block.type === "code") return paragraph(block.code);
   if (block.type === "table") return table(block);
   if (block.type === "image") return paragraph(block.alt || block.title || block.src);
@@ -39,7 +66,7 @@ export function writeDocx({ model, title = model.title }) {
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="${NS}/wordprocessingml/2006/main">
   <w:body>
-    ${model.blocks.map(blockToWordXml).join("\n")}
+${model.blocks.map(blockToWordXml).join("\n")}
     <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
   </w:body>
 </w:document>`;

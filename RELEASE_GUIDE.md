@@ -22,7 +22,7 @@
 ### 3. Release 包检查
 - [x] Release 包已生成（5.1MB）
 - [x] RELEASE_MANIFEST.json 正确
-- [x] 插件补丁包已包含
+- [x] 核心本地能力已包含
 - [x] 样例文件已包含（50+）
 
 ### 4. Git 检查
@@ -57,33 +57,31 @@ git push origin v2.0.0
 **Description**: 复制 `RELEASE_NOTES_v2.0.0.md` 的内容
 
 **Assets**: 上传以下文件
-- `trans2former-2.0.0.zip` (压缩 release 包)
-- `plugin-patches/ofd-local-reader-0.2.0.t2f-plugin.json`
-- `plugin-patches/local-ocr-basic-0.1.0.t2f-plugin.json`
+- `release/trans2former-2.0.0.zip`（压缩 release 包）
+- `release/trans2former-2.0.0.zip.sha256`（校验和）
 
 ### 步骤 3: 压缩 Release 包
 
-```bash
+```powershell
 # 进入 release 目录
-cd release
+Set-Location release
 
 # 压缩 release 包
-zip -r trans2former-2.0.0.zip trans2former-2.0.0/
+Compress-Archive -Path .\trans2former-2.0.0 -DestinationPath .\trans2former-2.0.0.zip -Force
 
 # 生成 SHA-256 校验和
-sha256sum trans2former-2.0.0.zip > trans2former-2.0.0.zip.sha256
+(Get-FileHash .\trans2former-2.0.0.zip -Algorithm SHA256).Hash | Set-Content .\trans2former-2.0.0.zip.sha256 -Encoding ascii
 
 # 返回项目根目录
-cd ..
+Set-Location ..
 ```
 
 ### 步骤 4: 上传 Assets
 
 在 GitHub Release 页面上传：
-1. `trans2former-2.0.0.zip` - 主 release 包
-2. `trans2former-2.0.0.zip.sha256` - 校验和文件
-3. `plugin-patches/ofd-local-reader-0.2.0.t2f-plugin.json` - OFD 插件
-4. `plugin-patches/local-ocr-basic-0.1.0.t2f-plugin.json` - OCR 插件
+1. `release/trans2former-2.0.0.zip` - 主 release 包
+2. `release/trans2former-2.0.0.zip.sha256` - 校验和文件
+说明：`npm run release:prepare` 只生成主 release 包和 manifest；OFD、OCR 等增强路线进入核心本地能力，不再单独上传扩展包。
 
 ### 步骤 5: 发布
 
@@ -105,7 +103,7 @@ cd ..
 - ✅ **11 种输出格式** - Markdown, HTML, TXT, JSON, CSV, XML, DOCX, XLSX, EPUB, PPTX, PDF
 - ✅ **100+ 转换路径** - 智能路由，自动派生最佳转换路径
 - ✅ **本地优先** - 所有转换在本地完成，零上传
-- ✅ **插件系统** - 按需加载高级功能
+- ✅ **核心本地增强** - OFD、OCR 等增强路线并入核心本地能力
 - ✅ **50+ 样例文件** - 覆盖多种语言和场景
 
 ## 🎯 新增功能
@@ -131,8 +129,6 @@ cd ..
 ## 📦 下载
 
 - **主包**: trans2former-2.0.0.zip (5.1MB)
-- **插件**: ofd-local-reader-0.2.0.t2f-plugin.json
-- **插件**: local-ocr-basic-0.1.0.t2f-plugin.json
 
 ## 🚀 快速开始
 
@@ -157,15 +153,15 @@ npm start
 
 ## 🧪 测试结果
 
-✅ 所有 44 个测试组通过  
-✅ 测试覆盖率 100%  
-✅ 代码质量 5/5
+✅ `npm test` 全链路通过
+✅ Smoke Test: 44/44 个测试组通过
+✅ Release readiness / local security / resource budget 等发布门槛通过
 
 ## 🛡️ 数据安全
 
 - ✅ 所有转换在本地完成
 - ✅ 不上传任何数据
-- ✅ 插件处理文档时禁止联网
+- ✅ 文档处理阶段禁止联网
 
 ---
 
@@ -202,7 +198,7 @@ npm start
 
 **标题**: Trans2Former v2.0.0 发布 - 生产就绪版本
 
-**内容**: 
+**内容**:
 ```
 🎉 Trans2Former v2.0.0 正式发布！
 
@@ -212,7 +208,7 @@ npm start
 - 12 种输入格式，11 种输出格式
 - 100+ 转换路径
 - 本地优先，零上传
-- 完整的插件系统
+- 核心本地增强能力
 
 立即下载: https://github.com/Vantalens/Trans2Former/releases/tag/v2.0.0
 
@@ -243,6 +239,6 @@ npm start
 
 ---
 
-**发布日期**: 2026-05-12  
-**版本**: 2.0.0  
+**发布日期**: 2026-05-12
+**版本**: 2.0.0
 **状态**: ✅ 准备发布

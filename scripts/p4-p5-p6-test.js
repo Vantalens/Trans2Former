@@ -3,17 +3,11 @@ import assert from "node:assert/strict";
 import { AssetStore } from "../public/core/asset-store.js";
 import { createDocumentModel, createHeading, createParagraph, createTable } from "../public/core/document-model.js";
 import { getAllowedOutputFormats, getFormatCapabilities, convertContent } from "../public/browser-transformer.js";
-import {
-  createFixturePluginPackage,
-  createPluginRecord,
-  runPluginModuleTask,
-  setPluginEnabled,
-} from "../public/core/plugin-runtime.js";
 import { readZipEntries } from "../public/core/zip-container.js";
+import { readOfdL0 } from "../public/formats/ofd.js";
 
 await testAssetLazyLoad();
 testCapabilityNotes();
-await testFixturePluginLoader();
 testEnhancedOutputs();
 testOfdL0Reader();
 
@@ -47,44 +41,14 @@ async function testAssetLazyLoad() {
 
 function testCapabilityNotes() {
   const heavyFormats = new Map(getFormatCapabilities().map((item) => [item.format, item]));
-  for (const format of ["docx", "xlsx", "pptx", "epub", "pdf"]) {
+  for (const format of ["docx", "xlsx", "pptx", "epub", "pdf", "ofd"]) {
     const capability = heavyFormats.get(format);
     assert.equal(Boolean(capability), true, `${format} should be registered`);
-    assert.match(capability.qualityGrade, /^(basic|enhanced|plugin-required)$/);
+    assert.match(capability.qualityGrade, /^(basic|enhanced)$/);
     assert.equal(Array.isArray(capability.warnings), true);
     assert.equal(typeof capability.resourceBudget.maxInputBytes, "number");
     assert.equal(typeof capability.degradation, "string");
   }
-}
-
-async function testFixturePluginLoader() {
-  const fixture = await createFixturePluginPackage();
-  const enabled = setPluginEnabled(createPluginRecord(fixture.manifest, { integrityVerified: true }), true);
-
-  const success = await runPluginModuleTask(enabled, {
-    packageBytes: fixture.bytes,
-    input: { text: "local content" },
-    timeoutMs: 1000,
-  });
-  assert.equal(success.ok, true);
-  assert.equal(success.output.blocks[0].text.includes("fixture plugin processed"), true);
-
-  const network = await runPluginModuleTask(enabled, {
-    packageBytes: fixture.bytes,
-    input: { mode: "network" },
-    timeoutMs: 1000,
-  });
-  assert.equal(network.ok, false);
-  assert.equal(network.error.code, "PLUGIN_NETWORK_BLOCKED");
-  assert.equal(network.outputPreserved, true);
-
-  const crash = await runPluginModuleTask(enabled, {
-    packageBytes: fixture.bytes,
-    input: { mode: "crash" },
-    timeoutMs: 1000,
-  });
-  assert.equal(crash.ok, false);
-  assert.equal(crash.error.code, "PLUGIN_CRASH_ISOLATED");
 }
 
 function testEnhancedOutputs() {
@@ -121,7 +85,11 @@ function testOfdL0Reader() {
   const model = JSON.parse(result.data);
   assert.equal(model.sourceFormat, "ofd");
   assert.equal(model.metadata.ofd.level, "L0");
-  assert.equal(model.metadata.warnings.some((warning) => warning.code === "OFD_L1_PLUGIN_REQUIRED"), true);
+  assert.equal(model.metadata.ofd.localOnly, true);
+  assert.equal(model.metadata.warnings.some((warning) => warning.code === "OFD_L1_CORE_LIMITED"), true);
+
+  const nativeModel = readOfdL0({ content: ofdXml, title: "sample.ofd" });
+  assert.equal(nativeModel.fixedLayout.metadata.coreIntegrated, true);
 }
 
-console.log("P4/P5/P6 test passed: lazy assets, quality capabilities, fixture plugin loader, enhanced outputs, and OFD L0 are covered.");
+console.log("P4/P5/P6 test passed: lazy assets, quality capabilities, enhanced outputs, and core OFD L0 are covered.");

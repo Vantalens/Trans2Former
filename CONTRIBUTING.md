@@ -1,6 +1,6 @@
 # 贡献指南
 
-Trans2Former 当前产品方向是 Tauri 桌面壳 + Web-GUI 的本地格式转换工作台。当前仓库仍用浏览器 Web 应用验证转换核心和前端工作台；贡献代码时请保持 Web-GUI、TypeScript core、Worker/WASM 和本地插件系统方向，不要新增 Electron、Playwright、Office、LibreOffice、Pandoc 或云端转换服务作为运行依赖。
+Trans2Former 当前产品方向是 Tauri 桌面壳 + Web-GUI 的本地格式转换工作台。当前仓库仍用浏览器 Web 应用验证转换核心和前端工作台；贡献代码时请保持 Web-GUI、TypeScript core、Worker/WASM 和核心本地模块方向，不要新增 Electron、Playwright、Office、LibreOffice、Pandoc 或云端转换服务作为运行依赖。
 
 核心底线：用户数据本地处理、零上传。不要上传文档、文件名、文档片段、转换结果、错误详情或用户编辑内容；不要接入云端文档处理、远程转换、远程 OCR、远程转写或远程 AI 增强。
 
@@ -23,17 +23,15 @@ http://localhost:3000
 - [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md)：当前任务看板，只放可执行任务和阶段状态。
 - [docs/README.md](docs/README.md)：开发文档总目录。
 - [docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md)：产品原则、市场路线和安全底线。
-- [docs/DESKTOP_APP_ARCHITECTURE.md](docs/DESKTOP_APP_ARCHITECTURE.md)：Tauri 桌面壳、Web-GUI、版本控制和插件隔离架构。
+- [docs/DESKTOP_APP_ARCHITECTURE.md](docs/DESKTOP_APP_ARCHITECTURE.md)：Tauri 桌面壳、Web-GUI、版本控制和本地处理架构。
 - [docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)：格式覆盖矩阵和新增格式准入规则。
 - [docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)：P0 基础格式质量、before/after 和降级说明。
-- [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)：本地优先、零云端处理和插件隔离规则。
-- [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md)：插件 manifest、权限隔离、processing no-network 和完整性校验。
-- [docs/PLUGIN_DISTRIBUTION.md](docs/PLUGIN_DISTRIBUTION.md)：GitHub Releases 插件分发、下载板块和更新板块规则。
+- [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)：本地优先、零云端处理和核心内置处理规则。
 - [docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)：核心包体积和依赖预算。
 - [docs/PROJECT_ASSESSMENT_2026-04-30.md](docs/PROJECT_ASSESSMENT_2026-04-30.md)：项目评估和修复记录。
 - [docs/RELEASE_PREP.md](docs/RELEASE_PREP.md)：GitHub release 准备流程。
 - [docs/development-standards/00_README.md](docs/development-standards/00_README.md)：开发规范体系。
-- [docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md](docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md)：成本、资源、热门基础格式和模块插件治理规则。
+- [docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md](docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md)：成本、资源、热门基础格式和核心模块治理规则。
 
 ## 项目结构
 
@@ -53,10 +51,9 @@ src/
 - 大文件、压缩包、图片处理等耗时任务后续应迁移到 Web Worker。
 - 新增格式时，先设计中间模型，再做输入/输出适配器。
 - 新增高频轻量格式时，可评估进入 `format-basic`，但必须通过体积、安全和质量门禁，保证免下载体验不破坏资源预算。
-- 新增重格式或可选能力时，默认按模块插件处理；用户需要时再下载或加载，不能进入核心包默认路径。
+- 新增重格式或可选能力时，默认按核心本地模块处理；可以本地按需加载，但不能要求用户安装插件。
 - OFD 是战略攻坚格式，不是边缘研究项；新增 OFD 相关改动必须同步 capability levels、公开样例、质量报告、warnings 和 processing no-network 验证。
-- 新增插件能力时，必须通过 `public/core/plugin-policy.js` 和 `scripts/plugin-security-test.js`，不得绕过 manifest、权限、完整性和 no-network policy。
-- 插件下载和更新默认通过 GitHub Releases；应用内只能在 install mode 下访问插件 release，不得在文档处理阶段自动联网更新。
+- 不再新增插件能力、插件下载入口或插件更新入口。
 - 可以进行代码水平拆分，但必须保持 `input -> DocumentModel -> output` 语义一致，拆分前后快照不能退化。
 - 处理超大单文件时，优先设计动态分块转换与结构化合并，不允许为了分块速度牺牲最终转换效果。
 - 新增 OOXML/ZIP 容器能力时，不得把 ZIP 宣传为用户-facing 转换格式；ZIP 只作为 DOCX/PPTX/XLSX/EPUB 基础设施。
@@ -71,7 +68,7 @@ src/
 
 - 默认不得引入 `fetch`、`XMLHttpRequest`、`sendBeacon`、`WebSocket`、远程转换 API、云端 OCR、云端 AI、遥测 SDK 或分析 SDK。
 - 默认不得把文档正文、转换结果、错误原文写入 localStorage、IndexedDB 或日志。
-- 插件安装可以联网下载插件代码；文档处理阶段必须禁联网。
+- 文档处理、预览、编辑和导出阶段必须禁联网。
 - 远程 OCR、远程转写、远程 AI 增强明确不做。
 - 错误详情复制必须脱敏，只包含 category/code/format/message/warnings。
 - 任何违反本地优先路线的改动都必须先更新安全策略并增加测试。
@@ -80,9 +77,9 @@ src/
 
 - 默认依赖必须保持少量；PDF/OCR/Office/AI/云端 SDK 不得进入默认 dependencies。
 - 基础包必须保持小而可用，热门轻量格式可内置免下载。
-- 重格式应放入模块插件、按需加载目录或后续独立包。
-- 新增格式前先判断属于 `format-basic`、`format-plugin` 还是 `optional-plugin`。
-- 插件必须有 manifest，声明格式能力、体积预算、依赖、安全模式、加载方式和失败降级路径。
+- 重格式应放入核心按需加载目录或后续独立包。
+- 新增格式前先判断属于 `format-basic` 还是核心重能力。
+- 核心重能力必须声明格式能力、体积预算、依赖、安全模式、加载方式和失败降级路径。
 - 如果必须提高资源预算，先更新 [docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)，并解释原因。
 
 ## 动态分块与代码拆分要求
@@ -103,7 +100,7 @@ src/
 npm test
 ```
 
-当前测试包括核心转换 smoke、转换快照、浏览器自检静态服务检查、Tauri 桌面壳配置检查、本地安全 smoke test、资源预算 smoke test、插件安全 test 和 release readiness test。
+当前测试包括核心转换 smoke、转换快照、浏览器自检静态服务检查、Tauri 桌面壳配置检查、本地安全 smoke test、资源预算 smoke test 和 release readiness test。
 
 ## PPTX 方向
 

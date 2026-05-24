@@ -473,7 +473,7 @@ test("XLSX writer preserves formula cache and merge ranges from WorkbookModel (P
   // 公式表达式 + 缓存值都应当回写
   assert.match(sheetXmlOut, /<f>SUM\(1,2\)<\/f><v>3<\/v>/);
   // mergeCells 节点应当存在
-  assert.match(sheetXmlOut, /<mergeCells count="1"><mergeCell ref="A1:B1"\/><\/mergeCells>/);
+  assert.match(sheetXmlOut, /<mergeCells count="1">[\s\S]*<mergeCell ref="A1:B1"\/>[\s\S]*<\/mergeCells>/);
 });
 
 test("EPUB input MVP follows OPF spine and extracts XHTML structure", () => {
@@ -750,6 +750,9 @@ test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", ()
   // 验证输出包含 "High-Fidelity" producer 标记
   const pdfText = new TextDecoder().decode(bytes);
   assert.match(pdfText, /Trans2Former High-Fidelity/);
+  assert.match(pdfText, /72\.00 760\.00 Tm/, "first text run should use an absolute text matrix");
+  assert.match(pdfText, /72\.00 720\.00 Tm/, "new lines should reset to their absolute page coordinates");
+  assert.equal(pdfText.includes("72.00 760.00 Td"), false, "absolute coordinates must not be emitted through relative Td moves");
 });
 
 test("placeholder image rendering outputs are not advertised as supported conversions", () => {
@@ -1015,6 +1018,10 @@ test("Markdown preview and core conversions preserve common document structure",
   const html = convertContent({ content: markdown, from: "md", to: "html", title: "sample" });
   assertValidOutput(html, "html", "markdown to html");
   assert.equal(html.data.includes("<main>"), true);
+  assert.equal(html.data.includes("\n    <main>\n      <h1>Title</h1>"), true);
+  assert.equal(html.data.includes("<li data-depth=\"0\">"), false);
+  assert.equal(html.data.includes("  <li>One</li>"), true);
+  assert.equal(html.data.includes("<pre><code class=\"language-js\">console.log(&#39;ok&#39;);</code></pre>"), true);
 
   const text = convertContent({ content: "<h1>Hello</h1><p>World</p>", from: "html", to: "txt", title: "sample" });
   assertValidOutput(text, "txt", "html to txt");
@@ -1024,6 +1031,69 @@ test("Markdown preview and core conversions preserve common document structure",
   const json = convertContent({ content: "{\"hello\":\"world\"}", from: "json", to: "md", title: "sample" });
   assertValidOutput(json, "md", "json to markdown");
   assert.equal(json.data.includes("```json"), true);
+});
+
+test("format writers emit clean target-format output without leaked markdown/internal markers", () => {
+  const markdown = [
+    "# Title",
+    "",
+    "Hello **world** and `code`.",
+    "",
+    "- One",
+    "  - Nested",
+    "- Two",
+    "",
+    "| Name | Value |",
+    "| --- | --- |",
+    "| A | 1 |",
+    "| B | 2 |",
+    "",
+    "```js",
+    "console.log(\"ok\");",
+    "```",
+  ].join("\n");
+
+  const text = convertContent({ content: markdown, from: "md", to: "txt", title: "sample" }).data;
+  assert.equal(text.includes("Hello world and code."), true);
+  assert.equal(text.includes("**world**"), false);
+  assert.equal(text.includes("`code`"), false);
+
+  const json = JSON.parse(convertContent({ content: markdown, from: "md", to: "json", title: "sample" }).data);
+  assert.equal(json.plainText.includes("Hello world and code."), true);
+  assert.equal(json.plainText.includes("**world**"), false);
+
+  const xml = convertContent({ content: markdown, from: "md", to: "xml", title: "sample" }).data;
+  assert.equal(xml.includes("<paragraph>Hello world and code.</paragraph>"), true);
+  assert.equal(xml.includes("      <headers>\n        <cell>Name</cell>\n        <cell>Value</cell>\n      </headers>"), true);
+  assert.equal(xml.includes("<![CDATA[\nconsole.log(\"ok\");\n    ]]>"), true);
+
+  const html = convertContent({ content: markdown, from: "md", to: "html", title: "sample" }).data;
+  assert.equal(html.includes("data-depth"), false);
+  assert.equal(html.includes("<li>One\n          <ul>\n            <li>Nested</li>\n          </ul>\n        </li>"), true);
+
+  const docxZip = readZipEntries(convertContent({ content: markdown, from: "md", to: "docx", title: "sample" }).data);
+  const wordXml = docxZip.getText("word/document.xml");
+  assert.equal(wordXml.includes("Hello world and code."), true);
+  assert.equal(wordXml.includes("**world**"), false);
+  assert.equal(wordXml.includes("<w:tbl>\n"), true);
+
+  const xlsxZip = readZipEntries(convertContent({ content: markdown, from: "md", to: "xlsx", title: "sample" }).data);
+  assert.equal(xlsxZip.getText("xl/worksheets/sheet1.xml").includes("\n  <sheetData>\n      <row r=\"1\">"), true);
+
+  const epubZip = readZipEntries(convertContent({ content: markdown, from: "md", to: "epub", title: "sample" }).data);
+  const chapter = epubZip.getText("OEBPS/chapter.xhtml");
+  assert.equal(chapter.includes("data-depth"), false);
+  assert.equal(chapter.includes("<li>Nested</li>"), true);
+
+  const pptxZip = readZipEntries(convertContent({ content: markdown, from: "md", to: "pptx", title: "sample" }).data);
+  const slide = pptxZip.getText("ppt/slides/slide1.xml");
+  assert.equal(slide.includes("Hello world and code."), true);
+  assert.equal(slide.includes("**world**"), false);
+
+  const pdfBytes = dataUrlToBytes(convertContent({ content: markdown, from: "md", to: "pdf", title: "sample" }).data);
+  const pdfText = new TextDecoder().decode(pdfBytes);
+  assert.equal(pdfText.includes("**world**"), false);
+  assert.equal(pdfText.includes("`code`"), false);
 });
 
 test("Markdown advanced syntax keeps ordered lists, nesting hints, alignment, and footnotes", () => {
@@ -1054,7 +1124,8 @@ test("Markdown advanced syntax keeps ordered lists, nesting hints, alignment, an
 
   const preview = renderPreviewHtml(markdown, "md", "advanced");
   assert.equal(preview.includes("<ol>"), true);
-  assert.equal(preview.includes('data-depth="1"'), true);
+  assert.equal(preview.includes('data-depth="1"'), false);
+  assert.equal(preview.includes("<li>Nested item</li>"), true);
   assert.equal(preview.includes('<sup id="fnref-safe">'), true);
 });
 
@@ -1080,6 +1151,7 @@ test("table conversions round-trip through Markdown, CSV, and HTML", () => {
   const tableHtml = convertContent({ content: tableMarkdown, from: "md", to: "html", title: "table" });
   assertValidOutput(tableHtml, "html", "markdown table to html");
   assert.equal(tableHtml.data.includes("<table>"), true);
+  assert.equal(tableHtml.data.includes("\n      <table>\n        <thead>"), true);
 
   const tableRoundTrip = convertContent({ content: tableMarkdown, from: "md", to: "md", title: "table" });
   assertValidOutput(tableRoundTrip, "md", "markdown table round-trip");

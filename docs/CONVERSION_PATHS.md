@@ -26,14 +26,14 @@ Trans2Former 区分两件事：
 | EPUB | Markdown、HTML、TXT、JSON、DOCX、PDF、EPUB | 电子书源保留文档和发布路径。 |
 | PDF | Markdown、HTML、TXT、JSON、DOCX、PDF | 当前主要是文本型 PDF 抽取，不提供表格/演示高保真输出。 |
 | PPTX | Markdown、HTML、TXT、JSON、PDF | 演示源可抽取为文档或导出 PDF，不做反向复杂编辑。 |
-| PNG | HTML、TXT、JSON、PDF | 图片源进入资产/预览路径，OCR 和图片重渲染仍属于本地插件增强。 |
-| OFD | Markdown、HTML、TXT、JSON、PDF | 核心包只提供 L0/L1 级本地解析路径，高保真依赖本地插件。 |
+| PNG | HTML、TXT、JSON、PDF | 图片源进入资产/预览路径，OCR 和图片重渲染进入核心本地增强路线。 |
+| OFD | Markdown、HTML、TXT、JSON、PDF | 核心包提供 L0 级本地解析路径，高保真继续并入核心本地增强。 |
 
 ## UI 规则
 
 - 输入格式变化后，输出下拉框立即按路径矩阵刷新。
 - 当前输出不再适用时，自动选择该输入格式的第一个可用输出。
-- 维护型功能（插件、安全中心、质量报告、DocumentModel、版本历史）默认隐藏，避免干扰主转换路径。
+- 维护型功能（安全中心、质量报告、DocumentModel、版本历史）默认隐藏，避免干扰主转换路径。
 - 格式能力说明只展示当前输入/输出组合的简短状态，详细 warnings 和 capability note 放入高级面板或文档。
 
 ## 程序层规则

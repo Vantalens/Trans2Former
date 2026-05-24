@@ -1,6 +1,6 @@
 # Trans2Former Development Tasks
 
-最后更新：2026-05-12
+最后更新：2026-05-24
 
 维护规则：
 
@@ -21,10 +21,9 @@ Trans2Former 当前产品方向正式收敛为：
 - 当前 Web 应用继续作为转换核心和 GUI 验证底座，最终用户产品面向成熟 PC 桌面体验。
 - 桌面形态采用 Tauri，不回到 Electron，不依赖 Microsoft Office、LibreOffice、Pandoc、云端转换 API 或云端 OCR/AI。
 - 转换核心继续围绕 `input -> DocumentModel -> QualityReport / Warnings -> output`，避免 `N * N` 私有转换路线。
-- 热门基础格式必须免下载可用；高保真增强、OFD、本地 OCR/layout/table 必须插件化或按需加载。
-- 插件系统必须隔离安装和文档处理：安装/更新可联网但不可接触用户文档，处理/编辑/导出可接触文档但必须禁联网。
-- 插件下载服务采用 GitHub Releases，不自建分发后端；浏览器端和桌面端都必须保留下载板块和更新板块。
-- 当前优先级从“继续堆格式”调整为“架构收敛、质量回归、真实插件加载器、高保真/OFD 攻坚和桌面发布产品化”。
+- 热门基础格式必须免下载可用；高保真增强、OFD、本地 OCR/layout/table 全部进入核心本地模块路线，不再提供插件安装。
+- 文档处理、预览、编辑和导出阶段必须禁联网；增强能力不得通过插件下载或更新入口接触用户文档。
+- 当前优先级从“继续堆格式”调整为“架构收敛、质量回归、核心本地增强、高保真/OFD 攻坚和桌面发布产品化”。
 
 ## 当前项目判断
 
@@ -38,12 +37,18 @@ Trans2Former 当前产品方向正式收敛为：
 
 ## 下一步执行顺序
 
-1. P8：多模型架构与转换路由。把 `DocumentModel` 升级为五个规范模型（SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel / AssetGraph），用 Capability Registry + Route Planner 自动派生路径矩阵。短期先做 PDF 坐标启发式版面分析，作为 FixedLayoutModel 的前置验证。
-2. P7：桌面发布与产品化。安装包、签名、自动更新、平台 smoke、文件关联和桌面权限体验。
-3. 发布前回归：继续保持 `npm test`、`git diff --check`、`npm run release:prepare` 和 release manifest ignore 验证。
+1. 发布卫生修复：先处理 2026-05-24 代码审查发现的 release 文档、Git hygiene 和本地配置入库问题，确保主分支重新满足 `git diff --check` 和发布操作文档可执行。
+2. P7：桌面发布与产品化收尾。平台安装包真实产出、签名/公证、自动更新、平台 smoke、文件关联和桌面权限体验。
+3. P9：质量证据升级。把 SSIM 视觉对比从框架推进到可运行实现，并补 PDF/OFD/扫描件版面恢复的公开样例和质量报告。
+4. 发布前回归：继续保持 `npm test`、`git diff --check`、`npm run release:prepare` 和 release manifest ignore 验证。
 
 ## 最近验收修复
 
+- 2026-05-24：修复 HTML 输出“不像正常 HTML”的问题。Markdown / table 转 HTML 现在输出缩进后的完整 HTML 文档，`<main>` 内部按块换行，列表和表格不再压成一行；普通列表项移除内部 `data-depth="0"` 标记，仅保留真正嵌套项的深度信息。`smoke-test` 增加 HTML 可读源码断言，覆盖 `<main>` 缩进、列表项、代码块和表格结构。
+- 2026-05-24：取消产品插件系统和 release 插件补丁包路线。OFD、PNG/image OCR、PDF scan/OCR layout、table recovery 等增强能力改为核心内置本地能力；移除插件管理 UI、catalog/runtime/policy、`.t2f-plugin.json` 补丁包、插件测试链和 release 复制逻辑；安全、资源预算、发布文档同步改为“不提供插件安装、文档处理全程在核心包内执行”。
+- 2026-05-24：逐项排查并修复其他输出格式的“目标格式不像目标格式”问题。TXT / CSV / XML / JSON plainText / DOCX / PPTX / PDF 程序化输出清理 Markdown 行内标记，不再把 `**bold**`、反引号等源格式语法泄漏到普通文本目标；HTML / EPUB 列表从内部 `data-depth` 标记改为真实嵌套 `<ul>/<ol>`；XML 表格、DOCX document.xml、XLSX worksheet.xml、PPTX slide1.xml 改为展开后的可读结构。新增 `format writers emit clean target-format output without leaked markdown/internal markers` 回归测试，覆盖 TXT、JSON、XML、HTML、DOCX、XLSX、EPUB、PPTX、PDF。
+- 2026-05-24：修复工作台截图暴露的三处前端/PDF 问题。左侧 source card 不再按右侧结果面板高度强行拉满；短文本输入框通过 `fitInputEditorHeight()` 按内容高度收起，长文本在输入框内滚动。外层 `app-shell` / `workspace` 不再用 `100vh` + `1fr` 强制制造空白画布，结果面板移除响应式 `min-height: 620px`，短文档下方不再预留一整屏空白。PDF 结果 iframe 明确 `width/height:100%`，不再使用浏览器默认 300x150 小框贴在结果面板左上角。高保真 PDF 输出从相对 `Td` 位移改为每个 text run 使用绝对 `Tm` text matrix，并修正内容流、页面、annotation、字体对象编号，避免 PDF round-trip 后字距被拉爆或对象引用冲突。新增 `browser-smoke-test` 和 `smoke-test` 回归断言，`npm test` 与 `git diff --check` 已通过。
+- 2026-05-24：完成主分支代码审核。当前 `npm test` 全链路通过，但 `git diff --check v2.0.0..HEAD` 在新增 release 文档中发现 trailing whitespace；`.claude/settings.local.json` 已被纳入版本控制，属于本地权限配置入库风险；`RELEASE_GUIDE.md` 的 release asset 路径和 `zip` / `sha256sum` 命令偏 Unix，在 Windows 主环境下需要改为可执行流程；发布说明中“测试覆盖率 100% / 代码质量 5/5 / 生产就绪”等断言需要收敛为可验证口径。
 - 2026-05-12：P8-M6 fixtures 扩展 + SSIM 视觉对比框架。扩展 samples 到 50+ 个程序化生成样例，覆盖中英文、RTL文本、复杂表格、代码示例等场景。新增 scripts/visual-comparison-test.js 框架和 docs/VISUAL_COMPARISON_PLAN.md 实现计划，定义 SSIM 测试配置、接口和两种实现方案（使用库 vs 自实现）。修复 PDF 高保真输出坐标计算错误（dx 计算）和转换开始时标签页状态问题。改进按钮可访问性（添加 title 属性）。生成 release 包（5.1MB）。所有 44 个测试组通过。P8 阶段 100% 完成，P7 核心准备就绪。
 - 2026-05-12：P8-M4 高保真 PDF 输出双路实现。新增 public/formats/pdf-output-high-fidelity.js，直接消费 FixedLayoutModel，按 textRun.bbox 精确定位每个文本片段，保留原始坐标、字体、尺寸和 annotations。pdf-output.js 升级为智能路由：优先使用高保真路径（FixedLayoutModel → 精确坐标重现），回落到程序化路径（SemanticDoc → 重新排版）。Producer 标记区分 High-Fidelity vs 普通 Trans2Former。新增 P8-M4 测试验证 FixedLayoutModel 坐标保留和 PDF round-trip 高保真路径。所有 44 个测试组通过。
 - 2026-05-12：P8-M7 结构化 inline 节点 + 公式/合并单元格保留。DOCX reader 新增 extractInlinesFromParagraph 和 extractRunInlines，识别 hyperlink、bold/italic/del/code 属性，输出 strong/em/del/code/link inline 节点，链接不再降级为 "文本 (URL)" 字符串。PDF reader 新增 itemsToInlines，从 PDF.js textContent.items 提取 fontName 识别 bold/italic。XLSX writer 新增 extractCachedValue 单独提取公式缓存值，sheetXml 从 WorkbookModel.formulas 回写 `<f>expression</f><v>cachedValue</v>`，从 WorkbookModel.merges 回写 `<mergeCells>` 节点，xlsx → xlsx round-trip 保留公式表达式和合并单元格范围。新增 P9-C 和 P9-B 测试，所有 43 个测试组通过。新增 public/core/models/mappers.js 实现跨模型 mapper（workbookToSemantic / semanticToWorkbook / slideToSemantic / semanticToSlide / fixedLayoutToSemantic / semanticToFixedLayout）。
@@ -70,8 +75,6 @@ Trans2Former 当前产品方向正式收敛为：
 - DocumentModel：[docs/DOCUMENT_MODEL_SCHEMA.md](docs/DOCUMENT_MODEL_SCHEMA.md)
 - 转换降级策略：[docs/CONVERSION_POLICY.md](docs/CONVERSION_POLICY.md)
 - 安全策略：[docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)
-- 插件安全模型：[docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md)
-- 插件分发规则：[docs/PLUGIN_DISTRIBUTION.md](docs/PLUGIN_DISTRIBUTION.md)
 - 资源预算：[docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)
 - 重格式 capability note：[docs/HEAVY_FORMAT_CAPABILITY_NOTES.md](docs/HEAVY_FORMAT_CAPABILITY_NOTES.md)
 - 动态分块合并：[docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md](docs/DYNAMIC_CHUNKING_MERGE_DESIGN.md)
@@ -257,7 +260,7 @@ Trans2Former 当前产品方向正式收敛为：
 
 ## P7：桌面发布与产品化
 
-状态：已完成，平台安装包待真实构建环境产出。
+状态：核心完成，发布卫生和平台安装包仍在收尾。
 
 目标：把当前 Web-GUI preview release 逐步升级为可分发、可安装、可更新的成熟桌面产品。
 
@@ -270,12 +273,18 @@ Trans2Former 当前产品方向正式收敛为：
 - [x] 发布文档区分 Web preview、desktop dev build、desktop installer、plugin release。
 - [x] 新增 release 插件补丁包机制：格式增强能力以 `.t2f-plugin.json` 放入 `plugin-patches/`，用户按需下载导入。
 - [x] `npm test` 增加 `plugin-patch-release-test` 和 `p7-release-productization-test`。
+- [x] 清理 release 文档 trailing whitespace，保证 `git diff --check v2.0.0..HEAD` 通过。
+- [x] 移除已跟踪的 `.claude/settings.local.json`，并在 `.gitignore` 中明确忽略本地 Claude/Codex 权限配置。
+- [x] 修正 `RELEASE_GUIDE.md`：区分仓库路径 `public/plugin-patches/`、生成包内路径 `plugin-patches/` 和 GitHub Release asset 上传路径；补 Windows PowerShell 可执行的压缩与 SHA-256 命令。
+- [x] 收敛发布说明中的质量断言：把“100% 测试覆盖率 / 代码质量 5/5 / 生产就绪”改为可核验的命令结果、测试组数量和已知限制。
+- [x] 扩展 `scripts/release-readiness-test.js`，覆盖本地配置不得入库、release 指南 asset 路径存在、checksum 文件生成说明和 `git diff --check` 卫生门槛。
 
 验收门槛：
 
 - [x] 用户能安装桌面包并在无网络环境完成基础转换：发布计划、CSP、本地 preview 和平台 smoke 门槛已建立；真实安装包需在平台构建环境生成。
 - [x] 安装包和更新通道不接触用户文档。
 - [x] 平台 smoke 证明核心 GUI、转换、导出和插件管理入口可用。
+- [x] release 文档、Git ignore、release asset 和 checksum 流程能在 Windows 主开发环境中按文档复现。
 
 ## P8：多模型架构与转换路由
 
@@ -364,6 +373,7 @@ Trans2Former 当前产品方向正式收敛为：
 - [x] 单一 `DocumentModel` 表达力有限，对工作簿、幻灯片、固定页面等跨类对象的转换易丢信息；P8 多模型架构已完成。
 - [ ] PDF / OFD / 扫描件的版面恢复仍偏弱，PDF reader 仅做坐标启发式，FixedLayoutModel 与本地 OCR/layout 插件待后续实现。
 - [ ] 平台安装包真实产出、签名/公证和跨平台 smoke 仍需在对应 Windows/macOS/Linux 构建环境执行。
+- [x] 发布文档和本地配置治理存在漂移：release 指南部分命令不贴合 Windows 主环境，新增文档未通过 `git diff --check`，本地权限配置文件需要从版本控制中移除。
 
 ## 已完成基础盘归档
 

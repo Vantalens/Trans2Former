@@ -1,6 +1,7 @@
 import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
 import { getPlainText } from "../core/document-model.js";
 import { writePdfHighFidelity } from "./pdf-output-high-fidelity.js";
+import { stripMarkdownInlineSyntax } from "./text-utils.js";
 
 function escapePdfText(value) {
   return String(value ?? "").replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
@@ -23,7 +24,7 @@ function pdfUnicodeString(value) {
 }
 
 function linesForPdf(model) {
-  const text = getPlainText(model).replace(/\r\n?/g, "\n");
+  const text = stripMarkdownInlineSyntax(getPlainText(model)).replace(/\r\n?/g, "\n");
   const lines = [];
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;

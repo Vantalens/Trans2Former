@@ -137,12 +137,12 @@ createParagraph([
 | `public/core/asset-store.js` | 演化为 `models/asset-graph.js`，跨模型共享 |
 | `public/core/format-registry.js` | 升级为 Capability Registry，详见 [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md) |
 | `public/core/warnings.js` | 不变，仍然是 info / lossy / unsupported / security / performance 五级 |
-| `public/core/plugin-runtime.js` | 增加 `engine-bridge` 类型，详见 [PLUGIN_DISTRIBUTION.md](PLUGIN_DISTRIBUTION.md) |
+| 核心本地重能力模块 | 后续承载 OCR / layout / sidecar engine，详见 [RESOURCE_BUDGET.md](RESOURCE_BUDGET.md) |
 
 ## 不做什么（明确边界）
 
 - **不引入 DOCX / HTML / PDF 文件级 pivot**：pivot 是内存对象，不是落盘文件。
-- **不在核心包引入 LibreOffice / Pandoc / OCR**：external engine 全部插件化。
+- **不在首屏核心路径引入 LibreOffice / Pandoc / OCR**：external engine 必须作为核心本地按需能力设计。
 - **不破坏 local-only / no-network processing**：所有模型流转在浏览器内或桌面 worker 内。
 - **不允许任何 mapper 静默丢信息**：跨模型必发 warning，并写入 qualityReport。
 - **不强求 14×11 矩阵全可用**：UI 显示不推荐路径但加严重 warning，不"假装能用"。

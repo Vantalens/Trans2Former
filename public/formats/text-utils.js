@@ -34,3 +34,13 @@ export function stripHtml(html) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+export function stripMarkdownInlineSyntax(value) {
+  return String(value ?? "")
+    .replace(/!\[([^\]]*)\]\([^\)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^\)]*\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/(\*|_)(.*?)\1/g, "$2")
+    .replace(/~~(.*?)~~/g, "$1");
+}

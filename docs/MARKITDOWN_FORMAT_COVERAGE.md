@@ -8,7 +8,7 @@
 
 | MarkItDown 提到的格式 | Trans2Former 目标 | 当前状态 | 浏览器端策略 |
 | --- | --- | --- | --- |
-| PDF | 输入/输出 | 已支持文本型 PDF 输入和程序化 PDF 输出基线 | 后续评估文本顺序、表格、图片和本地 OCR 插件 |
+| PDF | 输入/输出 | 已支持文本型 PDF 输入和程序化 PDF 输出基线 | 后续评估文本顺序、表格、图片和核心 OCR 增强 |
 | PowerPoint | PPTX 输入/输出 | 未做 | 解析/生成 OOXML ZIP；借鉴 PresentationModel/schema 思路 |
 | Word | DOCX 输入/输出 | 未做 | 解析/生成 OOXML ZIP；正文结构进入 DocumentModel |
 | Excel | XLSX/CSV 输入/输出 | CSV 已支持；XLSX 未做 | CSV 走 table block；XLSX 后续解析 OOXML ZIP |

@@ -58,7 +58,6 @@
           <details class="auxiliary-actions">
             <summary aria-label="更多操作">更多</summary>
             <div class="auxiliary-menu">
-              <button id="pluginManagerButton" class="menu-button" type="button">插件管理</button>
               <button id="securityCenterButton" class="menu-button" type="button">安全中心</button>
               <button id="outputDirectoryButton" class="menu-button" type="button">输出目录</button>
             </div>
@@ -225,16 +224,15 @@
         </section>
       </main>
 
-      <details id="bottomReportPanel" class="bottom-drawer" aria-label="质量与插件抽屉">
+      <details id="bottomReportPanel" class="bottom-drawer" aria-label="质量与版本抽屉">
         <summary class="bottom-drawer-summary">
-          <span class="bottom-drawer-title">质量、版本与插件</span>
-          <small class="bottom-drawer-hint">Warnings · Quality · Diff · Versions · Plugins</small>
+          <span class="bottom-drawer-title">质量与版本</span>
+          <small class="bottom-drawer-hint">Warnings · Quality · Diff · Versions</small>
           <span class="bottom-drawer-toggle" aria-hidden="true"></span>
         </summary>
         <div class="bottom-drawer-body">
           <nav class="drawer-tabs" aria-label="抽屉视图">
             <button class="drawer-tab is-active" type="button" data-drawer-tab="drawerQualityGroup">质量</button>
-            <button class="drawer-tab" type="button" data-drawer-tab="drawerPluginsGroup">插件</button>
             <button class="drawer-tab" type="button" data-drawer-tab="drawerVersionsGroup">版本</button>
           </nav>
 
@@ -266,34 +264,6 @@
             </article>
           </div>
 
-          <div id="drawerPluginsGroup" class="drawer-group">
-            <article id="pluginDownloadPanel" class="report-card">
-              <div class="report-card-header">
-                <h2>Plugin Downloads</h2>
-                <div class="report-card-actions">
-                  <button id="importPluginButton" class="mini-button" type="button">导入本地插件包</button>
-                  <input id="importPluginInput" type="file" accept="application/json,.json" hidden />
-                </div>
-              </div>
-              <div id="pluginDownloadList" class="report-list plugin-list">GitHub Releases install mode</div>
-            </article>
-            <article id="pluginInstalledPanel" class="report-card">
-              <h2>Installed Plugins</h2>
-              <div id="pluginInstalledList" class="report-list plugin-list">尚未导入本地插件包</div>
-            </article>
-            <article id="pluginUpdatePanel" class="report-card">
-              <h2>Plugin Updates</h2>
-              <div id="pluginUpdateList" class="report-list plugin-list">权限变化、资源预算和回滚入口</div>
-            </article>
-            <article id="pluginCapabilityPanel" class="report-card">
-              <h2>Plugin Capabilities</h2>
-              <div id="pluginCapabilityList" class="report-list">尚无插件能力</div>
-            </article>
-            <article id="pluginSecurityPanel" class="report-card">
-              <h2>Plugin Security</h2>
-              <div id="pluginSecuritySummary" class="report-list">install mode / processing mode</div>
-            </article>
-          </div>
         </div>
       </details>
     </div>

@@ -105,11 +105,11 @@ registry.registerFormat("png", {
   extension: "png",
   mime: "image/png",
   label: "PNG",
-  note: "支持作为输入图片资源导入 DocumentModel；图片渲染输出在真实视觉保真前不作为可下载格式开放",
+  note: "支持作为输入图片资源导入 DocumentModel；图片文本识别走核心内置路线，不再要求插件安装",
   qualityGrade: "basic",
-  warnings: ["PNG_INPUT_ASSET_ONLY"],
+  warnings: ["PNG_INPUT_ASSET_ONLY", "PNG_OCR_CORE_LIMITED"],
   resourceBudget: { maxInputBytes: 25 * 1024 * 1024, maxRuntimeMemoryMb: 512 },
-  degradation: "输入作为图片资产保存；文档到图片输出必须等待真实本地渲染器，不能用占位图冒充。",
+  degradation: "输入作为图片资产保存；当前核心包不伪造 OCR 文本，后续 OCR 引擎直接并入核心而不是插件安装。",
   inputModels: ["SemanticDoc"],
 });
 
@@ -194,9 +194,9 @@ registry.registerFormat("pdf", {
   label: "PDF",
   note: "P4：文本型 PDF 输入和程序化 PDF 二进制输出",
   qualityGrade: "enhanced",
-  warnings: ["PDF_TEXT_ORDER_APPROXIMATED", "PDF_SCAN_REQUIRES_LOCAL_OCR_PLUGIN"],
+  warnings: ["PDF_TEXT_ORDER_APPROXIMATED", "PDF_SCAN_OCR_CORE_LIMITED"],
   resourceBudget: { maxInputBytes: 50 * 1024 * 1024, maxRuntimeMemoryMb: 1024 },
-  degradation: "文本型 PDF 可抽取；扫描件、复杂版面和表格恢复依赖本地插件。",
+  degradation: "文本型 PDF 可抽取；扫描件 OCR、复杂版面和表格恢复后续直接进入核心，不走插件安装。",
   inputModels: ["FixedLayoutModel"],
   outputModels: ["SemanticDoc", "FixedLayoutModel"],
 });
@@ -206,11 +206,11 @@ registry.registerFormat("ofd", {
   extension: "ofd",
   mime: "application/ofd",
   label: "OFD",
-  note: "P6：核心包只读取 L0 容器/manifest/metadata，L1+ 由本地插件承载",
-  qualityGrade: "plugin-required",
-  warnings: ["OFD_L1_PLUGIN_REQUIRED", "OFD_RENDER_PLUGIN_REQUIRED"],
+  note: "P6：OFD 容器、manifest 和 metadata 由核心包直接读取；后续页面树、文本对象和渲染继续并入核心",
+  qualityGrade: "basic",
+  warnings: ["OFD_L1_CORE_LIMITED", "OFD_RENDER_CORE_LIMITED"],
   resourceBudget: { maxInputBytes: 80 * 1024 * 1024, maxRuntimeMemoryMb: 1024 },
-  degradation: "核心包仅登记容器和 metadata；页面树、文本、图片、签章和渲染必须走本地 OFD 插件。",
+  degradation: "核心包直接登记 OFD 容器和 metadata；页面树、文本、图片、签章和渲染仍是核心内置路线的后续增强，不再提示安装插件。",
   inputModels: ["FixedLayoutModel"],
 });
 
@@ -249,18 +249,6 @@ export function getRouteTemperature(from, to) {
 
 export function isModelReachable(from, to) {
   return registry.isModelReachable(from, to);
-}
-
-export function registerEngineBridge(bridge) {
-  registry.registerBridge(bridge);
-}
-
-export function unregisterEngineBridgesFromSource(source) {
-  registry.unregisterBridgesFromSource(source);
-}
-
-export function listEngineBridges() {
-  return registry.listBridges();
 }
 
 export function detectFormatFromName(fileName) {

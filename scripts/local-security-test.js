@@ -57,23 +57,8 @@ function assertNoForbiddenPublicApis(filePath, content) {
   }
 
   for (const { pattern, reason } of FORBIDDEN_PUBLIC_PATTERNS) {
-    if ((pattern.source.includes("localStorage") || pattern.source.includes("indexedDB")) && /persistHistoryCheckbox|HISTORY_PREFERENCE_KEY|output-history|trans2former\.plugins\.state|manifest/i.test(content)) {
+    if ((pattern.source.includes("localStorage") || pattern.source.includes("indexedDB")) && /persistHistoryCheckbox|HISTORY_PREFERENCE_KEY|output-history|manifest/i.test(content)) {
       continue;
-    }
-    if (pattern.source.includes("fetch") && normalizedPath === path.normalize("public/core/plugin-workbench-ui.js")) {
-      // 只允许在调用 fetch 前用 startsWith 校验 releaseUrl 限定到 /plugin-patches/，
-      // 任何外部 scheme（http/https/file/ftp/ws/data/protocol-relative）都禁止。
-      // 模板字符串里只要包含未受 startsWith 校验的插值，也禁止。
-      const localPatchGuard = /releaseUrl\.startsWith\("\/plugin-patches\/"\)/;
-      const localFetchCall = /fetch\(releaseUrl\)/;
-      const externalScheme = /fetch\s*\(\s*[`"']?\s*(?:https?:|\/\/|file:|ftp:|wss?:|data:)/i;
-      const dynamicTemplateFetch = /fetch\s*\(\s*`(?!\/plugin-patches\/)[^`]*\$\{/;
-      if (localPatchGuard.test(content)
-        && localFetchCall.test(content)
-        && !externalScheme.test(content)
-        && !dynamicTemplateFetch.test(content)) {
-        continue;
-      }
     }
     assert.equal(
       pattern.test(content),
@@ -99,8 +84,8 @@ async function assertSecurityPolicyIsDocumented() {
     "local-only",
     "不提供云端文档处理",
     "默认不得调用远程转换 API",
-    "插件安装模式",
-    "文档处理模式",
+    "不提供插件安装模式",
+    "文档处理全程在核心包内执行",
     "错误详情默认只展示",
     "复制诊断信息不得默认复制用户文档内容",
     "fetch",

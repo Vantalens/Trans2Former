@@ -76,7 +76,7 @@ UI 显示时按温度排序，cold 路径打 ⚠️ 标记。
 | pptx → md | reader=pptx→Slide → mapper.slideToSemantic → writer=md | warm |
 | pptx → docx | reader=pptx→Slide → mapper.slideToSemantic → writer=docx | warm |
 | pptx → xlsx | reader=pptx→Slide → mapper.slideToSemantic → mapper.semanticToWorkbook → writer=xlsx | cold |
-| png → md | reader=png→FixedLayout（OCR 插件）→ mapper.fixedLayoutToSemantic → writer=md | cold（依赖插件） |
+| png → md | reader=png→FixedLayout（核心 OCR 增强）→ mapper.fixedLayoutToSemantic → writer=md | cold（依赖后续核心增强） |
 | ofd → pdf | reader=ofd→FixedLayout → writer=pdf | warm |
 
 ## 不推荐路径
@@ -89,28 +89,7 @@ UI 显示时按温度排序，cold 路径打 ⚠️ 标记。
 
 ## External Engine Bridge
 
-桌面环境（Tauri）下可以选择装本地引擎插件：LibreOffice / Pandoc / Calibre / ofdrw。
-
-manifest 字段：
-
-```json
-{
-  "type": "engine-bridge",
-  "bridges": [
-    { "from": "docx", "to": "pdf", "engine": "libreoffice", "command": "soffice --convert-to pdf" },
-    { "from": "pdf",  "to": "docx", "engine": "libreoffice" }
-  ],
-  "securityScope": ["sidecar:soffice"],
-  "requiresLocalBinary": "soffice"
-}
-```
-
-行为：
-
-- 装了 bridge 插件且本地有对应二进制，**Route Planner 优先选 bridge 路径**（温度 hot），核心 mapper 路径作为 fallback
-- 浏览器端 bridge 不暴露（沙箱不允许调本地命令）
-- bridge 失败自动回落到核心 mapper，发 `BRIDGE_FALLBACK` warning，不阻塞主流程
-- bridge 调用全程 local-only，不允许带网络权限
+当前产品不提供插件化 External Engine Bridge。桌面环境如需接入 LibreOffice / Pandoc / Calibre / ofdrw，必须作为核心本地 sidecar 能力设计，显式声明本地二进制、权限、资源预算、fallback 和 no-network 约束。
 
 ## 与 CONVERSION_PATHS.md 的关系
 

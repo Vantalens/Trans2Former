@@ -10,10 +10,10 @@
 | XLSX | enhanced | 读取工作表文本、公式缓存、日期和合并单元格 warning；输出基础 workbook/sheet 容器 | formula cache only, merged cells approximated | 30 MB input / 512 MB runtime | 不执行公式，不还原图表、宏和复杂样式 |
 | PPTX | enhanced | 读取幻灯片标题、文本框、图片、表格和备注；输出基础 presentation/slide 容器 | layout approximated, animation ignored | 80 MB input / 1024 MB runtime | 动画、母版精确布局和媒体播放降级 |
 | EPUB | enhanced | 读取 OPF spine 和 XHTML 内容结构；输出基础 EPUB3 container/OPF/XHTML | CSS approximated, media referenced | 80 MB input / 768 MB runtime | 复杂 CSS、脚本、DRM 内容降级 |
-| PDF | enhanced | 文本型 PDF 抽取，上传时本地解压常见 FlateDecode 文本流；程序化 PDF 输出支持分页和 link annotation 基线 | text order approximated, scan requires local OCR plugin | 50 MB input / 1024 MB runtime | 扫描件、复杂字体编码、复杂版面和表格恢复交给本地插件 |
+| PDF | enhanced | 文本型 PDF 抽取，上传时本地解压常见 FlateDecode 文本流；程序化 PDF 输出支持分页和 link annotation 基线 | text order approximated, scan requires core OCR enhancement | 50 MB input / 1024 MB runtime | 扫描件、复杂字体编码、复杂版面和表格恢复进入核心本地增强路线 |
 | PNG | basic | 图片输入进入 AssetStore；文档到 PNG 输出不公开 | input asset only | 25 MB input / 512 MB runtime | 真实视觉渲染未完成前不允许占位图像输出进入矩阵 |
 | JPEG | planned | 不公开输出 | visual renderer required | 25 MB input / 512 MB runtime | 多页和真实排版渲染等待本地渲染器 |
-| OFD | plugin-required | 核心包只读取 L0 manifest/metadata | L1 plugin required, render plugin required | 80 MB input / 1024 MB runtime | 页面树、文本对象、图片对象、签章和渲染由本地 OFD 插件处理 |
+| OFD | basic | 核心包读取 L0 container/manifest/metadata | L1 core enhancement pending, render core enhancement pending | 80 MB input / 1024 MB runtime | 页面树、文本对象、图片对象、签章和渲染进入核心本地增强路线 |
 
 ## Fixture Layers
 

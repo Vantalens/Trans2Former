@@ -2,6 +2,7 @@ import { createDocumentModel, createTable } from "../core/document-model.js";
 import { getPlainText } from "../core/document-model.js";
 import { createWorkbookModel } from "../core/models/workbook-model.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
+import { stripMarkdownInlineSyntax } from "./text-utils.js";
 
 function parseCsvRecords(content) {
   const source = String(content ?? "").replace(/^\uFEFF/, "");
@@ -111,7 +112,7 @@ export function writeCsv({ model }) {
   return {
     type: "text",
     format: "csv",
-    data: `${rows.map((row) => row.map(escapeCsvCell).join(",")).join("\n")}\n`,
+    data: `${rows.map((row) => row.map((cell) => escapeCsvCell(stripMarkdownInlineSyntax(cell))).join(",")).join("\n")}\n`,
     mime: "text/csv;charset=utf-8",
   };
 }

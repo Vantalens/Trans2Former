@@ -3,7 +3,7 @@ import { createFixedLayoutModel } from "../core/models/fixed-layout.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
 import { escapeHtml } from "./text-utils.js";
 
-const PDF_FALLBACK_TEXT = "这是有效 PDF，但当前核心文本抽取器暂时无法读取其中的正文编码或压缩内容流。下方保留原 PDF 预览；如需转换为可编辑文本，请使用本地 OCR/Layout 插件或导入可复制文本的 PDF。";
+const PDF_FALLBACK_TEXT = "这是有效 PDF，但当前核心文本抽取器暂时无法读取其中的正文编码或压缩内容流。下方保留原 PDF 预览；如需转换为可编辑文本，请等待核心 OCR/Layout 增强或导入可复制文本的 PDF。";
 const PDFJS_PAYLOAD_START = "% Trans2Former PDFJS_TEXT_START";
 const PDFJS_PAYLOAD_END = "% Trans2Former PDFJS_TEXT_END";
 const MAX_INFLATED_STREAM_BYTES = 64 * 1024 * 1024;
@@ -910,7 +910,7 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
       "unsupported",
       fontGlyphIdNoise ? "PDF_FONT_GLYPH_ID_NOISE" : "PDF_NO_CREDIBLE_TEXT",
       fontGlyphIdNoise
-        ? "PDF text operators decode to font Glyph IDs without ToUnicode mapping; readable text was not produced. Install a local OCR/PDF plugin or use a copyable-text PDF."
+        ? "PDF text operators decode to font Glyph IDs without ToUnicode mapping; readable text was not produced. Use a copyable-text PDF or a later core OCR/PDF enhancement."
         : "No credible PDF text operators were extracted; binary/compressed data was not exposed as document text."
     ));
   }

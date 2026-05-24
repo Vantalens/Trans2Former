@@ -50,6 +50,7 @@ Thumbs.db
 .env.*
 !.env.example
 .local/
+.claude/settings.local.json
 
 # Project-local release scratch
 /RELEASE_CHECKLIST.md

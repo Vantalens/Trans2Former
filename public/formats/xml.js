@@ -1,7 +1,7 @@
 import { ConversionError } from "../core/conversion-error.js";
 import { createDocumentModel, createParagraph, createRawBlock } from "../core/document-model.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
-import { escapeHtml, stripHtml } from "./text-utils.js";
+import { escapeHtml, stripHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
 
 function parseAttributes(rawAttributes = "") {
   const attributes = {};
@@ -183,13 +183,21 @@ export function readXml({ content, title = "xml", format = "xml" }) {
 
 export function writeXml({ model, title = model.title }) {
   const blocks = model.blocks.map((block, index) => {
-    if (block.type === "heading") return `    <heading level="${block.level}">${escapeHtml(block.text)}</heading>`;
-    if (block.type === "paragraph") return `    <paragraph>${escapeHtml(block.text)}</paragraph>`;
-    if (block.type === "quote") return `    <quote>${escapeHtml(block.text)}</quote>`;
-    if (block.type === "code") return `    <code language="${escapeHtml(block.language)}"><![CDATA[${block.code}]]></code>`;
+    if (block.type === "heading") return `    <heading level="${block.level}">${escapeHtml(stripMarkdownInlineSyntax(block.text))}</heading>`;
+    if (block.type === "paragraph") return `    <paragraph>${escapeHtml(stripMarkdownInlineSyntax(block.text))}</paragraph>`;
+    if (block.type === "quote") return `    <quote>${escapeHtml(stripMarkdownInlineSyntax(block.text))}</quote>`;
+    if (block.type === "code") return `    <code language="${escapeHtml(block.language)}"><![CDATA[\n${block.code}\n    ]]></code>`;
     if (block.type === "table") {
-      const header = `      <headers>${block.headers.map((cell) => `<cell>${escapeHtml(cell)}</cell>`).join("")}</headers>`;
-      const rows = block.rows.map((row) => `      <row>${row.map((cell) => `<cell>${escapeHtml(cell)}</cell>`).join("")}</row>`).join("\n");
+      const header = [
+        "      <headers>",
+        ...block.headers.map((cell) => `        <cell>${escapeHtml(stripMarkdownInlineSyntax(cell))}</cell>`),
+        "      </headers>",
+      ].join("\n");
+      const rows = block.rows.map((row) => [
+        "      <row>",
+        ...row.map((cell) => `        <cell>${escapeHtml(stripMarkdownInlineSyntax(cell))}</cell>`),
+        "      </row>",
+      ].join("\n")).join("\n");
       return `    <table>\n${header}\n${rows}\n    </table>`;
     }
     if (block.type === "image") return `    <image src="${escapeHtml(block.src)}" alt="${escapeHtml(block.alt)}" />`;

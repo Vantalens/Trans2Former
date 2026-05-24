@@ -317,14 +317,7 @@ export function blockToHtml(block) {
     return `<blockquote>${blockTextToHtml(block)}</blockquote>`;
   }
   if (block.type === "list") {
-    const tag = block.ordered ? "ol" : "ul";
-    return `<${tag}>${block.items.map((item, index) => {
-      const depth = Math.max(0, Number(block.itemMeta?.[index]?.depth) || 0);
-      const inner = Array.isArray(block.itemInlines?.[index]) && block.itemInlines[index].length > 0
-        ? inlinesToHtml(block.itemInlines[index])
-        : inlineMarkdownToHtml(item);
-      return `<li data-depth="${depth}">${inner}</li>`;
-    }).join("")}</${tag}>`;
+    return listBlockToHtml(block);
   }
   if (block.type === "code") {
     const language = block.language ? ` class="language-${escapeHtml(block.language)}"` : "";
@@ -335,9 +328,17 @@ export function blockToHtml(block) {
       const alignment = block.alignments?.[index] || "";
       return alignment ? ` style="text-align:${alignment}"` : "";
     };
-    const head = `<thead><tr>${block.headers.map((cell, index) => `<th${alignAttr(index)}>${escapeHtml(cell)}</th>`).join("")}</tr></thead>`;
-    const body = `<tbody>${block.rows.map((row) => `<tr>${row.map((cell, index) => `<td${alignAttr(index)}>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>`;
-    return `<table>${head}${body}</table>`;
+    const head = [
+      "  <thead>",
+      `    <tr>${block.headers.map((cell, index) => `<th${alignAttr(index)}>${escapeHtml(cell)}</th>`).join("")}</tr>`,
+      "  </thead>",
+    ].join("\n");
+    const body = [
+      "  <tbody>",
+      ...block.rows.map((row) => `    <tr>${row.map((cell, index) => `<td${alignAttr(index)}>${escapeHtml(cell)}</td>`).join("")}</tr>`),
+      "  </tbody>",
+    ].join("\n");
+    return `<table>\n${head}\n${body}\n</table>`;
   }
   if (block.type === "image") {
     return `<img src="${escapeHtml(block.src)}" alt="${escapeHtml(block.alt)}" />`;
@@ -354,6 +355,45 @@ export function blockToHtml(block) {
     return `<pre><code${langClass}>${escapeHtml(block.content)}</code></pre>`;
   }
   return "";
+}
+
+function listBlockToHtml(block) {
+  const items = block.items || [];
+  const meta = block.itemMeta || [];
+  const itemHtml = (index) => Array.isArray(block.itemInlines?.[index]) && block.itemInlines[index].length > 0
+    ? inlinesToHtml(block.itemInlines[index])
+    : inlineMarkdownToHtml(items[index]);
+  const depthAt = (index) => Math.max(0, Number(meta[index]?.depth) || 0);
+  const tagForDepth = (depth) => (block.ordered && depth === 0 ? "ol" : "ul");
+
+  function renderAt(startIndex, depth, indentLevel) {
+    const tag = tagForDepth(depth);
+    const lines = [`${"  ".repeat(indentLevel)}<${tag}>`];
+    let index = startIndex;
+    while (index < items.length) {
+      const itemDepth = depthAt(index);
+      if (itemDepth < depth) break;
+      if (itemDepth > depth) {
+        const nested = renderAt(index, itemDepth, indentLevel + 1);
+        lines.push(...nested.lines);
+        index = nested.nextIndex;
+        continue;
+      }
+
+      let inner = itemHtml(index);
+      index += 1;
+      if (index < items.length && depthAt(index) > depth) {
+        const nested = renderAt(index, depthAt(index), indentLevel + 2);
+        inner = `${inner}\n${nested.lines.join("\n")}\n${"  ".repeat(indentLevel + 1)}`;
+        index = nested.nextIndex;
+      }
+      lines.push(`${"  ".repeat(indentLevel + 1)}<li>${inner}</li>`);
+    }
+    lines.push(`${"  ".repeat(indentLevel)}</${tag}>`);
+    return { lines, nextIndex: index };
+  }
+
+  return renderAt(0, 0, 0).lines.join("\n");
 }
 
 export function modelToBodyHtml(model) {

@@ -33,29 +33,27 @@ function buildHighFidelityPdfBytes(fixedLayout, title) {
     throw new Error("FixedLayoutModel has no pages");
   }
 
-  const fontObjectNumber = 3 + pages.length * 2;
+  const objects = ["", ""];
+  const fontObjectNumber = objects.length + 1;
   const cidFontObjectNumber = fontObjectNumber + 1;
   const fontDescriptorObjectNumber = fontObjectNumber + 2;
-  const infoObjectNumber = fontObjectNumber + 3;
-  const pageObjectNumbers = pages.map((_, index) => 3 + index * 2);
+  const pageObjectNumbers = [];
 
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    `<< /Type /Pages /Kids [${pageObjectNumbers.map((number) => `${number} 0 R`).join(" ")}] /Count ${pages.length} >>`,
-  ];
+  objects.push(
+    `<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [${cidFontObjectNumber} 0 R] >>`
+  );
+  objects.push(
+    `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor ${fontDescriptorObjectNumber} 0 R /DW 1000 >>`
+  );
+  objects.push(
+    "<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [0 -120 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >>"
+  );
 
-  pages.forEach((page, index) => {
-    const pageObjectNumber = 3 + index * 2;
-    const contentObjectNumber = pageObjectNumber + 1;
-
-    // 使用页面原始尺寸
+  pages.forEach((page) => {
     const width = page.size?.width || 612;
     const height = page.size?.height || 792;
 
-    // 构建内容流：按 textRun 的 bbox 精确定位
     const contentLines = ["BT"];
-    let lastX = null;
-    let lastY = null;
 
     for (const run of page.textRuns || []) {
       if (!run.text || !run.bbox) continue;
@@ -64,33 +62,20 @@ function buildHighFidelityPdfBytes(fixedLayout, title) {
       const x = run.bbox.x || 0;
       const y = run.bbox.y || 0;
 
-      // 设置字体和字号
       contentLines.push(`/F1 ${fontSize} Tf`);
-
-      // 定位到 textRun 的坐标
-      if (lastY === null || Math.abs(y - lastY) > 0.1) {
-        // 新行或 y 坐标变化，使用绝对定位
-        contentLines.push(`${x.toFixed(2)} ${y.toFixed(2)} Td`);
-        lastX = x;
-        lastY = y;
-      } else if (lastX !== null && Math.abs(x - lastX) > 0.1) {
-        // 同一行，x 坐标变化，使用相对定位
-        const dx = x - lastX;
-        contentLines.push(`${dx.toFixed(2)} 0 Td`);
-        lastX = x;
-      }
-
-      // 输出文本
+      contentLines.push(`1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm`);
       contentLines.push(`<${utf16BeHex(run.text)}> Tj`);
     }
 
     contentLines.push("ET");
+    const content = contentLines.join("\n");
+    const contentObjectNumber = objects.length + 1;
+    objects.push(`<< /Length ${textToBytes(content).length} >>\nstream\n${content}\nendstream`);
 
-    // 处理 annotations（链接等）
     const annotRefs = [];
-    (page.annotations || []).forEach((annot, annotIndex) => {
+    (page.annotations || []).forEach((annot) => {
       if (annot.type === "link" && annot.bbox && annot.target) {
-        const annotObjectNumber = contentObjectNumber + 1 + annotIndex;
+        const annotObjectNumber = objects.length + 1;
         const rect = [
           annot.bbox.x || 0,
           annot.bbox.y || 0,
@@ -104,30 +89,21 @@ function buildHighFidelityPdfBytes(fixedLayout, title) {
       }
     });
 
-    const content = contentLines.join("\n");
     const annotsField = annotRefs.length > 0 ? ` /Annots [${annotRefs.join(" ")}]` : "";
+    const pageObjectNumber = objects.length + 1;
+    pageObjectNumbers.push(pageObjectNumber);
 
     objects.push(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >> /Contents ${contentObjectNumber} 0 R${annotsField} >>`
     );
-    objects.push(`<< /Length ${textToBytes(content).length} >>\nstream\n${content}\nendstream`);
   });
 
-  // 字体对象（使用 CID 字体支持中文）
-  objects.push(
-    `<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [${cidFontObjectNumber} 0 R] >>`
-  );
-  objects.push(
-    `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor ${fontDescriptorObjectNumber} 0 R /DW 1000 >>`
-  );
-  objects.push(
-    "<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [0 -120 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >>"
-  );
+  objects[0] = "<< /Type /Catalog /Pages 2 0 R >>";
+  objects[1] = `<< /Type /Pages /Kids [${pageObjectNumbers.map((number) => `${number} 0 R`).join(" ")}] /Count ${pages.length} >>`;
 
-  // Info 对象
+  const infoObjectNumber = objects.length + 1;
   objects.push(`<< /Title ${pdfUnicodeString(title)} /Producer (Trans2Former High-Fidelity) >>`);
 
-  // 构建 PDF 文件
   let output = "%PDF-1.4\n";
   const offsets = [0];
   objects.forEach((object, index) => {

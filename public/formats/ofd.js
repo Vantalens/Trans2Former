@@ -31,8 +31,8 @@ export function readOfdL0({ content, title = "document", fileName = "", format =
   const ofdTitle = extractTag(xml, "Title") || title;
   const docRoot = extractTag(xml, "DocRoot");
   const warnings = [
-    createWarning("unsupported", "OFD_L1_PLUGIN_REQUIRED", "OFD L1 page tree, text objects, image objects, and attachments require a local OFD plugin."),
-    createWarning("unsupported", "OFD_RENDER_PLUGIN_REQUIRED", "OFD rendering to PNG/PDF requires a local renderer plugin and visual regression."),
+    createWarning("unsupported", "OFD_L1_CORE_LIMITED", "OFD L1 page tree, text objects, image objects, and attachments are not yet fully implemented in the core reader."),
+    createWarning("unsupported", "OFD_RENDER_CORE_LIMITED", "OFD rendering to PDF requires the core OFD renderer milestone and visual regression coverage."),
   ];
 
   const model = createDocumentModel({
@@ -55,11 +55,10 @@ export function readOfdL0({ content, title = "document", fileName = "", format =
       },
     }, warnings),
   });
-  // P8-M4：OFD L0 阶段先挂空 FixedLayoutModel 占位，让 capability 视图能识别
-  // 模型存在但 pages 为空；L1+ 由本地 OFD 插件填充 textRuns / annotations。
+  // OFD L0 阶段先挂空 FixedLayoutModel 占位，让 capability 视图能识别模型存在但 pages 为空。
   model.fixedLayout = createFixedLayoutModel({
     pages: [],
-    metadata: { level: "L0", awaitsPlugin: true },
+    metadata: { level: "L0", coreIntegrated: true },
   });
   return model;
 }

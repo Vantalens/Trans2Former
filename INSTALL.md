@@ -73,8 +73,8 @@ npm test
 - 桌面架构：[docs/DESKTOP_APP_ARCHITECTURE.md](docs/DESKTOP_APP_ARCHITECTURE.md)
 - 格式路线：[docs/FORMAT_ROADMAP.md](docs/FORMAT_ROADMAP.md)
 - 基础格式质量：[docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)
-- 插件安全模型：[docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md)
-- 插件分发规则：[docs/PLUGIN_DISTRIBUTION.md](docs/PLUGIN_DISTRIBUTION.md)
+- 安全策略：[docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md)
+- 资源预算：[docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md)
 - 开发规范：[docs/development-standards/00_README.md](docs/development-standards/00_README.md)
 - 成本与资源治理：[docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md](docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md)
 - 发布准备：[docs/RELEASE_PREP.md](docs/RELEASE_PREP.md)
@@ -89,17 +89,17 @@ npm run release:prepare
 
 ```text
 release/trans2former-2.0.0/
-release/trans2former-2.0.0/plugin-patches/
+release/trans2former-2.0.0/RELEASE_MANIFEST.json
 ```
 
-`release/` 默认不提交 GitHub，用于后续创建 GitHub release 前检查发布素材。格式增强能力以 `.t2f-plugin.json` 插件补丁包放在 `plugin-patches/`，用户按需下载后通过“导入本地插件包”安装。
+`release/` 默认不提交 GitHub，用于后续创建 GitHub release 前检查发布素材。格式增强能力进入核心本地模块，不再生成插件补丁包，也不需要用户导入插件。
 
 ## 当前限制
 
 1. PDF 当前支持程序化二进制输出，不再依赖浏览器打印作为主要路径。
-2. DOCX、XLSX、EPUB、PDF text extraction、PPTX input 已完成 P3；DOCX/PDF output 已完成 P4/P6 基线；OFD 和本地 OCR 增强以 release 插件补丁包形式按需安装。
+2. DOCX、XLSX、EPUB、PDF text extraction、PPTX input 已完成 P3；DOCX/PDF output 已完成 P4/P6 基线；OFD 和本地 OCR 增强进入核心本地路线。
 3. 不需要安装 Office、LibreOffice、Pandoc、Playwright 或桌面壳程序。
-4. 不提供远程 OCR、远程转写、远程 AI 增强或云端文档处理；本地模型和 OFD 高保真渲染只能作为可删除、可禁用、可回滚的本地插件。
+4. 不提供远程 OCR、远程转写、远程 AI 增强或云端文档处理；本地模型和 OFD 高保真渲染必须保持本地、可删除、可禁用、可回滚。
 
 ## 升级
 

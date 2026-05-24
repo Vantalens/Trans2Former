@@ -42,13 +42,9 @@ export function normalizeFormat(value) {
 // 单向转换。getReachableModels 从 reader 出发 BFS 走 mapper 到所有可达模型，
 // canReachWriter 判断 writer 是否能消费其中一个。详见 docs/CONVERSION_ROUTING.md。
 //
-// External Engine Bridge：装了 engine-bridge 插件且本地有对应二进制时，注册的
-// bridge 在 from→to 之间加一条 "hot"（与同模型并列）的直达线，绕过中间 mapper
-// 链；bridge 失败时 Planner 会回落到核心 mapper 路径。
 export class RoutePlanner {
   constructor() {
     this.mappers = []; // { from, to, lossLevel, forcedWarnings }
-    this.bridges = []; // { from, to, engine, lossLevel, source }
   }
 
   registerMapper({ from, to, lossLevel = "low", forcedWarnings = [] }) {
@@ -59,29 +55,6 @@ export class RoutePlanner {
       lossLevel: String(lossLevel),
       forcedWarnings: forcedWarnings.map((w) => String(w)),
     });
-  }
-
-  registerBridge({ from, to, engine = "", lossLevel = "low", source = "plugin" }) {
-    if (!from || !to) return;
-    this.bridges.push({
-      from: String(from),
-      to: String(to),
-      engine: String(engine || ""),
-      lossLevel: String(lossLevel),
-      source: String(source || "plugin"),
-    });
-  }
-
-  unregisterBridgesFromSource(source) {
-    this.bridges = this.bridges.filter((bridge) => bridge.source !== source);
-  }
-
-  findBridge(fromFormat, toFormat) {
-    return this.bridges.find((bridge) => bridge.from === fromFormat && bridge.to === toFormat) || null;
-  }
-
-  listBridges() {
-    return [...this.bridges];
   }
 
   getReachableModels(seedModels) {
@@ -187,24 +160,9 @@ export class ConverterRegistry {
     this.planner.registerMapper(mapper);
   }
 
-  registerBridge(bridge) {
-    this.planner.registerBridge(bridge);
-  }
-
-  unregisterBridgesFromSource(source) {
-    this.planner.unregisterBridgesFromSource(source);
-  }
-
-  listBridges() {
-    return this.planner.listBridges();
-  }
-
   getRouteTemperature(from, to) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
-    if (this.planner.findBridge(fromFormat, toFormat)) {
-      return "hot";
-    }
     const fromModels = this.inputModelsByFormat.get(fromFormat);
     const toModels = this.acceptModelsByFormat.get(toFormat);
     if (!fromModels || !toModels) return null;

@@ -3,6 +3,7 @@ import { ConversionError } from "../core/conversion-error.js";
 import { createCodeBlock, createDocumentModel, createHeading } from "../core/document-model.js";
 import { getPlainText } from "../core/document-model.js";
 import { writeMarkdown } from "./markdown.js";
+import { stripMarkdownInlineSyntax } from "./text-utils.js";
 
 export function readJson({ content, title = "document", format = "json" }) {
   let parsed;
@@ -54,7 +55,7 @@ export function writeJson({ model, title = model.title }) {
       blocks: model.blocks,
       assets: model.assets,
       metadata: model.metadata,
-      plainText: getPlainText(model),
+      plainText: stripMarkdownInlineSyntax(getPlainText(model)),
       markdown,
     }, null, 2)}\n`,
     mime: "application/json;charset=utf-8",
