@@ -21,6 +21,7 @@ const FORBIDDEN_PUBLIC_PATTERNS = [
 const ALLOWED_PUBLIC_FILES = new Set([
   path.normalize("public/smoke-test.html"),
   path.normalize("public/smoke-test.js"),
+  path.normalize("public/security-center.js"),
 ]);
 
 function isLocalVendorPdfJs(normalizedPath, content) {
