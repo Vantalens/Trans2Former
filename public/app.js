@@ -57,7 +57,6 @@ const outputMeta = document.getElementById("outputMeta");
 const markdownProfileSelect = document.getElementById("markdownProfileSelect");
 const persistHistoryCheckbox = document.getElementById("persistHistoryCheckbox");
 const clearHistoryButton = document.getElementById("clearHistoryButton");
-const autoPreviewCheckbox = document.getElementById("autoPreviewCheckbox");
 const refreshPreviewButton = document.getElementById("refreshPreviewButton");
 const largePreviewModeSelect = document.getElementById("largePreviewModeSelect");
 const transformButton = document.getElementById("transformButton");
@@ -115,7 +114,7 @@ let currentPrintHtml = "";
 let previewTimer = null;
 let previewIdleHandle = null;
 let lastRenderedPayload = "";
-let autoPreviewEnabled = false;
+let autoPreviewEnabled = true;
 let lastOutputIsPdf = false;
 let convertWorker = null;
 let convertJobSeq = 0;
@@ -1400,8 +1399,7 @@ inputContent.addEventListener("input", () => {
   fitInputEditorHeight();
   if (autoPreviewEnabled && inputContent.value.length > LARGE_DOC_THRESHOLD) {
     autoPreviewEnabled = false;
-    autoPreviewCheckbox.checked = false;
-    setStatus("文档较大，已自动切换为手动预览模式", "info");
+    setStatus("文档较大，已暂停自动预览，请点击“刷新预览”查看", "info");
   }
 });
 
@@ -1459,18 +1457,6 @@ largePreviewModeSelect?.addEventListener("change", () => {
   renderPreviewWhenIdle();
 });
 
-autoPreviewCheckbox.addEventListener("change", () => {
-  autoPreviewEnabled = autoPreviewCheckbox.checked;
-  if (autoPreviewEnabled) {
-    setStatus("已开启自动预览", "success");
-    schedulePreviewUpdate();
-  } else {
-    window.clearTimeout(previewTimer);
-    cancelIdleTask(previewIdleHandle);
-    setStatus("已切换为手动预览模式", "info");
-  }
-});
-
 fromFormatSelect.addEventListener("change", () => {
   syncInputEditorMode();
   syncFormatOptions();
@@ -1516,8 +1502,6 @@ outputDirectoryButton.addEventListener("click", () => {
   chooseOutputDirectory().catch((error) => setStatus(error.message, "error"));
 });
 securityCenterButton.addEventListener("click", () => {
-  openDrawerOnTab("drawerQualityGroup");
-  document.getElementById("warningsPanel")?.scrollIntoView({ block: "nearest" });
   setStatus("local-only · 所有内置转换在浏览器本地执行，不上传用户文档", "success");
 });
 document.getElementById("bottomReportPanel")?.addEventListener("click", (event) => {
@@ -1646,7 +1630,6 @@ if (markdownProfileSelect) {
   markdownProfileSelect.value = markdownOutputProfile;
 }
 bootstrapInitialSample();
-autoPreviewCheckbox.checked = false;
 syncMarkdownProfileControl();
 syncPdfPaperControl();
 openPdfPreviewButton.disabled = true;

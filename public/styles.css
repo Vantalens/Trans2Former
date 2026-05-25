@@ -74,7 +74,8 @@ details:not([open]) > :not(summary) {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
   min-height: 100vh;
   background: linear-gradient(180deg, #ffffff 0%, var(--bg) 42%);
 }
@@ -385,8 +386,9 @@ button:disabled {
 .workspace {
   display: grid;
   grid-template-columns: minmax(360px, 0.86fr) minmax(560px, 1.2fr);
-  align-content: start;
-  align-items: start;
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+  align-items: stretch;
   gap: 16px;
   min-height: 0;
   padding: 16px 20px 12px;
@@ -405,10 +407,10 @@ button:disabled {
 }
 
 .source-pane {
-  align-self: start;
-  display: grid;
-  grid-template-rows: auto auto auto auto;
-  max-height: calc(100vh - 116px);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -606,11 +608,10 @@ button:disabled {
 }
 
 #inputContent {
+  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
   min-height: 144px;
-  max-height: min(46vh, 420px);
-  height: 220px;
   resize: none;
   border: 0;
   padding: 18px;
@@ -624,7 +625,6 @@ button:disabled {
 
 #inputContent.is-binary-input {
   min-height: 118px;
-  max-height: min(34vh, 280px);
   border-bottom: 1px solid var(--border);
   background: #fbfdfd;
   font-family: var(--sans);
@@ -634,7 +634,8 @@ button:disabled {
 .result-pane {
   align-self: stretch;
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -771,9 +772,11 @@ button:disabled {
 
 .viewer-grid {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   min-height: 0;
   padding: 12px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .viewer-grid.single-view {
@@ -782,7 +785,8 @@ button:disabled {
 
 .viewer-card {
   display: none;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
   overflow: hidden;
   border-color: var(--border);
 }
@@ -804,8 +808,7 @@ button:disabled {
 
 .preview-frame {
   min-width: 0;
-  min-height: 180px;
-  max-height: min(52vh, 520px);
+  min-height: 0;
   overflow: auto;
   border: 0;
   background: #ffffff;
@@ -1287,15 +1290,20 @@ button:disabled {
 
   .workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-auto-rows: auto;
+    align-items: start;
     overflow: visible;
   }
 
   .source-pane {
+    align-self: start;
     min-height: 0;
     max-height: none;
   }
 
   .result-pane {
+    align-self: start;
     min-height: 0;
   }
 
@@ -1375,4 +1383,196 @@ button:disabled {
   .error-details-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.security-dialog {
+  width: min(720px, 92vw);
+  max-height: 88vh;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.security-dialog::backdrop {
+  background: rgba(23, 27, 33, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.security-dialog-form {
+  display: grid;
+  gap: 14px;
+  padding: 20px 22px;
+  max-height: 88vh;
+  overflow: auto;
+}
+
+.security-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.security-dialog-header h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.security-dialog-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.security-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.security-card h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--muted-strong);
+}
+
+.security-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.security-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.security-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.security-label {
+  font-size: 0.78rem;
+  color: var(--muted-strong);
+  font-weight: 700;
+}
+
+.security-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.security-pill[data-state="online"] {
+  background: #e8f5f2;
+  border-color: #b8ddd5;
+  color: var(--accent-strong);
+}
+
+.security-pill[data-state="offline"],
+.security-pill[data-mode="block"] {
+  background: #fbecef;
+  border-color: #f0c5cc;
+  color: var(--danger);
+}
+
+.security-pill[data-mode="audit"] {
+  background: #fff5e6;
+  border-color: #ebd0a2;
+  color: var(--accent-warm);
+}
+
+.security-counter {
+  display: inline-flex;
+  align-items: center;
+  min-width: 28px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.security-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.security-list[data-empty="true"] {
+  display: block;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-style: italic;
+  text-align: center;
+}
+
+.security-list li {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
+.security-list li.is-blocked {
+  background: #fbecef;
+  border-color: #f0c5cc;
+  color: var(--danger);
+}
+
+.security-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.security-dialog code {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+#securityInterceptMode {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.82rem;
 }

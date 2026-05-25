@@ -57,21 +57,18 @@ try {
   assert.equal(indexHtml.includes("id=\"documentModelPanel\""), true, "P0 workbench should expose DocumentModel pane");
   assert.equal(indexHtml.includes("id=\"outputPreviewPanel\""), true, "P0 workbench should expose output preview pane");
   assert.equal(indexHtml.includes("id=\"workbenchTabs\""), true, "P0 workbench should expose narrow-screen tabs");
-  assert.equal(indexHtml.includes("id=\"bottomReportPanel\""), true, "P0 workbench should expose bottom report panel");
-  assert.equal(indexHtml.includes("id=\"warningsPanel\""), true, "P0 workbench should expose warnings panel");
-  assert.equal(indexHtml.includes("id=\"qualityReportPanel\""), true, "P0 workbench should expose quality report panel");
-  assert.equal(indexHtml.includes("id=\"diffPanel\""), true, "P0 workbench should expose diff panel");
-  assert.equal(indexHtml.includes("id=\"versionsPanel\""), true, "P0 workbench should expose versions panel");
+  assert.equal(indexHtml.includes("id=\"bottomReportPanel\""), false, "bottom report panel has been removed from the primary workflow");
+  assert.equal(indexHtml.includes("id=\"warningsPanel\""), false, "warnings panel has been removed with the bottom drawer");
+  assert.equal(indexHtml.includes("id=\"qualityReportPanel\""), false, "quality report panel has been removed with the bottom drawer");
+  assert.equal(indexHtml.includes("id=\"diffPanel\""), false, "diff panel has been removed with the bottom drawer");
+  assert.equal(indexHtml.includes("id=\"versionsPanel\""), false, "versions panel has been removed with the bottom drawer");
   assert.equal(indexHtml.includes("id=\"pluginManagerButton\""), false, "workbench should not expose plugin manager entry after core integration");
   assert.equal(indexHtml.includes("id=\"securityCenterButton\""), true, "P0 workbench should expose security center entry");
   assert.equal(indexHtml.includes("id=\"pluginDownloadPanel\""), false, "workbench should not expose plugin download entry");
   assert.equal(indexHtml.includes("id=\"importPluginInput\""), false, "workbench should not expose local plugin import");
-  assert.equal(indexHtml.includes("class=\"bottom-drawer\""), true, "workbench should host quality and version reports in a collapsible bottom drawer");
+  assert.equal(indexHtml.includes("class=\"bottom-drawer\""), false, "the bottom drawer has been removed from the primary workflow");
   assert.equal(indexHtml.includes("<details id=\"fileQueuePanel\""), true, "modern workbench should keep file queue collapsed by default");
   assert.equal(indexHtml.includes("<details id=\"fileQueuePanel\" class=\"queue-panel\" aria-label=\"文件队列\" hidden>"), true, "primary UI should hide batch queue from the default user path");
-  assert.equal(indexHtml.includes("<details id=\"bottomReportPanel\""), true, "modern workbench should expose reports via the bottom drawer");
-  assert.equal(indexHtml.includes("<details id=\"bottomReportPanel\" class=\"bottom-drawer\""), true, "bottom drawer is the host for quality and version reports");
-  assert.equal(/<details id="bottomReportPanel"[^>]*\sopen[\s>]/.test(indexHtml), false, "drawer should be collapsed by default to keep the primary flow uncluttered");
   assert.equal(indexHtml.includes("workspace-primary"), true, "modern workbench should expose a focused primary workflow");
   assert.equal(indexHtml.includes("class=\"auxiliary-actions\""), true, "modern workbench should group secondary actions away from the primary command path");
   assert.equal(indexHtml.includes("class=\"auxiliary-actions\" hidden"), false, "secondary actions should be reachable from the default workbench");
@@ -148,18 +145,26 @@ try {
   assert.equal(pdfFormatJs.includes("PDFJS_TEXT_START"), true, "PDF.js extraction should feed structured text into the existing conversion pipeline");
   assert.equal(pdfJsVendor.includes("getDocument"), true, "vendored PDF.js runtime should be served locally");
   assert.equal(stylesCss.includes(".source-pane.is-binary-input"), true, "binary input mode should have an explicit layout rule");
-  assert.equal(stylesCss.includes("grid-template-rows: auto minmax(0, 1fr) auto;"), false, "app shell should not force the workspace row to occupy the whole viewport");
   assert.equal(/(^|\n)\s{2}height:\s*100vh;/.test(stylesCss), false, "app shell should not lock the workbench to a viewport-height canvas");
-  assert.equal(stylesCss.includes("align-content: start;"), true, "workspace grid content should stay pinned to the top instead of stretching empty rows");
+  assert.equal(stylesCss.includes("align-items: stretch;"), true, "workspace grid should stretch the source and result panes to fill the available height");
   assert.equal(stylesCss.includes("min-height: 620px;"), false, "result pane should not reserve a large empty preview area on short documents");
-  assert.equal(stylesCss.includes("grid-template-rows: auto auto auto;"), true, "short document panels should use content-sized rows instead of a forced 1fr canvas");
-  assert.equal(stylesCss.includes(".source-pane {\n  align-self: start;"), true, "source pane should size to its editor content instead of stretching to the full workspace height");
-  assert.equal(stylesCss.includes("grid-template-rows: auto auto auto minmax(0, 1fr);"), false, "source pane must not stretch the input editor as a 1fr row");
+  assert.equal(stylesCss.includes(".source-pane {\n  align-self: stretch;"), true, "source pane should stretch to fill the workspace row after removing the bottom drawer");
   assert.equal(stylesCss.includes(".pdf-frame {\n  display: none;\n  width: 100%;\n  height: 100%;"), true, "PDF result preview should fill the result panel instead of using the iframe default size");
   assert.equal(appJs.includes("docx"), true, "main app should accept DOCX input");
   for (const format of ["doc", "xlsx", "epub", "pdf", "pptx"]) {
     assert.equal(appJs.includes(format), true, `main app should accept ${format.toUpperCase()} input`);
   }
+
+  assert.equal(indexHtml.includes("id=\"securityCenterDialog\""), true, "security center dialog should be wired into the workbench");
+  assert.equal(indexHtml.includes("data-sec-mode"), true, "security center should expose a runtime intercept mode control");
+  assert.equal(indexHtml.includes("data-sec-external"), true, "security center should expose an external-request list anchor");
+  assert.equal(indexHtml.includes("/security-center.js"), true, "security center module should be loaded before app.js");
+
+  const securityCenterJs = await fetchText(baseUrl, "/security-center.js");
+  assert.equal(securityCenterJs.includes("getEntriesByType"), true, "security center should sample the resource timing buffer");
+  assert.equal(securityCenterJs.includes("interceptMode"), true, "security center should manage a runtime intercept mode");
+  assert.equal(securityCenterJs.includes("patchedFetch"), true, "security center should observe fetch traffic for off-origin requests");
+  assert.equal(securityCenterJs.includes("patchedSend"), true, "security center should observe XHR traffic for off-origin requests");
 
   const workerJs = await fetchText(baseUrl, "/workers/convert-worker.js");
   assert.equal(workerJs.includes("postMessage"), true, "conversion worker should be served");

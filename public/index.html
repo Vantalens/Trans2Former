@@ -142,10 +142,6 @@
                   </div>
                 </div>
               </details>
-              <label class="toggle-label" for="autoPreviewCheckbox">
-                <input id="autoPreviewCheckbox" type="checkbox" />
-                自动预览
-              </label>
               <button id="refreshPreviewButton" class="ghost-button" type="button" title="刷新预览内容">刷新预览</button>
               <label class="compact-field large-preview-field" hidden>
                 <span>大文件预览</span>
@@ -223,51 +219,66 @@
           </div>
         </section>
       </main>
-
-      <details id="bottomReportPanel" class="bottom-drawer" aria-label="质量与版本抽屉">
-        <summary class="bottom-drawer-summary">
-          <span class="bottom-drawer-title">质量与版本</span>
-          <small class="bottom-drawer-hint">Warnings · Quality · Diff · Versions</small>
-          <span class="bottom-drawer-toggle" aria-hidden="true"></span>
-        </summary>
-        <div class="bottom-drawer-body">
-          <nav class="drawer-tabs" aria-label="抽屉视图">
-            <button class="drawer-tab is-active" type="button" data-drawer-tab="drawerQualityGroup">质量</button>
-            <button class="drawer-tab" type="button" data-drawer-tab="drawerVersionsGroup">版本</button>
-          </nav>
-
-          <div id="drawerQualityGroup" class="drawer-group is-active">
-            <article id="warningsPanel" class="report-card">
-              <div class="report-card-header">
-                <h2>Warnings</h2>
-                <div class="report-card-actions">
-                  <button id="resolveWarningsButton" class="mini-button" type="button">标记已处理</button>
-                  <button id="clearResolvedWarningsButton" class="mini-button" type="button">清除标记</button>
-                </div>
-              </div>
-              <div id="warningsList" class="report-list">无</div>
-            </article>
-            <article id="qualityReportPanel" class="report-card">
-              <h2>Quality Report</h2>
-              <div id="qualityReportList" class="report-list">等待转换</div>
-            </article>
-          </div>
-
-          <div id="drawerVersionsGroup" class="drawer-group">
-            <article id="diffPanel" class="report-card">
-              <h2>Diff</h2>
-              <div id="diffSummary" class="report-list">尚无版本差异</div>
-            </article>
-            <article id="versionsPanel" class="report-card">
-              <h2>Versions</h2>
-              <div id="versionsList" class="report-list">v0 等待初始转换</div>
-            </article>
-          </div>
-
-        </div>
-      </details>
     </div>
 
+    <dialog id="securityCenterDialog" class="security-dialog" aria-labelledby="securityCenterTitle">
+      <form method="dialog" class="security-dialog-form">
+        <header class="security-dialog-header">
+          <div>
+            <h2 id="securityCenterTitle">安全中心</h2>
+            <p class="security-dialog-subtitle">浏览器端联网情况确认 · local-only 工作模式</p>
+          </div>
+          <button class="mini-button" type="button" data-sec-close title="关闭">关闭</button>
+        </header>
+
+        <section class="security-card">
+          <h3>实时联网状态</h3>
+          <div class="security-row">
+            <span class="security-label">浏览器在线</span>
+            <span class="security-pill" data-sec-online data-state="online">在线</span>
+          </div>
+          <div class="security-row">
+            <span class="security-label">应用模式</span>
+            <span class="security-pill" data-mode-static="local">local-only · 内置转换全部在浏览器执行</span>
+          </div>
+        </section>
+
+        <section class="security-card">
+          <h3>运行时网络拦截</h3>
+          <p class="security-hint">监控运行时 <code>fetch</code> 与 <code>XMLHttpRequest</code>，对非同源请求执行所选策略。</p>
+          <div class="security-row">
+            <label class="security-label" for="securityInterceptMode">策略</label>
+            <select id="securityInterceptMode" data-sec-mode>
+              <option value="off">关闭（默认）</option>
+              <option value="audit">审计 · 仅记录不阻断</option>
+              <option value="block">拦截 · 阻断所有外部请求</option>
+            </select>
+            <span class="security-pill" data-sec-mode-badge data-mode="off">未启用</span>
+          </div>
+        </section>
+
+        <section class="security-card">
+          <div class="security-card-header">
+            <h3>外部域名请求</h3>
+            <span class="security-counter" data-sec-external-count>0</span>
+          </div>
+          <ul class="security-list" data-sec-external data-empty="true">未观察到任何外部域名请求 · local-only 验证通过</ul>
+        </section>
+
+        <section class="security-card">
+          <h3>同源资源汇总</h3>
+          <p class="security-hint">页面已加载的本地资源按类型汇总（来自 Performance API）。</p>
+          <ul class="security-list" data-sec-same-origin data-empty="true">暂无加载记录</ul>
+        </section>
+
+        <footer class="security-dialog-footer">
+          <button class="ghost-button" type="button" data-sec-refresh>刷新</button>
+          <button class="primary-button" type="button" data-sec-close>完成</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script type="module" src="/security-center.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>
