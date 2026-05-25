@@ -19,6 +19,12 @@
 
 - 重构测试用例组织结构，移除已废弃的 plugin patch 功能。
 
+### 修复
+
+- 修复 `package-lock.json` 中 `depd` / `encodeurl` / `ms` 三个依赖被误改为 `2.1.0`（实际 tarball 仍为 `2.0.0`），避免 `npm ci` 校验失败。
+- `security-center.js` XHR 拦截在 `block` 模式下补发 `error` / `loadend` 事件，兼容仅监听 `xhr.onerror` 的调用方；同时移除未读取的 `sameOriginRequests` 数组。
+- 安全中心 dialog 文案补充覆盖范围说明（仅覆盖 XHR/fetch，其他外发途径以「同源资源汇总」为准）。
+
 ## [2.0.0] - 2026-05-12
 
 ### 新增 (2026-05-12)

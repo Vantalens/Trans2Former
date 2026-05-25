@@ -245,7 +245,7 @@
 
         <section class="security-card">
           <h3>运行时网络拦截</h3>
-          <p class="security-hint">监控运行时网络请求 API（含 XHR 与 fetch 通道），对非同源请求执行所选策略。</p>
+          <p class="security-hint">监控运行时网络请求 API（含 XHR 与 fetch 通道），对非同源请求执行所选策略。本拦截仅覆盖前述两类通道；其他外发途径（信标 API、实时通信、Worker 内请求、&lt;img&gt;/&lt;iframe&gt; 等资源加载）请以下方「同源资源汇总」为准。</p>
           <div class="security-row">
             <label class="security-label" for="securityInterceptMode">策略</label>
             <select id="securityInterceptMode" data-sec-mode>

@@ -1,6 +1,5 @@
 const ORIGIN = location.origin;
 const externalRequests = [];
-const sameOriginRequests = [];
 let interceptMode = "off";
 const listeners = new Set();
 
@@ -30,10 +29,8 @@ function recordRequest(url, type) {
   };
   if (external) {
     externalRequests.push(entry);
-  } else {
-    sameOriginRequests.push(entry);
+    notify();
   }
-  notify();
   return entry;
 }
 
@@ -61,7 +58,14 @@ if (typeof window.XMLHttpRequest === "function") {
     const url = this.__t2fSecurityUrl || "";
     const entry = recordRequest(url, "xhr");
     if (entry.blocked) {
-      throw new Error(`Trans2Former 安全中心已拦截外部请求: ${url}`);
+      const message = `Trans2Former 安全中心已拦截外部请求: ${url}`;
+      queueMicrotask(() => {
+        try {
+          this.dispatchEvent(new Event("error"));
+          this.dispatchEvent(new Event("loadend"));
+        } catch {}
+      });
+      throw new Error(message);
     }
     return originalSend.call(this, body);
   };
