@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-05-26
+
 ### 修复
 
 - **DOCX 读取丢失分级**：`word/styles.xml` 中样式名为 `heading 1` / `标题 1` 等中文/别名样式无法识别，导致全文落到同级 paragraph。新增 `parseHeadingStyleMap` 解析 styleId→level 映射，按 styleId / name 多路兜底识别。

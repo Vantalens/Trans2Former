@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 
 const appJs = await readFile("public/app.js", "utf8");
 const workerJs = await readFile("public/workers/convert-worker.js", "utf8");
-const tasks = await readFile("DEVELOPMENT_TASKS.md", "utf8");
+// 任务清单已分为活跃看板（DEVELOPMENT_TASKS.md）和历史归档
+// （docs/archive/DEVELOPMENT_HISTORY.md），断言的 P2 子任务行在归档中保留原文。
+const tasksMain = await readFile("DEVELOPMENT_TASKS.md", "utf8");
+const tasksArchive = await readFile("docs/archive/DEVELOPMENT_HISTORY.md", "utf8");
+const tasks = `${tasksMain}\n${tasksArchive}`;
 
 assert.equal(appJs.includes("WORKER_TRANSFERABLE_THRESHOLD_BYTES"), true, "Worker Transferable threshold must be explicit");
 assert.equal(appJs.includes("new TextEncoder().encode(payload.content)"), true, "large text payloads should be encoded into ArrayBuffer before posting");

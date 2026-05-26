@@ -85,11 +85,11 @@
 - [x] active Worker、旧 Blob URL 和旧输出在取消后清理。
 - [x] 动态分块合并设计和 direct vs chunked equivalence 基线。
 - [x] Worker Transferable：大块 ArrayBuffer 传递避免复制。
-- [x] 虚拟滚动：输入、输出、warnings、质量报告。
+- [x] 虚拟滚动：输入、输出、warnings 和质量报告列表必须适配大文档。
 - [x] 渐进预览：50MB+ 文件先展示结构摘要和前 N 个块。
-- [x] 大文件降级预览：100MB+ 文件可切换抽样/结构/全文。
-- [x] Blob URL / Worker / ObjectURL 生命周期专项测试。
-- [x] 性能 smoke test：冷启动、首个反馈、10MB 文本、50MB+ 渐进预览。
+- [x] 大文件降级预览：100MB+ 文件可切换抽样、结构和全文模式。
+- [x] Blob URL / Worker / ObjectURL 生命周期加入专项测试。
+- [x] 建立性能 smoke test：冷启动、首个反馈、10MB 文本、50MB+ 渐进预览。
 
 ### P3：插件隔离与资源治理（已取消，2026-05-24）
 
@@ -127,6 +127,29 @@
 - [x] PDF 高保真增强：分页、字体基线、链接 annotation、表格文本、多页布局。
 - [x] 本地 OCR/版面分析/表格恢复 capability/fallback 入口登记。
 - [x] OFD L0-L4：容器/manifest/metadata → 页面树/文本/图片/附件 → 本地渲染 → 高保真 → 公开回归。
+
+### P7：桌面发布与产品化
+
+状态：核心完成，发布卫生和平台安装包仍在收尾。
+
+目标：把当前 Web-GUI preview release 逐步升级为可分发、可安装、可更新的成熟桌面产品。
+
+- [x] 明确当前 `release/trans2former-2.0.0/` 是 Web-GUI preview 包，不是 Tauri 安装包：见 `docs/DESKTOP_RELEASE_PLAN.md`。
+- [x] 建立 Tauri build/release plan：Windows MSI/NSIS、macOS app/dmg、Linux AppImage/deb。
+- [x] 建立签名、公证、校验和 release artifact 命名规则。
+- [x] 建立平台 smoke test：Windows WebView2、macOS WKWebView、Linux WebKitGTK。
+- [x] 建立桌面文件关联、最近文件、项目保存和导出目录权限策略。
+- [x] 建立自动更新策略，但不得与文档处理阶段并发访问网络。
+- [x] 发布文档区分 Web preview、desktop dev build、desktop installer、plugin release。
+- [x] 新增 release 插件补丁包机制：格式增强能力以 `.t2f-plugin.json` 放入 `plugin-patches/`，用户按需下载导入。
+- [x] `npm test` 增加 `plugin-patch-release-test` 和 `p7-release-productization-test`。
+- [x] 清理 release 文档 trailing whitespace，保证 `git diff --check v2.0.0..HEAD` 通过。
+- [x] 移除已跟踪的 `.claude/settings.local.json`，并在 `.gitignore` 中明确忽略本地 Claude/Codex 权限配置。
+- [x] 修正 `RELEASE_GUIDE.md`：区分仓库路径 `public/plugin-patches/`、生成包内路径 `plugin-patches/` 和 GitHub Release asset 上传路径；补 Windows PowerShell 可执行的压缩与 SHA-256 命令。
+- [x] 收敛发布说明中的质量断言：把"100% 测试覆盖率 / 代码质量 5/5 / 生产就绪"改为可核验的命令结果、测试组数量和已知限制。
+- [x] 扩展 `scripts/release-readiness-test.js`，覆盖本地配置不得入库、release 指南 asset 路径存在、checksum 文件生成说明和 `git diff --check` 卫生门槛。
+
+平台安装包真实产出、签名/公证和跨平台 smoke 仍需在对应 Windows/macOS/Linux 构建环境中完成；当前任务看板继续跟踪这部分。
 
 ### P8：多模型架构与转换路由
 

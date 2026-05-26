@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const tasks = await readFile("DEVELOPMENT_TASKS.md", "utf8");
+// 任务清单已分为活跃看板（DEVELOPMENT_TASKS.md）和历史归档
+// （docs/archive/DEVELOPMENT_HISTORY.md），P7 详细状态行和子任务保留在归档中。
+const tasksMain = await readFile("DEVELOPMENT_TASKS.md", "utf8");
+const tasksArchive = await readFile("docs/archive/DEVELOPMENT_HISTORY.md", "utf8");
+const tasks = `${tasksMain}\n${tasksArchive}`;
 const releasePlan = await readFile("docs/DESKTOP_RELEASE_PLAN.md", "utf8");
 const releasePrep = await readFile("docs/RELEASE_PREP.md", "utf8");
 const prepareRelease = await readFile("scripts/prepare-release.js", "utf8");
