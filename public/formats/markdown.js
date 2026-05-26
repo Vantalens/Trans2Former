@@ -9,35 +9,19 @@ import {
   createTable,
 } from "../core/document-model.js";
 import { inlinesToHtml, inlinesToMarkdown } from "../core/models/semantic-inlines.js";
+import { getInlineTokens } from "./inline-tokens.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
 import { escapeHtml, normalizeNewlines } from "./text-utils.js";
 
+// 所有 writer 共用统一 inline 流水线：优先消费 reader 已存的 block.inlines，
+// 否则用 getInlineTokens 从 block.text 解析 markdown 内联（识别 ~~del~~、粗斜体、
+// 带 title 的 link 等），再转成目标格式。
 function blockTextToMarkdown(block) {
-  if (Array.isArray(block?.inlines) && block.inlines.length > 0) {
-    return inlinesToMarkdown(block.inlines);
-  }
-  return markdownInlineFromText(block?.text ?? "");
+  return inlinesToMarkdown(getInlineTokens(block));
 }
 
 function blockTextToHtml(block) {
-  if (Array.isArray(block?.inlines) && block.inlines.length > 0) {
-    return inlinesToHtml(block.inlines);
-  }
-  return inlineMarkdownToHtml(block?.text ?? "");
-}
-
-function inlineMarkdownToHtml(text) {
-  return escapeHtml(text)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/\[\^([^\]]+)\]/g, '<sup id="fnref-$1"><a href="#fn-$1">[$1]</a></sup>')
-    .replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" />')
-    .replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
-}
-
-function markdownInlineFromText(text) {
-  return String(text ?? "");
+  return inlinesToHtml(getInlineTokens(block));
 }
 
 function splitTableRow(line) {
@@ -191,11 +175,28 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
       continue;
     }
 
-    const quote = line.match(/^>\s+(.+)$/);
-    if (quote) {
+    // 引用块识别：连续的以 `>` 开头的行（含纯 `>` 的段落分隔行、`>>` 的嵌套行）
+    // 合并到同一个 quote 块；段落分隔用空字符串保留，行间空格连接。
+    if (/^>\s*/.test(line)) {
       flushParagraph();
       flushList();
-      blocks.push(createQuote(quote[1]));
+      const quoteLines = [];
+      while (lineIndex < lines.length) {
+        const candidate = lines[lineIndex];
+        if (!/^>\s*/.test(candidate)) break;
+        const stripped = candidate.replace(/^>\s?/, "");
+        // 段落分隔行（`>` 后空白）→ 用一个空字符串表示段落边界
+        if (stripped.trim() === "") {
+          quoteLines.push("");
+        } else {
+          quoteLines.push(stripped);
+        }
+        lineIndex += 1;
+      }
+      lineIndex -= 1;
+      // 把分段后的多段连成单个 quote.text（段落间用空格分隔，保证不丢内容）
+      const merged = quoteLines.filter((l) => l !== "").join(" ");
+      if (merged) blocks.push(createQuote(merged));
       continue;
     }
 
@@ -232,14 +233,21 @@ export function writeMarkdown({ model, options = {} }) {
         return `> ${blockTextToMarkdown(block)}`;
       }
       if (block.type === "list") {
+        // 有序列表编号只对 depth=0 的项递增，子项用 "-"，避免跨嵌套子项跳号
+        // （例如 1. → 2. → [嵌套子项] → 5. 应该是 3.）
+        let orderedCounter = 0;
         return block.items.map((item, index) => {
           const depth = Math.max(0, Number(block.itemMeta?.[index]?.depth) || 0);
           const indent = "  ".repeat(depth);
-          const marker = block.ordered && depth === 0 ? `${index + 1}.` : "-";
-          if (Array.isArray(block.itemInlines?.[index]) && block.itemInlines[index].length > 0) {
-            return `${indent}${marker} ${inlinesToMarkdown(block.itemInlines[index])}`;
+          let marker = "-";
+          if (block.ordered && depth === 0) {
+            orderedCounter += 1;
+            marker = `${orderedCounter}.`;
           }
-          return `${indent}${marker} ${markdownInlineFromText(item)}`;
+          const itemInlines = Array.isArray(block.itemInlines?.[index]) && block.itemInlines[index].length > 0
+            ? block.itemInlines[index]
+            : getInlineTokens({ text: item });
+          return `${indent}${marker} ${inlinesToMarkdown(itemInlines)}`;
         }).join("\n");
       }
       if (block.type === "code") {
@@ -282,8 +290,8 @@ export function writeMarkdown({ model, options = {} }) {
     ? [
       "",
       "---",
-      `title: ${markdownInlineFromText(model.title || "document")}`,
-      `source-format: ${markdownInlineFromText(model.sourceFormat || "md")}`,
+      `title: ${String(model.title || "document")}`,
+      `source-format: ${String(model.sourceFormat || "md")}`,
       `blocks: ${model.blocks.length}`,
       `warnings: ${(model.metadata?.warnings || []).length}`,
       "---",
@@ -293,7 +301,7 @@ export function writeMarkdown({ model, options = {} }) {
   const strictHints = keepStrictRoundTripHints
     ? [
       "",
-      `<!-- round-trip: ${markdownInlineFromText(model.sourceFormat || "md")} -->`,
+      `<!-- round-trip: ${String(model.sourceFormat || "md")} -->`,
       ...(model.metadata?.warnings || []).map((warning) => `<!-- warning:${warning.code} -->`),
     ].join("\n")
     : "";
@@ -360,9 +368,12 @@ export function blockToHtml(block) {
 function listBlockToHtml(block) {
   const items = block.items || [];
   const meta = block.itemMeta || [];
-  const itemHtml = (index) => Array.isArray(block.itemInlines?.[index]) && block.itemInlines[index].length > 0
-    ? inlinesToHtml(block.itemInlines[index])
-    : inlineMarkdownToHtml(items[index]);
+  const itemHtml = (index) => {
+    const itemInlines = Array.isArray(block.itemInlines?.[index]) && block.itemInlines[index].length > 0
+      ? block.itemInlines[index]
+      : getInlineTokens({ text: items[index] });
+    return inlinesToHtml(itemInlines);
+  };
   const depthAt = (index) => Math.max(0, Number(meta[index]?.depth) || 0);
   const tagForDepth = (depth) => (block.ordered && depth === 0 ? "ol" : "ul");
 

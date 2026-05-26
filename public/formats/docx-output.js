@@ -1,77 +1,103 @@
 import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
 import { writeStoredZip } from "../core/zip-writer.js";
 import { escapeHtml } from "./text-utils.js";
+import { getCellInlineTokens, getInlineTokens, parseInlineMarkdown } from "./inline-tokens.js";
 
 const NS = "http" + "://schemas.openxmlformats.org";
 const DC_NS = "http" + "://purl.org/dc/elements/1.1/";
 const REL_NS = "http" + "://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
-const INLINE_PATTERN = /(!\[[^\]]*\]\([^)]*\))|(\[[^\]]+\]\([^)]*\))|(\*\*[\s\S]+?\*\*)|(__[\s\S]+?__)|(~~[\s\S]+?~~)|(`[^`]+`)|(\*[^*\n]+\*)|(_[^_\n]+_)/;
-
-function parseInlineMarkdown(text) {
-  const tokens = [];
-  let remainder = String(text ?? "");
-  while (remainder.length > 0) {
-    const match = remainder.match(INLINE_PATTERN);
-    if (!match) {
-      tokens.push({ kind: "text", text: remainder });
-      break;
+// 把 inline tokens（semantic-inlines 形态）展平为 docx 风格的 run 描述：
+// 每个 run 自己带样式标志（bold/italic/strike/code/link），嵌套通过父层 OR 子层
+// 的并集表达，例如 strong(em(text)) → run{ bold:true, italic:true }。
+function flattenInlines(tokens, parentStyle = {}, hyperlinkHref = "") {
+  const runs = [];
+  for (const node of tokens || []) {
+    if (!node || typeof node !== "object") continue;
+    if (node.type === "text") {
+      if (node.value) runs.push({ text: node.value, style: parentStyle, hyperlinkHref });
+      continue;
     }
-    if (match.index > 0) {
-      tokens.push({ kind: "text", text: remainder.slice(0, match.index) });
+    if (node.type === "code") {
+      runs.push({ text: node.value || "", style: { ...parentStyle, code: true }, hyperlinkHref });
+      continue;
     }
-    const piece = match[0];
-    if (piece.startsWith("![")) {
-      const inner = piece.match(/^!\[([^\]]*)\]\(([^)]*)\)$/);
-      tokens.push({ kind: "text", text: inner?.[1] || "" });
-    } else if (piece.startsWith("[")) {
-      const inner = piece.match(/^\[([^\]]+)\]\(([^)]*)\)$/);
-      tokens.push({ kind: "link", text: inner?.[1] || "", href: inner?.[2] || "" });
-    } else if (piece.startsWith("**") || piece.startsWith("__")) {
-      tokens.push({ kind: "bold", text: piece.slice(2, -2) });
-    } else if (piece.startsWith("~~")) {
-      tokens.push({ kind: "strike", text: piece.slice(2, -2) });
-    } else if (piece.startsWith("`")) {
-      tokens.push({ kind: "code", text: piece.slice(1, -1) });
-    } else {
-      tokens.push({ kind: "italic", text: piece.slice(1, -1) });
+    if (node.type === "linebreak") {
+      runs.push({ lineBreak: true, style: parentStyle, hyperlinkHref });
+      continue;
     }
-    remainder = remainder.slice(match.index + piece.length);
+    if (node.type === "footnoteRef") {
+      // DOCX 无原生脚注引用渲染，用 [id] 上标样式占位
+      runs.push({ text: `[${node.id || ""}]`, style: { ...parentStyle, superscript: true }, hyperlinkHref });
+      continue;
+    }
+    if (node.type === "strong") {
+      runs.push(...flattenInlines(node.inlines, { ...parentStyle, bold: true }, hyperlinkHref));
+      continue;
+    }
+    if (node.type === "em") {
+      runs.push(...flattenInlines(node.inlines, { ...parentStyle, italic: true }, hyperlinkHref));
+      continue;
+    }
+    if (node.type === "del") {
+      runs.push(...flattenInlines(node.inlines, { ...parentStyle, strike: true }, hyperlinkHref));
+      continue;
+    }
+    if (node.type === "link") {
+      runs.push(...flattenInlines(node.inlines, { ...parentStyle, link: true }, node.href || ""));
+      continue;
+    }
+    if (Array.isArray(node.inlines)) {
+      runs.push(...flattenInlines(node.inlines, parentStyle, hyperlinkHref));
+    }
   }
-  return tokens.filter((token) => token.text !== "");
+  return runs;
 }
 
-function runProperties(token) {
+function runPropertiesXml(style) {
   const parts = [];
-  if (token.kind === "bold") parts.push("<w:b/>");
-  if (token.kind === "italic") parts.push("<w:i/>");
-  if (token.kind === "strike") parts.push("<w:strike/>");
-  if (token.kind === "code") parts.push('<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="Consolas"/>');
-  if (token.kind === "link") parts.push('<w:color w:val="0563C1"/><w:u w:val="single"/>');
+  if (style.bold) parts.push("<w:b/>");
+  if (style.italic) parts.push("<w:i/>");
+  if (style.strike) parts.push("<w:strike/>");
+  if (style.superscript) parts.push('<w:vertAlign w:val="superscript"/>');
+  if (style.code) parts.push('<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="Consolas"/>');
+  if (style.link) parts.push('<w:color w:val="0563C1"/><w:u w:val="single"/>');
   return parts.length > 0 ? `<w:rPr>${parts.join("")}</w:rPr>` : "";
 }
 
-function tokenToRun(token, { hyperlinks }) {
-  const text = `<w:t xml:space="preserve">${escapeHtml(token.text)}</w:t>`;
-  const rPr = runProperties(token);
-  const run = `<w:r>${rPr}${text}</w:r>`;
-  if (token.kind === "link" && token.href) {
-    const rId = hyperlinks.register(token.href);
-    return `<w:hyperlink r:id="${rId}">${run}</w:hyperlink>`;
+function renderRun(run, hyperlinks) {
+  if (run.lineBreak) return `<w:r>${runPropertiesXml(run.style || {})}<w:br/></w:r>`;
+  const rPr = runPropertiesXml(run.style || {});
+  const text = `<w:t xml:space="preserve">${escapeHtml(run.text || "")}</w:t>`;
+  const baseRun = `<w:r>${rPr}${text}</w:r>`;
+  if (run.hyperlinkHref) {
+    const rId = hyperlinks.register(run.hyperlinkHref);
+    return `<w:hyperlink r:id="${rId}">${baseRun}</w:hyperlink>`;
   }
-  return run;
+  return baseRun;
 }
 
-function runsFromText(text, hyperlinks) {
-  const tokens = parseInlineMarkdown(text);
-  if (tokens.length === 0) {
+function runsFromInlineTokens(tokens, hyperlinks) {
+  const runs = flattenInlines(tokens);
+  if (runs.length === 0) {
     return [`<w:r><w:t xml:space="preserve"></w:t></w:r>`];
   }
-  return tokens.map((token) => tokenToRun(token, { hyperlinks }));
+  return runs.map((run) => renderRun(run, hyperlinks));
 }
 
-function paragraph(text, hyperlinks, opts = {}) {
-  const runs = runsFromText(text, hyperlinks);
+function runsFromBlock(block, hyperlinks) {
+  return runsFromInlineTokens(getInlineTokens(block), hyperlinks);
+}
+
+function runsFromCell(cell, hyperlinks) {
+  return runsFromInlineTokens(getCellInlineTokens(cell), hyperlinks);
+}
+
+function runsFromPlainText(text, hyperlinks) {
+  return runsFromInlineTokens(parseInlineMarkdown(text), hyperlinks);
+}
+
+function paragraphFromRuns(runs, opts = {}) {
   const pPr = opts.pPr ? `      ${opts.pPr}\n` : "";
   return [
     "    <w:p>",
@@ -81,16 +107,28 @@ function paragraph(text, hyperlinks, opts = {}) {
   ].filter(Boolean).join("\n");
 }
 
+function paragraphBlock(block, hyperlinks, opts = {}) {
+  return paragraphFromRuns(runsFromBlock(block, hyperlinks), opts);
+}
+
+function paragraphFromText(text, hyperlinks, opts = {}) {
+  return paragraphFromRuns(runsFromPlainText(text, hyperlinks), opts);
+}
+
 function heading(block, hyperlinks) {
-  return paragraph(block.text, hyperlinks, {
+  return paragraphBlock(block, hyperlinks, {
     pPr: `<w:pPr><w:pStyle w:val="Heading${block.level}"/></w:pPr>`,
   });
 }
 
-function listItem(item, depth, ordered, hyperlinks) {
+function listItem(item, depth, ordered, hyperlinks, itemInlines) {
   const numId = ordered ? 1 : 2;
   const pPr = `<w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="${Math.min(8, Math.max(0, depth))}"/><w:numId w:val="${numId}"/></w:numPr></w:pPr>`;
-  return paragraph(item, hyperlinks, { pPr });
+  // 如果 reader 给了 itemInlines（如 html→docx），优先用结构化 inline 节点
+  if (Array.isArray(itemInlines) && itemInlines.length > 0) {
+    return paragraphFromRuns(runsFromInlineTokens(itemInlines, hyperlinks), { pPr });
+  }
+  return paragraphFromText(item, hyperlinks, { pPr });
 }
 
 function table(block, hyperlinks) {
@@ -100,7 +138,7 @@ function table(block, hyperlinks) {
   const rowXml = rows.map((row, rowIndex) => [
     "      <w:tr>",
     ...row.map((cell) => {
-      const cellRuns = runsFromText(String(cell ?? ""), hyperlinks).join("");
+      const cellRuns = runsFromCell(cell, hyperlinks).join("");
       const boldHeader = rowIndex === 0 ? '<w:pPr><w:rPr><w:b/></w:rPr></w:pPr>' : "";
       return [
         "        <w:tc>",
@@ -137,26 +175,27 @@ function codeParagraph(block) {
 }
 
 function quoteParagraph(block, hyperlinks) {
-  return paragraph(block.text, hyperlinks, {
+  return paragraphBlock(block, hyperlinks, {
     pPr: '<w:pPr><w:pStyle w:val="Quote"/></w:pPr>',
   });
 }
 
 function blockToWordXml(block, hyperlinks) {
   if (block.type === "heading") return heading(block, hyperlinks);
-  if (block.type === "paragraph") return paragraph(block.text, hyperlinks);
+  if (block.type === "paragraph") return paragraphBlock(block, hyperlinks);
   if (block.type === "quote") return quoteParagraph(block, hyperlinks);
   if (block.type === "list") {
     return (block.items || []).map((item, index) => {
       const depth = Math.max(0, Number(block.itemMeta?.[index]?.depth) || 0);
-      return listItem(item, depth, Boolean(block.ordered), hyperlinks);
+      const itemInlines = Array.isArray(block.itemInlines) ? block.itemInlines[index] : null;
+      return listItem(item, depth, Boolean(block.ordered), hyperlinks, itemInlines);
     }).join("\n");
   }
   if (block.type === "code") return codeParagraph(block);
   if (block.type === "table") return table(block, hyperlinks);
-  if (block.type === "image") return paragraph(block.alt || block.title || block.src, hyperlinks);
-  if (block.type === "asset") return paragraph(block.alt || block.title || block.assetId, hyperlinks);
-  if (block.type === "raw") return paragraph(block.content, hyperlinks);
+  if (block.type === "image") return paragraphFromText(block.alt || block.title || block.src, hyperlinks);
+  if (block.type === "asset") return paragraphFromText(block.alt || block.title || block.assetId, hyperlinks);
+  if (block.type === "raw") return paragraphFromText(block.content, hyperlinks);
   return "";
 }
 
@@ -180,12 +219,18 @@ function createHyperlinkRegistry() {
 }
 
 function buildRelationships(hyperlinks) {
-  const entries = hyperlinks.entries();
-  const linkRels = entries.map(([target, rId]) =>
+  // styles / numbering 是 document.xml 必需的关系；缺这两条 Word 会拒绝渲染样式。
+  const fixedRels = [
+    `  <Relationship Id="rIdStyles" Type="${REL_NS}/styles" Target="styles.xml"/>`,
+    `  <Relationship Id="rIdNumbering" Type="${REL_NS}/numbering" Target="numbering.xml"/>`,
+  ];
+  const linkRels = hyperlinks.entries().map(([target, rId]) =>
     `  <Relationship Id="${rId}" Type="${REL_NS}/hyperlink" Target="${escapeHtml(target)}" TargetMode="External"/>`
-  ).join("\n");
+  );
+  const allRels = [...fixedRels, ...linkRels].join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>
-<Relationships xmlns="${NS}/package/2006/relationships">${linkRels ? "\n" + linkRels : ""}
+<Relationships xmlns="${NS}/package/2006/relationships">
+${allRels}
 </Relationships>`;
 }
 

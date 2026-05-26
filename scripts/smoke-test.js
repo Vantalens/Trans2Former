@@ -1063,7 +1063,9 @@ test("format writers emit clean target-format output without leaked markdown/int
   assert.equal(json.plainText.includes("**world**"), false);
 
   const xml = convertContent({ content: markdown, from: "md", to: "xml", title: "sample" }).data;
-  assert.equal(xml.includes("<paragraph>Hello world and code.</paragraph>"), true);
+  // 新 XML writer 保留 inline 富文本：strong/em/code/link 等结构化标签，但不泄漏原始 markdown 标记
+  assert.equal(xml.includes("<paragraph>Hello <strong>world</strong> and <code>code</code>.</paragraph>"), true);
+  assert.equal(xml.includes("**world**"), false);
   assert.equal(xml.includes("      <headers>\n        <cell>Name</cell>\n        <cell>Value</cell>\n      </headers>"), true);
   assert.equal(xml.includes("<![CDATA[\nconsole.log(\"ok\");\n    ]]>"), true);
 

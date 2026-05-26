@@ -5,12 +5,18 @@
 //   - code: 行内代码 { value }（不递归）
 //   - link: 链接 { href, title, inlines: [...] }
 //   - linebreak: 强制换行（HTML <br> / Markdown 双空格换行）
+//   - footnoteRef: 脚注引用 { id }（HTML 渲染为 <sup id="fnref-id">，Markdown 保留 [^id]）
 //
 // 兼容输入：normalizeInlines 接受字符串、单节点对象或混合数组，统一规范化为
 // 节点数组。null/undefined 被忽略。
 
+// 只转义在 markdown 内联里"无歧义就会被解析成语法"的字符：
+//   \ ` * _ ~
+// 不转义 [ ] < > —— 它们在文本节点里出现时（task list "[x]"、字面尖括号等）
+// 几乎都是用户期望的字面字符；inline 节点流里真正的 link/autolink 已经是
+// 结构化节点，不会再走 text 路径。
 function escapeMarkdownInlineText(value) {
-  return String(value ?? "").replace(/([\\`*_~\[\]<>])/g, "\\$1");
+  return String(value ?? "").replace(/([\\`*_~])/g, "\\$1");
 }
 
 function escapeHtmlInline(value) {
@@ -53,6 +59,10 @@ export function createInlineDel(content) {
 
 export function createInlineLineBreak() {
   return { type: "linebreak" };
+}
+
+export function createInlineFootnoteRef(id) {
+  return { type: "footnoteRef", id: String(id ?? "") };
 }
 
 export function normalizeInlines(input) {
@@ -98,6 +108,7 @@ export function inlinesToMarkdown(inlines) {
         return `[${inner}](${node.href}${title})`;
       }
       if (node.type === "linebreak") return "  \n";
+      if (node.type === "footnoteRef") return `[^${String(node.id ?? "")}]`;
       if (Array.isArray(node.inlines)) return inlinesToMarkdown(node.inlines);
       return "";
     })
@@ -119,6 +130,10 @@ export function inlinesToHtml(inlines) {
         return `<a href="${escapeHtmlInline(node.href)}"${titleAttr} target="_blank" rel="noreferrer">${inner}</a>`;
       }
       if (node.type === "linebreak") return "<br />";
+      if (node.type === "footnoteRef") {
+        const id = escapeHtmlInline(node.id ?? "");
+        return `<sup id="fnref-${id}"><a href="#fn-${id}">[${id}]</a></sup>`;
+      }
       if (Array.isArray(node.inlines)) return inlinesToHtml(node.inlines);
       return "";
     })

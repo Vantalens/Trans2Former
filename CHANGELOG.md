@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **DOCX 读取丢失分级**：`word/styles.xml` 中样式名为 `heading 1` / `标题 1` 等中文/别名样式无法识别，导致全文落到同级 paragraph。新增 `parseHeadingStyleMap` 解析 styleId→level 映射，按 styleId / name 多路兜底识别。
+- **PDF 输出丢链接**：P1 重写后纯文本 URL（如正文里出现的 `https://example.com`）不再生成 `/Annots`，复原 `autoLinkifySegments` 用正则补齐链接段并附加 annotation。
+- **XML inline 富文本断言**：smoke test 仍按旧版扁平输出断言，与新 inline-preserving writer 不一致，更新为 `<paragraph>Hello <strong>world</strong> and <code>code</code>.</paragraph>` 并增加 markdown 残留负断言。
+- **`***粗斜体***` 嵌套丢失**：[inline-tokens.js](public/formats/inline-tokens.js) 优先识别 `***...***` / `___...___` 三星号为 strong×em 嵌套，避免被拆成 `**bold-italic*` + 孤立 `*`，影响 `samples/md/formatted-text.md` 等带粗斜体的真实文档。
+- **md → html 删除线 / 链接 title / 脚注上标丢失**：`markdown.js` 中 `blockTextToHtml` / `blockTextToMarkdown` 以及 list 渲染路径统一改走 `getInlineTokens → inlinesToHtml / inlinesToMarkdown`，废弃旧的 `inlineMarkdownToHtml` 正则兜底（漏 `<del>` 与 `<a title=>` 两类属性），同时把脚注 `[^id]` 升级为一等公民 `footnoteRef` inline 节点（HTML 渲染 `<sup id="fnref-…">`，MD/XML/DOCX/PDF 各自有专门渲染），消除写入路径的差异。
+- **md → md 有序列表编号跳号**：嵌套子项不应参与外层编号递增（原来 1./2./[嵌套]/5. 应为 3.）。在 markdown writer 维护独立的 `orderedCounter`，只在 `depth === 0` 的有序项递增。
+- **md → md task list `[x]` 被转义**：统一 inline 渲染管线后 `inlinesToMarkdown` 会按需转义 `[]<>`，导致 `- [x] 已完成任务` 输出为 `- \[x\] 已完成任务`。收窄 [`semantic-inlines.js`](public/core/models/semantic-inlines.js) 的 markdown 转义范围到 `\` `` ` `` `*` `_` `~`，文本节点里的 `[]<>` 当字面字符通过，task list / 字面尖括号还原。
+- **md → html 引用块出现孤立 `<p>&gt;</p>`**：markdown reader 旧的 quote 正则要求 `>` 后必须有内容，导致 `> ` 空引用行落到 paragraph collector 变 `<p>&gt;</p>`，并把 `> > 嵌套引用` 当成单层文本。改为按"连续 `>` 行"收集为单个 quote 块，跳过分段空 `>` 行。
+- **html → md 嵌套列表丢失层级**：`<li>` 抽取使用 `sliceInline(..., liEnd)` 把内部嵌套 `<ul>/<ol>` 也展平为同级文本（`项目 2  子项目 2.1 子项目 2.2`）。改为先扫描定位 `<li>` 内第一个嵌套列表起点，inline 范围截到嵌套起点，并把 cursor 推进到嵌套列表起点让外层 depth 跟踪接管；嵌套 `<ul>` 现在按层级渲染为缩进子项。
+- **html → md 命名实体未解码**：`decodeHtmlEntities` 只覆盖 `nbsp/amp/lt/gt/quot/apos`，常见的 `&copy;` / `&mdash;` / `&hellip;` / `&trade;` / `&laquo;` 等直接被当字面输出。新增覆盖 70+ 高频 HTML 命名实体的查表 + 通用 `&name;` fallback，同时把数字实体改用 `String.fromCodePoint` 支持星盘以外字符。
+
+### 改进
+
+- **预览标题分级**：`.preview-markdown` 补齐 `h4`/`h5`/`h6` 字号 + 颜色梯度，`h1`/`h2` 加 `border-bottom`，`h5`/`h6` 用 uppercase + letter-spacing 区分弱层级，解决「正文与标题视觉同级」。
+- **预览区布局**：`.viewer-card` 由 `grid` 改为 `flex column` + 子元素 `flex: 1 1 auto; min-height: 0`，`output-editor-panel` 取消 `grid-template-rows` 锁高，textarea 高度自适应，解决预览/结果切换时尺寸错乱。
+- **UI 现代化**：色板换为 slate + teal，圆角 10/14px，柔和阴影（1px soft + 12px diffuse），顶栏 `backdrop-filter saturate(180%) blur(14px)`，按钮悬停/按下微动效，深色代码块与条纹表格，Inter `font-feature-settings: cv11/ss01/ss03` + antialiased。
+
 ## [2.1.0] - 2026-05-25
 
 ### 新增

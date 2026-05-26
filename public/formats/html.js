@@ -31,16 +31,37 @@ const BLOCK_TAGS = new Set([
   "figure", "figcaption", "hr", "img",
 ]);
 
+// 常见 HTML 命名实体表。HTML5 完整实体表庞大（2200+ 项），只覆盖文档里高频使用的；
+// 数字 / 16 进制实体由前两条 replace 兜底。
+const NAMED_ENTITIES = {
+  nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
+  copy: "©", reg: "®", trade: "™",
+  hellip: "…", mdash: "—", ndash: "–",
+  lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”",
+  laquo: "«", raquo: "»", middot: "·", bull: "•",
+  times: "×", divide: "÷", plusmn: "±", deg: "°",
+  sect: "§", para: "¶", micro: "µ",
+  larr: "←", rarr: "→", uarr: "↑", darr: "↓",
+  harr: "↔", crarr: "↵",
+  euro: "€", pound: "£", yen: "¥", cent: "¢",
+  iexcl: "¡", iquest: "¿",
+  frac12: "½", frac14: "¼", frac34: "¾",
+  alpha: "α", beta: "β", gamma: "γ", delta: "δ",
+  epsilon: "ε", lambda: "λ", mu: "μ", pi: "π",
+  sigma: "σ", omega: "ω",
+  infin: "∞", asymp: "≈", ne: "≠", le: "≤", ge: "≥",
+  sum: "∑", prod: "∏", radic: "√", int: "∫",
+  // 注意：&apos; 不是 HTML4 实体但 HTML5 / XHTML 允许，&#39; 也常见
+};
+
 function decodeHtmlEntities(value) {
   return String(value ?? "")
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(Number.parseInt(n, 16)))
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;|&#39;/g, "'");
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(Number.parseInt(n, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&([a-zA-Z][a-zA-Z0-9]+);/g, (raw, name) => {
+      const decoded = NAMED_ENTITIES[name];
+      return decoded != null ? decoded : raw;
+    });
 }
 
 function getAttr(attrs, name) {
@@ -245,15 +266,27 @@ function extractListItems(events, start, closeIndex) {
     }
     if (event.type === "open" && event.tag === "li") {
       const liClose = findClosingIndex(events, index + 1, "li");
-      const end = liClose === -1 ? closeIndex : liClose;
-      const inlines = sliceInline(events, index + 1, end);
+      const liEnd = liClose === -1 ? closeIndex : liClose;
+      // 寻找当前 li 内第一个嵌套 ul/ol 的位置：嵌套子列表不应纳入当前 li 的文本，
+      // 而是让外层循环按 depth+1 继续递归处理。
+      let nestedListStart = -1;
+      for (let scan = index + 1; scan < liEnd; scan += 1) {
+        const inner = events[scan];
+        if (inner.type === "open" && (inner.tag === "ul" || inner.tag === "ol")) {
+          nestedListStart = scan;
+          break;
+        }
+      }
+      const inlineEnd = nestedListStart === -1 ? liEnd : nestedListStart;
+      const inlines = sliceInline(events, index + 1, inlineEnd);
       const plain = inlinesPlainTextTrimmed(inlines);
       if (plain) {
         items.push(plain);
         itemInlines.push(inlines);
         meta.push({ depth, marker: "-" });
       }
-      index = end + 1;
+      // 有嵌套列表时让外层循环接管（depth 计数会自然递增）；否则跳过整个 li。
+      index = nestedListStart === -1 ? liEnd + 1 : nestedListStart;
       continue;
     }
     index += 1;

@@ -1,7 +1,28 @@
 import { ConversionError } from "../core/conversion-error.js";
 import { createDocumentModel, createParagraph, createRawBlock } from "../core/document-model.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
-import { escapeHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
+import { escapeHtml } from "./text-utils.js";
+import { getCellInlineTokens, getInlineTokens } from "./inline-tokens.js";
+
+// 把 inline tokens 渲染为嵌套 XML：<strong>/<em>/<del>/<code>/<link href="...">/<br/>
+function inlinesToXml(tokens) {
+  return (tokens || []).map((node) => {
+    if (!node || typeof node !== "object") return "";
+    if (node.type === "text") return escapeHtml(node.value || "");
+    if (node.type === "code") return `<code>${escapeHtml(node.value || "")}</code>`;
+    if (node.type === "linebreak") return "<br/>";
+    if (node.type === "footnoteRef") return `<footnoteRef id="${escapeHtml(node.id || "")}"/>`;
+    if (node.type === "strong") return `<strong>${inlinesToXml(node.inlines)}</strong>`;
+    if (node.type === "em") return `<em>${inlinesToXml(node.inlines)}</em>`;
+    if (node.type === "del") return `<del>${inlinesToXml(node.inlines)}</del>`;
+    if (node.type === "link") {
+      const titleAttr = node.title ? ` title="${escapeHtml(node.title)}"` : "";
+      return `<link href="${escapeHtml(node.href || "")}"${titleAttr}>${inlinesToXml(node.inlines)}</link>`;
+    }
+    if (Array.isArray(node.inlines)) return inlinesToXml(node.inlines);
+    return "";
+  }).join("");
+}
 
 function parseAttributes(rawAttributes = "") {
   const attributes = {};
@@ -217,20 +238,34 @@ export function readXml({ content, title = "xml", format = "xml" }) {
 }
 
 export function writeXml({ model, title = model.title }) {
+  const renderBlockInlines = (block) => inlinesToXml(getInlineTokens(block));
+  const renderCellInlines = (cell) => inlinesToXml(getCellInlineTokens(cell));
+
   const blocks = model.blocks.map((block, index) => {
-    if (block.type === "heading") return `    <heading level="${block.level}">${escapeHtml(stripMarkdownInlineSyntax(block.text))}</heading>`;
-    if (block.type === "paragraph") return `    <paragraph>${escapeHtml(stripMarkdownInlineSyntax(block.text))}</paragraph>`;
-    if (block.type === "quote") return `    <quote>${escapeHtml(stripMarkdownInlineSyntax(block.text))}</quote>`;
+    if (block.type === "heading") return `    <heading level="${block.level}">${renderBlockInlines(block)}</heading>`;
+    if (block.type === "paragraph") return `    <paragraph>${renderBlockInlines(block)}</paragraph>`;
+    if (block.type === "quote") return `    <quote>${renderBlockInlines(block)}</quote>`;
     if (block.type === "code") return `    <code language="${escapeHtml(block.language)}"><![CDATA[\n${safeCdata(block.code)}\n    ]]></code>`;
+    if (block.type === "list") {
+      const items = (block.items || []).map((item, idx) => {
+        const itemInlines = Array.isArray(block.itemInlines) ? block.itemInlines[idx] : null;
+        const inner = itemInlines && itemInlines.length > 0
+          ? inlinesToXml(itemInlines)
+          : renderCellInlines(item);
+        const depth = Number(block.itemMeta?.[idx]?.depth) || 0;
+        return `      <item depth="${depth}">${inner}</item>`;
+      }).join("\n");
+      return `    <list ordered="${Boolean(block.ordered)}">\n${items}\n    </list>`;
+    }
     if (block.type === "table") {
       const header = [
         "      <headers>",
-        ...block.headers.map((cell) => `        <cell>${escapeHtml(stripMarkdownInlineSyntax(cell))}</cell>`),
+        ...block.headers.map((cell) => `        <cell>${renderCellInlines(cell)}</cell>`),
         "      </headers>",
       ].join("\n");
       const rows = block.rows.map((row) => [
         "      <row>",
-        ...row.map((cell) => `        <cell>${escapeHtml(stripMarkdownInlineSyntax(cell))}</cell>`),
+        ...row.map((cell) => `        <cell>${renderCellInlines(cell)}</cell>`),
         "      </row>",
       ].join("\n")).join("\n");
       return `    <table>\n${header}\n${rows}\n    </table>`;

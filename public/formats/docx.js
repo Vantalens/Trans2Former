@@ -56,6 +56,30 @@ function parseTable(xml) {
   return { table, hasMergedCells };
 }
 
+// 从 styles.xml 解析每个 paragraph style 对应的 heading level（如果有）。
+// 兼容 Word 中文模板：styleId 可能是 "1"/"af0"/"a3"，w:name 可能是 "heading 1" 或 "标题 1"。
+function parseHeadingStyleMap(xml) {
+  const map = new Map();
+  if (!xml) return map;
+  for (const styleMatch of String(xml).matchAll(/<w:style\b[\s\S]*?<\/w:style>/g)) {
+    const styleBlock = styleMatch[0];
+    const open = styleBlock.match(/<w:style\b[^>]*>/)?.[0] || "";
+    if (!/w:type="paragraph"/.test(open)) continue;
+    const styleId = getAttr(open, "w:styleId");
+    if (!styleId) continue;
+    const name = getAttr(styleBlock.match(/<w:name\b[^>]*\/?>/)?.[0] || "", "w:val").toLowerCase();
+    // 直接 styleId 命中
+    let m = /^heading([1-6])$/i.exec(styleId);
+    if (!m) m = /^heading\s*([1-6])$/i.exec(name);
+    if (!m) m = /^标题\s*([1-6])$/.exec(name);
+    if (m) {
+      const level = Math.min(6, Math.max(1, Number(m[1])));
+      map.set(styleId, level);
+    }
+  }
+  return map;
+}
+
 function parseNumbering(xml) {
   const orderedAbstractIds = new Set();
   for (const abstractMatch of String(xml || "").matchAll(/<w:abstractNum\b[\s\S]*?<\/w:abstractNum>/g)) {
@@ -160,8 +184,11 @@ function parseParagraph(xml, relationships, assetStore, zip, warnings, reference
       }]);
       if (inlines.length > 0) list.itemInlines = [inlines];
       blocks.push(list);
-    } else if (/^Heading([1-6])$/i.test(style)) {
-      const heading = createHeading(Number(style.match(/\d/)?.[0] || 1), text);
+    } else if (/^Heading([1-6])$/i.test(style) || references.headingStyles?.has(style)) {
+      const level = /^Heading([1-6])$/i.test(style)
+        ? Number(style.match(/\d/)?.[0] || 1)
+        : references.headingStyles.get(style);
+      const heading = createHeading(level, text);
       if (inlines.length > 0) heading.inlines = inlines;
       blocks.push(heading);
     } else {
@@ -236,6 +263,7 @@ export function readDocx({ content, title = "document", fileName = "", format = 
   const body = documentXml.match(/<w:body\b[\s\S]*<\/w:body>/)?.[0] || documentXml;
   const references = {
     orderedNumIds: parseNumbering(zip.getText("word/numbering.xml")),
+    headingStyles: parseHeadingStyleMap(zip.getText("word/styles.xml")),
     footnotes: parseIdTextMap(zip.getText("word/footnotes.xml"), "footnote"),
     comments: parseIdTextMap(zip.getText("word/comments.xml"), "comment"),
   };
