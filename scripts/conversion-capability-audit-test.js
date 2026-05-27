@@ -7,6 +7,7 @@ import {
   getRouteTemperature,
   isModelReachable,
   listFormats,
+  toConversionDocumentModel,
 } from "../public/browser-transformer.js";
 import { decodeTextBytes } from "../public/core/text-decoding.js";
 import { createDocumentModel, createHeading, createParagraph, getPlainText } from "../public/core/document-model.js";
@@ -179,5 +180,21 @@ for (const from of listFormats().input) {
 
 const baseTemperature = getRouteTemperature("pdf", "docx");
 assert.equal(baseTemperature, "cold", "PDF -> DOCX 默认走 FixedLayoutModel→SemanticDoc 应当为 cold");
+
+const csvMarkdownModel = toConversionDocumentModel(sourceByFormat.csv, "csv", "md", "route.csv");
+assert.equal(
+  csvMarkdownModel.metadata.warnings.some((warning) => warning.code === "MODEL_STYLE_DROPPED"),
+  true,
+  "warm cross-model routes must expose their forced loss warning in the conversion quality report"
+);
+assert.equal(csvMarkdownModel.metadata.conversion.routeTemperature, "warm");
+
+const pdfDocxModel = toConversionDocumentModel(sourceByFormat.md, "pdf", "docx", "route.pdf");
+assert.equal(
+  pdfDocxModel.metadata.warnings.some((warning) => warning.code === "MODEL_VISUAL_FIDELITY_LOST"),
+  true,
+  "cold fixed-layout routes must expose fidelity loss warnings before export"
+);
+assert.equal(pdfDocxModel.metadata.conversion.routeTemperature, "cold");
 
 console.log("Capability Registry / RoutePlanner test passed: core model annotations and route temperatures cover the current product matrix.");

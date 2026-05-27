@@ -1,10 +1,10 @@
 # Conversion Routing
 
-版本：v0.1.0
-状态：方案落地，分阶段实施
-最后更新：2026-05-12
+版本：v0.2.0
+状态：P8-A 路径与质量提示已接入；P8-B 执行型 mapper 与路径校准待开发
+最后更新：2026-05-27
 
-[CONVERSION_PATHS.md](CONVERSION_PATHS.md) 仍然是当前生效的产品路径矩阵。本文档是 P8 之后的目标设计，描述 Capability Registry 自动派生路径的机制。
+[CONVERSION_PATHS.md](CONVERSION_PATHS.md) 仍然是当前生效的产品路径矩阵。本文记录 P8-A 已落地的模型路径、温度与质量提示机制，以及 P8-B 需要纠正的执行边界；产品是否推荐某条转换路径继续由保守维护的产品矩阵控制。
 
 ## 痛点回顾
 
@@ -47,21 +47,21 @@ registry.registerMapper({
 
 ### Route Planner
 
-`getAllowedOutputs(from)` 不再读硬编码表，而是计算：
+P8-A 中，`RoutePlanner` 计算模型可达路径和损失提示：
 
 ```
 1. reader[from].inputModels 给出可达模型集合 M0
 2. 从 M0 出发，走 mapper 图（BFS），扩展出可达模型集合 M*
-3. 收集所有 writer w 满足 w.acceptModels ∩ M* ≠ ∅
-4. 输出格式列表 = w.format
-5. 按"模型距离 + lossLevel"给每条路径打分（hot / warm / cold）
+3. 为产品矩阵允许的目标 writer 选择一条可达模型路径
+4. 按"模型距离 + lossLevel"给路径打分（hot / warm / cold）
+5. 把路径携带的 `forcedWarnings` 写入转换模型的 `QualityReport`
 ```
 
 **hot**：reader → writer 共享同一模型，无 mapper（如 `md → md`、`xlsx → xlsx`）。
 **warm**：经过一次 low-loss mapper（如 `csv → md`：WorkbookModel → SemanticDoc.table）。
 **cold**：经过一次 high-loss mapper 或多次 mapper 链（如 `pdf → docx`：FixedLayoutModel → SemanticDoc → DOCX）。
 
-UI 显示时按温度排序，cold 路径打 ⚠️ 标记。
+工作台完成转换后展示带 `routeTemperature` 与 `forcedWarnings` 的转换质量模型。格式选择仍以产品矩阵为准，不因模型技术可达而自动开放不推荐输出。当前 warnings 基于规划路径写入，不代表对应 mapper 已实际改写转换 payload。
 
 ### 路径示例
 
@@ -95,21 +95,31 @@ UI 显示时按温度排序，cold 路径打 ⚠️ 标记。
 
 | 文档 | 内容 |
 |---|---|
-| [CONVERSION_PATHS.md](CONVERSION_PATHS.md) | 当前 P0~P7 生效的产品路径矩阵，硬编码在 ALLOWED_OUTPUTS_BY_INPUT |
-| 本文档 | P8 之后的目标设计，矩阵从 reader/writer/mapper 声明自动派生 |
+| [CONVERSION_PATHS.md](CONVERSION_PATHS.md) | 当前生效的用户可选产品路径矩阵 |
+| 本文档 | P8 模型可达性、路径温度与强制降级提示机制 |
 
-P8-M1 完成后两者合并，CONVERSION_PATHS.md 改为引用本文档生成的矩阵快照。
+## P8-B 执行边界校准
+
+经研究报告与代码核对，当前注册的专属模型声明尚未全部对应 writer 的实际消费方式：
+
+- `XLSX` 和 `PDF` writer 已具备专属模型优先路径，适合作为真实执行链依据。
+- `CSV` writer 当前仍消费 `SemanticDoc` table；因此 `xlsx -> csv` 需要经过 `WorkbookModel -> SemanticDoc`，不能视为同模型 hot 路径。
+- `PPTX` writer 当前从语义文本生成单页输出，`pptx -> pptx` 不能表述为 `SlideModel` 保真写回。
+- `OFD` reader 当前仅有空 `FixedLayoutModel` 占位，`ofd -> pdf` 不能表述为已具备稳定布局保持能力。
+
+P8-B 将引入真实 mapper 执行证据字段 `executedMappers`，优先接入 `SemanticDoc <-> WorkbookModel` 路径；Slide/FixedLayout 自动映射在 writer 和质量 fixture 具备证据后再启用。
 
 ## 程序层规则
 
-P8-M1 完成后：
+当前规则：
 
-- `getAllowedOutputs(from)` 改为 Planner 计算，不再读硬编码表
-- `ConverterRegistry.convert()` 必须先调 Planner 选路径，校验通过才执行
+- `getAllowedOutputFormats(from)` 继续维护产品推荐边界，避免只因技术可达而暴露低质量输出。
+- `ConverterRegistry.prepareConversionModel()` 先校验产品路径，再由 Planner 选择模型路径并注入 route warnings。
+- `ConverterRegistry.convert()` 使用上述转换模型执行 writer，UI 同步用该模型显示 QualityReport。
 - 不支持的路径返回 `UNSUPPORTED_CONVERSION_PATH`，未注册 reader/writer 返回 `UNSUPPORTED_INPUT_FORMAT` / `UNSUPPORTED_OUTPUT_FORMAT`
-- 新增格式时只改 reader/writer 注册和（如必要）添加 mapper，矩阵自动更新
+- 新增格式时必须声明 reader/writer 的真实模型能力，并在新增推荐路径时同步产品矩阵与测试。
 - [scripts/conversion-capability-audit-test.js](../scripts/conversion-capability-audit-test.js) 用 Planner 输出做矩阵稳定性断言
 
-## 阶段实施
+## 后续增强
 
-详细 milestone 见 [DEVELOPMENT_TASKS.md](../DEVELOPMENT_TASKS.md) P8-M1。先做"零行为变化"重构：把现有路径矩阵用新机制描述出来，旧 ALLOWED_OUTPUTS_BY_INPUT 删除前自动比对一致。
+P8-A 的路径可见性已闭环。P8-B 将在 `prepareConversionModel()` 中把现有 reader 附带的 `workbook` 数据显式交给可执行 mapper；`slide` / `fixedLayout` 路径继续等待 writer 能力与质量证据，不仅增加格式列表或静态可达声明。

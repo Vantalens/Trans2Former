@@ -214,10 +214,10 @@ registry.registerFormat("ofd", {
   inputModels: ["FixedLayoutModel"],
 });
 
-// 跨模型 mapper：P8-M1 阶段只声明拓扑，真实 fn 在 P8-M3/M4 落地。
-// 当前所有 reader/writer 实质上还共用 SemanticDoc，mapper 用来给 RoutePlanner
-// 提供"模型可达性"判断，让 csv/xlsx → md、pptx → md、pdf → md 这类跨类
-// 路径在 capability 视图中明确标注 warm/cold 温度。详见 docs/CONVERSION_ROUTING.md。
+// 跨模型路由图：reader 仍提供可写出的 DocumentModel，同时保留 workbook /
+// slide / fixedLayout 附加模型。RoutePlanner 用该拓扑计算 warm/cold 温度并将
+// forcedWarnings 注入转换 QualityReport，让跨类转换的损失在工作台可见。
+// 详见 docs/CONVERSION_ROUTING.md。
 registry.registerMapper({ from: "WorkbookModel", to: "SemanticDoc", lossLevel: "low",
   forcedWarnings: ["MODEL_STYLE_DROPPED", "MODEL_FORMULA_AS_VALUE"] });
 registry.registerMapper({ from: "SemanticDoc", to: "WorkbookModel", lossLevel: "low",
@@ -266,6 +266,10 @@ export function getFormatCapabilities() {
 
 export function toDocumentModel(content, fromFormat, title = "document") {
   return registry.read({ content, from: fromFormat, title });
+}
+
+export function toConversionDocumentModel(content, fromFormat, toFormat, title = "document", fileName = "") {
+  return registry.prepareConversionModel({ content, from: fromFormat, to: toFormat, title, fileName });
 }
 
 export function renderPreviewHtml(content, fromFormat, title = "document") {

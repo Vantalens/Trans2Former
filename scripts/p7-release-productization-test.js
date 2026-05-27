@@ -13,7 +13,8 @@ const tauriConfig = await readFile("src-tauri/tauri.conf.json", "utf8");
 const docsIndex = await readFile("docs/README.md", "utf8");
 
 for (const expected of [
-  "Trans2Former_<version>_windows_x64.msi",
+  "Trans2Former_<version>_x64_en-US.msi",
+  "Trans2Former_<version>_x64-setup.exe",
   "checksums.sha256",
   "Windows WebView2",
   "macOS WKWebView",
@@ -31,6 +32,7 @@ for (const expected of ["DESKTOP_RELEASE_PLAN.md", "release asset", "OFD", "core
 assert.equal(prepareRelease.includes("pluginPatchAssets"), false, "release manifest should not include plugin patch assets");
 assert.equal(prepareRelease.includes("plugin-patches"), false, "release prepare should not copy plugin patch packages");
 assert.equal(tauriConfig.includes('"targets": "all"'), true, "Tauri bundle should keep all platform targets declared");
+assert.equal(tauriConfig.includes('"icon": ["icons/icon.ico"]'), true, "Tauri bundle should declare a Windows installer icon");
 assert.equal(tauriConfig.includes("connect-src 'self'"), true, "desktop CSP should keep network scope local-only by default");
 assert.equal(docsIndex.includes("DESKTOP_RELEASE_PLAN.md"), true, "docs index should expose P7 release plan");
 assert.equal(tasks.includes("状态：核心完成，发布卫生和平台安装包仍在收尾。"), true, "P7 task status should reflect release productization completion");

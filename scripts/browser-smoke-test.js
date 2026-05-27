@@ -124,6 +124,7 @@ try {
   assert.equal(appJs.includes("releaseConversionResources"), true, "P2 should centralize Worker and ObjectURL lifecycle cleanup");
   assert.equal(appJs.includes("BINARY_INPUT_FORMATS"), true, "binary formats should avoid text decoding");
   assert.equal(appJs.includes("getAllowedOutputFormats"), true, "main app should filter output formats by supported conversion paths");
+  assert.equal(appJs.includes("toConversionDocumentModel"), true, "quality panel should render the routed model with conversion-loss warnings");
   assert.equal(appJs.includes("currentInputContent"), true, "binary uploads should keep raw conversion payload separate from editor display text");
   assert.equal(appJs.includes("getActiveInputContent"), true, "conversion and preview should read the active raw payload, not textarea display text");
   assert.equal(appJs.includes("fitInputEditorHeight"), true, "short source text should not leave a full-height empty editor area");

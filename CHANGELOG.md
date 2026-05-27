@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **P7-A Windows 桌面发布基线**：统一 `package.json`、Tauri 配置与 Rust crate 版本为 `2.2.0`，声明已入库的 Windows ICO 图标；新增配置门禁并通过真实 `npm run desktop:build` 产出 MSI 与 NSIS 安装包。
+- **P8 路由损失可见性**：`RoutePlanner` 现在返回实际模型路径，跨模型转换将 `forcedWarnings` 和 `routeTemperature` 写入 QualityReport；工作台转换完成后展示带路径降级提示的转换模型。
+- **Markdown 导出原始 HTML 回归**：保留 task list 的 `[]` 字面语义，同时恢复文本节点 `<` / `>` 转义，避免纯文本输入导出 `.md` 时激活 HTML 标签。
+
 ## [2.2.0] - 2026-05-26
 
 ### 修复

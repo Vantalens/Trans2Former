@@ -2,7 +2,7 @@
 
 版本：v0.2.0
 状态：生效
-最后更新：2026-05-08
+最后更新：2026-05-27
 
 本文记录 Trans2Former 上传 GitHub 与后续 GitHub release 的准备规则。
 
@@ -41,6 +41,14 @@ release/trans2former-<version>/RELEASE_MANIFEST.json
 ## P7 桌面发布
 
 桌面安装包、签名、checksum、平台 smoke、自动更新和文件关联规则见 [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md)。
+
+Windows 桌面安装包基线验证命令：
+
+```bash
+npm run desktop:build
+```
+
+2026-05-27 已验证该命令生成 `Trans2Former_2.2.0_x64_en-US.msi` 与 `Trans2Former_2.2.0_x64-setup.exe`。生成成功不替代签名、安装后 smoke 或跨平台验证。
 
 ## 每次对话同步要求
 

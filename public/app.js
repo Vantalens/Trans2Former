@@ -5,6 +5,7 @@ import {
   getFormatCapabilities,
   getOutputExtension,
   renderPreviewHtml,
+  toConversionDocumentModel,
   toDocumentModel,
 } from "./browser-transformer.js";
 import { normalizeConversionError } from "./core/conversion-error.js";
@@ -1268,7 +1269,7 @@ async function transformContent() {
   try {
     const title = getBaseName(currentFileName);
     const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName, options: { profile: markdownOutputProfile } });
-    const model = toDocumentModel(content, from, currentFileName);
+    const model = toConversionDocumentModel(content, from, to, currentFileName, currentFileName);
     currentDocumentModel = model;
     renderDocumentModelPanel(model);
     currentOutputType = result.type;

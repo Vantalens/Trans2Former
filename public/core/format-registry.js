@@ -1,5 +1,6 @@
 import { ConversionError } from "./conversion-error.js";
 import { ensureDocumentAudit } from "./document-audit.js";
+import { createWarning, withWarnings } from "./warnings.js";
 
 const FORMAT_ALIASES = {
   markdown: "md",
@@ -12,9 +13,8 @@ const FORMAT_ALIASES = {
 };
 
 // 产品矩阵：哪些路径在 UI 上推荐用户使用，按"语义合理"维度筛选。
-// 模型可达性由 RoutePlanner 单独计算，最终允许的路径是两者交集。
-// P8-M1 阶段保留产品矩阵硬编码；P8-M3/M4 模型分家后逐步把可达路径从 Planner
-// 自动派生，把"是否推荐"独立出来作为 capability flag。
+// RoutePlanner 为产品允许的路径计算温度和强制降级提示；技术可达性不自动
+// 扩大用户可选矩阵，避免展示质量尚未达到产品标准的输出。
 const PRODUCT_MATRIX_BY_INPUT = {
   md: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"],
   html: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"],
@@ -77,23 +77,41 @@ export class RoutePlanner {
   // - warm：一次 low-loss mapper
   // - cold：经过 medium/high-loss mapper 或多步链
   // 返回 null 表示模型上无法到达。
-  getRouteTemperature(readerInputModels = [], writerAcceptModels = []) {
+  getRoute(readerInputModels = [], writerAcceptModels = []) {
     const accepted = new Set(writerAcceptModels);
-    if (readerInputModels.some((m) => accepted.has(m))) return "hot";
-    let warmCandidate = false;
-    for (const seed of readerInputModels) {
+    const directModel = readerInputModels.find((model) => accepted.has(model));
+    if (directModel) {
+      return { temperature: "hot", models: [directModel], mappers: [] };
+    }
+
+    const visited = new Set(readerInputModels);
+    const queue = readerInputModels.map((model) => ({ model, models: [model], mappers: [] }));
+    while (queue.length > 0) {
+      const current = queue.shift();
       for (const mapper of this.mappers) {
-        if (mapper.from === seed && accepted.has(mapper.to)) {
-          if (mapper.lossLevel === "low") return "warm";
-          warmCandidate = true;
+        if (mapper.from !== current.model || visited.has(mapper.to)) continue;
+        const route = {
+          model: mapper.to,
+          models: [...current.models, mapper.to],
+          mappers: [...current.mappers, mapper],
+        };
+        if (accepted.has(mapper.to)) {
+          const warm = route.mappers.length === 1 && route.mappers[0].lossLevel === "low";
+          return {
+            temperature: warm ? "warm" : "cold",
+            models: route.models,
+            mappers: route.mappers,
+          };
         }
+        visited.add(mapper.to);
+        queue.push(route);
       }
     }
-    const reachable = this.getReachableModels(readerInputModels);
-    if (writerAcceptModels.some((m) => reachable.has(m))) {
-      return warmCandidate ? "cold" : "cold";
-    }
     return null;
+  }
+
+  getRouteTemperature(readerInputModels = [], writerAcceptModels = []) {
+    return this.getRoute(readerInputModels, writerAcceptModels)?.temperature || null;
   }
 }
 
@@ -167,6 +185,13 @@ export class ConverterRegistry {
     const toModels = this.acceptModelsByFormat.get(toFormat);
     if (!fromModels || !toModels) return null;
     return this.planner.getRouteTemperature(fromModels, toModels);
+  }
+
+  getRoute(from, to) {
+    const fromModels = this.inputModelsByFormat.get(normalizeFormat(from));
+    const toModels = this.acceptModelsByFormat.get(normalizeFormat(to));
+    if (!fromModels || !toModels) return null;
+    return this.planner.getRoute(fromModels, toModels);
   }
 
   isModelReachable(from, to) {
@@ -243,7 +268,7 @@ export class ConverterRegistry {
     return writer({ model: auditedModel, title, format: toFormat, options });
   }
 
-  convert({ content, from, to, title = "document", fileName = "", options = {} }) {
+  prepareConversionModel({ content, from, to, title = "document", fileName = "", options = {} }) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
     if (!this.writers.has(toFormat)) {
@@ -260,7 +285,39 @@ export class ConverterRegistry {
         format: `${fromFormat}->${toFormat}`,
       });
     }
-    const model = this.read({ content, from, title, fileName });
+
+    const model = this.read({ content, from: fromFormat, title, fileName });
+    const route = this.getRoute(fromFormat, toFormat);
+    const routeWarnings = [...new Set((route?.mappers || []).flatMap((mapper) => mapper.forcedWarnings))]
+      .map((code) => createWarning(
+        "lossy",
+        code,
+        `转换路径 ${fromFormat} -> ${toFormat} 会经过 ${route.temperature} 级模型降级: ${code}.`,
+        { from: fromFormat, to: toFormat, routeTemperature: route.temperature }
+      ));
+    const routedModel = {
+      ...model,
+      metadata: withWarnings({
+        ...(model.metadata || {}),
+        conversion: {
+          ...(model.metadata?.conversion || {}),
+          routeTemperature: route?.temperature || "unknown",
+          routeModels: route?.models || [],
+        },
+      }, routeWarnings),
+    };
+    return ensureDocumentAudit(routedModel, {
+      content,
+      reader: fromFormat,
+      writer: toFormat,
+      targetFormat: toFormat,
+      fileName,
+      options,
+    });
+  }
+
+  convert({ content, from, to, title = "document", fileName = "", options = {} }) {
+    const model = this.prepareConversionModel({ content, from, to, title, fileName, options });
     return this.write({ model, to, title, options });
   }
 }

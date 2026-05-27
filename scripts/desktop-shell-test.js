@@ -21,10 +21,16 @@ assert.equal(packageJson.scripts["desktop:build"], "npm exec @tauri-apps/cli -- 
 
 const tauriConfig = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"));
 assert.equal(tauriConfig.productName, "Trans2Former");
+assert.equal(tauriConfig.version, packageJson.version, "Tauri bundle version must match the JavaScript release version");
 assert.equal(tauriConfig.identifier, "com.vantalens.trans2former");
 assert.equal(tauriConfig.build.frontendDist, "../public");
 assert.equal(tauriConfig.app.security.csp.includes("connect-src 'self'"), true);
 assert.equal(tauriConfig.app.windows[0].title, "Trans2Former Desktop");
+assert.deepEqual(tauriConfig.bundle.icon, ["icons/icon.ico"], "Windows bundles must declare the checked-in ICO asset");
+await access(path.resolve("src-tauri/icons/icon.ico"));
+
+const cargoManifest = await readFile("src-tauri/Cargo.toml", "utf8");
+assert.match(cargoManifest, new RegExp(`^version = "${packageJson.version.replaceAll(".", "\\.")}"$`, "m"), "Rust desktop version must match package.json");
 
 const capability = JSON.parse(await readFile("src-tauri/capabilities/default.json", "utf8"));
 assert.equal(capability.identifier, "default");
