@@ -23,10 +23,10 @@ import { createSlideModel } from "./slide-model.js";
 import { createFixedLayoutModel, createTextRun } from "./fixed-layout.js";
 
 // WorkbookModel → SemanticDoc：每个 sheet 转成 heading + table block。
-export function workbookToSemantic(workbook, { title = "workbook", sourceFormat = "" } = {}) {
+export function workbookToSemantic(workbook, { title = "workbook", sourceFormat = "", includeSheetHeadings = true } = {}) {
   const blocks = [];
   for (const sheet of workbook?.sheets || []) {
-    if (sheet.name) blocks.push(createHeading(2, sheet.name));
+    if (includeSheetHeadings && sheet.name) blocks.push(createHeading(2, sheet.name));
     if (Array.isArray(sheet.headers) && sheet.headers.length > 0) {
       blocks.push(createTable(sheet.headers, sheet.rows || []));
     }

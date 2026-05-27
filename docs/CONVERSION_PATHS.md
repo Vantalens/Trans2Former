@@ -25,9 +25,15 @@ Trans2Former 区分两件事：
 | DOC / DOCX | Markdown、HTML、TXT、JSON、DOCX、PDF | 文档源不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
 | EPUB | Markdown、HTML、TXT、JSON、DOCX、PDF、EPUB | 电子书源保留文档和发布路径。 |
 | PDF | Markdown、HTML、TXT、JSON、DOCX、PDF | 当前主要是文本型 PDF 抽取，不提供表格/演示高保真输出。 |
-| PPTX | Markdown、HTML、TXT、JSON、PDF | 演示源可抽取为文档或导出 PDF，不做反向复杂编辑。 |
+| PPTX | Markdown、HTML、TXT、JSON、PDF、PPTX | 演示源可抽取为文档；PPTX 写出仅为重新生成的基础演示，不是原稿保真写回。 |
 | PNG | HTML、TXT、JSON、PDF | 图片源进入资产/预览路径，OCR 和图片重渲染进入核心本地增强路线。 |
 | OFD | Markdown、HTML、TXT、JSON、PDF | 核心包提供 L0 级本地解析路径，高保真继续并入核心本地增强。 |
+
+## 路径分级
+
+- `Markdown / HTML / JSON -> PPTX` 与 `PPTX -> PPTX` 属于 `generated`：writer 从语义内容重新生成基础演示，转换模型附带 `PATH_NOT_RECOMMENDED`。
+- `OFD -> PDF` 属于 `restricted`：当前 OFD reader 仅提供 L0 占位能力，PDF 输出不能视为版面保持导出。
+- 表格稳定链优先执行 `SemanticDoc <-> WorkbookModel` mapper；执行结果写入 `executedMappers`，便于质量报告与回归校验。
 
 ## UI 规则
 

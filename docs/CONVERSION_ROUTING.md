@@ -1,10 +1,10 @@
 # Conversion Routing
 
-版本：v0.2.0
-状态：P8-A 路径与质量提示已接入；P8-B 执行型 mapper 与路径校准待开发
+版本：v0.3.0
+状态：P8-B 首批执行型 mapper 与路径校准已接入
 最后更新：2026-05-27
 
-[CONVERSION_PATHS.md](CONVERSION_PATHS.md) 仍然是当前生效的产品路径矩阵。本文记录 P8-A 已落地的模型路径、温度与质量提示机制，以及 P8-B 需要纠正的执行边界；产品是否推荐某条转换路径继续由保守维护的产品矩阵控制。
+[CONVERSION_PATHS.md](CONVERSION_PATHS.md) 仍然是当前生效的产品路径矩阵。本文记录已落地的模型路径、执行证据、温度与质量提示机制；产品是否开放某条转换路径继续由保守维护的产品矩阵控制。
 
 ## 痛点回顾
 
@@ -17,17 +17,21 @@
 每个 reader / writer 注册时声明：
 
 ```js
-registry.registerReader("pdf", {
+registry.registerFormat("pdf", {
   read: readPdf,
-  inputModels: ["FixedLayoutModel"],   // 这个 reader 能产出哪些规范模型
+  producesModels: ["FixedLayoutModel", "SemanticDoc"],
+  primaryModel: "FixedLayoutModel",
+  acceptsModels: ["FixedLayoutModel", "SemanticDoc"],
   qualityGrade: "enhanced",
   warnings: ["PDF_TEXT_ORDER_APPROXIMATED"],
   ...
 });
 
-registry.registerWriter("md", {
+registry.registerFormat("md", {
+  read: readMarkdown,
   write: writeMarkdown,
-  acceptModels: ["SemanticDoc"],        // 这个 writer 接受哪些规范模型
+  producesModels: ["SemanticDoc"],
+  acceptsModels: ["SemanticDoc"],
   qualityGrade: "ai-ready",
   ...
 });
@@ -47,21 +51,23 @@ registry.registerMapper({
 
 ### Route Planner
 
-P8-A 中，`RoutePlanner` 计算模型可达路径和损失提示：
+`RoutePlanner` 计算模型可达路径，并由转换注册表执行已有证据支持的 mapper：
 
 ```
 1. reader[from].inputModels 给出可达模型集合 M0
 2. 从 M0 出发，走 mapper 图（BFS），扩展出可达模型集合 M*
 3. 为产品矩阵允许的目标 writer 选择一条可达模型路径
 4. 按"模型距离 + lossLevel"给路径打分（hot / warm / cold）
-5. 把路径携带的 `forcedWarnings` 写入转换模型的 `QualityReport`
+5. 执行具备 `fn` 的连续 mapper 段，将实际执行名称写入 `executedMappers`
+6. 仅把已执行 mapper 的 `forcedWarnings` 写入转换模型的 `QualityReport`
+7. 对 `generated` / `restricted` 路径注入 `PATH_NOT_RECOMMENDED`
 ```
 
 **hot**：reader → writer 共享同一模型，无 mapper（如 `md → md`、`xlsx → xlsx`）。
 **warm**：经过一次 low-loss mapper（如 `csv → md`：WorkbookModel → SemanticDoc.table）。
-**cold**：经过一次 high-loss mapper 或多次 mapper 链（如 `pdf → docx`：FixedLayoutModel → SemanticDoc → DOCX）。
+**cold**：经过中高损失规划边、多个 mapper，或属于生成型降级出口（如 `md → pptx`）。
 
-工作台完成转换后展示带 `routeTemperature` 与 `forcedWarnings` 的转换质量模型。格式选择仍以产品矩阵为准，不因模型技术可达而自动开放不推荐输出。当前 warnings 基于规划路径写入，不代表对应 mapper 已实际改写转换 payload。
+工作台完成转换后展示带 `routeTemperature`、`routeClass`、`executedMappers` 与 warnings 的转换质量模型。格式选择仍以产品矩阵为准，不因模型技术可达而自动开放不推荐输出。Slide/FixedLayout 的规划边仍保留用于能力判断，但在未接入函数前不生成 mapper 已执行警告。
 
 ### 路径示例
 
@@ -70,22 +76,21 @@ P8-A 中，`RoutePlanner` 计算模型可达路径和损失提示：
 | md → html | reader=md→SemanticDoc → writer=html | hot |
 | md → docx | reader=md→SemanticDoc → writer=docx | hot |
 | csv → md | reader=csv→Workbook → mapper.workbookToSemantic → writer=md | warm |
-| pdf → md | reader=pdf→FixedLayout → mapper.fixedLayoutToSemantic → writer=md | cold |
-| pdf → docx | reader=pdf→FixedLayout → mapper.fixedLayoutToSemantic → writer=docx | cold |
-| xlsx → docx | reader=xlsx→Workbook → mapper.workbookToSemantic → writer=docx | warm |
-| pptx → md | reader=pptx→Slide → mapper.slideToSemantic → writer=md | warm |
-| pptx → docx | reader=pptx→Slide → mapper.slideToSemantic → writer=docx | warm |
-| pptx → xlsx | reader=pptx→Slide → mapper.slideToSemantic → mapper.semanticToWorkbook → writer=xlsx | cold |
-| png → md | reader=png→FixedLayout（核心 OCR 增强）→ mapper.fixedLayoutToSemantic → writer=md | cold（依赖后续核心增强） |
-| ofd → pdf | reader=ofd→FixedLayout → writer=pdf | warm |
+| md → xlsx | reader=md→SemanticDoc → mapper.semanticToWorkbook → writer=xlsx | warm |
+| xlsx → csv | reader=xlsx→Workbook → mapper.workbookToSemantic → writer=csv | warm |
+| pdf → docx | reader=pdf→FixedLayout → planned mapper.fixedLayoutToSemantic → writer=docx | cold（mapper 待证据） |
+| pptx → md | reader=pptx→Slide → planned mapper.slideToSemantic → writer=md | cold（mapper 待证据） |
+| md → pptx | writer 根据 SemanticDoc 重新生成基础 PPTX | cold / generated |
+| pptx → pptx | writer 根据抽取后的语义内容重新生成 PPTX | cold / generated |
+| ofd → pdf | OFD L0 语义占位 → PDF 程序化输出 | cold / restricted |
 
 ## 不推荐路径
 
-某些路径技术上可达但语义勉强（如 `pptx → xlsx`、`xlsx → pptx`、`pdf → epub`），Capability Registry 标记为 `not-recommended: true`：
+部分已开放路径仅代表可生成输出，不代表保真互转：
 
-- UI 仍然显示，但默认不在快捷选项里
-- 转换时强制弹一条 `policy` 级 warning：`PATH_NOT_RECOMMENDED`
-- qualityReport 注明"非推荐路径，输出仅供查看"
+- `md/html/json -> pptx` 与 `pptx -> pptx` 标记为 `routeClass=generated`。
+- `ofd -> pdf` 标记为 `routeClass=restricted`。
+- 转换模型附带 `PATH_NOT_RECOMMENDED`，提示输出不代表保真互转。
 
 ## External Engine Bridge
 
@@ -98,23 +103,23 @@ P8-A 中，`RoutePlanner` 计算模型可达路径和损失提示：
 | [CONVERSION_PATHS.md](CONVERSION_PATHS.md) | 当前生效的用户可选产品路径矩阵 |
 | 本文档 | P8 模型可达性、路径温度与强制降级提示机制 |
 
-## P8-B 执行边界校准
+## P8-B 执行边界校准结果
 
-经研究报告与代码核对，当前注册的专属模型声明尚未全部对应 writer 的实际消费方式：
+经研究报告与代码核对，注册表已按 writer 的实际消费方式校准：
 
-- `XLSX` 和 `PDF` writer 已具备专属模型优先路径，适合作为真实执行链依据。
+- `XLSX` writer 具备 `WorkbookModel` 优先路径，作为首批真实执行链依据。
 - `CSV` writer 当前仍消费 `SemanticDoc` table；因此 `xlsx -> csv` 需要经过 `WorkbookModel -> SemanticDoc`，不能视为同模型 hot 路径。
 - `PPTX` writer 当前从语义文本生成单页输出，`pptx -> pptx` 不能表述为 `SlideModel` 保真写回。
-- `OFD` reader 当前仅有空 `FixedLayoutModel` 占位，`ofd -> pdf` 不能表述为已具备稳定布局保持能力。
+- `OFD` reader 当前仅提供 `SemanticDoc` 占位读入，`ofd -> pdf` 不能表述为已具备稳定布局保持能力。
 
-P8-B 将引入真实 mapper 执行证据字段 `executedMappers`，优先接入 `SemanticDoc <-> WorkbookModel` 路径；Slide/FixedLayout 自动映射在 writer 和质量 fixture 具备证据后再启用。
+P8-B 已引入真实 mapper 执行证据字段 `executedMappers` 并接入 `SemanticDoc <-> WorkbookModel` 路径；Slide/FixedLayout 自动映射仍在 writer 和质量 fixture 具备证据后再启用。
 
 ## 程序层规则
 
 当前规则：
 
 - `getAllowedOutputFormats(from)` 继续维护产品推荐边界，避免只因技术可达而暴露低质量输出。
-- `ConverterRegistry.prepareConversionModel()` 先校验产品路径，再由 Planner 选择模型路径并注入 route warnings。
+- `ConverterRegistry.prepareConversionModel()` 先校验产品路径，再由 Planner 选择模型路径、执行有实现的 mapper，并注入执行警告或路径分类警告。
 - `ConverterRegistry.convert()` 使用上述转换模型执行 writer，UI 同步用该模型显示 QualityReport。
 - 不支持的路径返回 `UNSUPPORTED_CONVERSION_PATH`，未注册 reader/writer 返回 `UNSUPPORTED_INPUT_FORMAT` / `UNSUPPORTED_OUTPUT_FORMAT`
 - 新增格式时必须声明 reader/writer 的真实模型能力，并在新增推荐路径时同步产品矩阵与测试。
@@ -122,4 +127,4 @@ P8-B 将引入真实 mapper 执行证据字段 `executedMappers`，优先接入 
 
 ## 后续增强
 
-P8-A 的路径可见性已闭环。P8-B 将在 `prepareConversionModel()` 中把现有 reader 附带的 `workbook` 数据显式交给可执行 mapper；`slide` / `fixedLayout` 路径继续等待 writer 能力与质量证据，不仅增加格式列表或静态可达声明。
+P8-B 的首批执行链已闭环。后续由 P9 补齐 `slide` / `fixedLayout` 路径的 writer 能力、公开 fixture 与视觉质量证据；在证据成立前不将规划边提升为实际 mapper 执行。

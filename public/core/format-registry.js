@@ -32,6 +32,14 @@ const PRODUCT_MATRIX_BY_INPUT = {
   ofd: ["md", "html", "txt", "json", "xml", "pdf"],
 };
 
+const ROUTE_CLASS_OVERRIDES = {
+  "md->pptx": "generated",
+  "html->pptx": "generated",
+  "json->pptx": "generated",
+  "pptx->pptx": "generated",
+  "ofd->pdf": "restricted",
+};
+
 export function normalizeFormat(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return FORMAT_ALIASES[normalized] || normalized;
@@ -44,14 +52,16 @@ export function normalizeFormat(value) {
 //
 export class RoutePlanner {
   constructor() {
-    this.mappers = []; // { from, to, lossLevel, forcedWarnings }
+    this.mappers = []; // { name, from, to, fn, lossLevel, forcedWarnings }
   }
 
-  registerMapper({ from, to, lossLevel = "low", forcedWarnings = [] }) {
+  registerMapper({ name, from, to, fn, lossLevel = "low", forcedWarnings = [] }) {
     if (!from || !to) return;
     this.mappers.push({
+      name: String(name || `${from}To${to}`),
       from: String(from),
       to: String(to),
+      fn: typeof fn === "function" ? fn : null,
       lossLevel: String(lossLevel),
       forcedWarnings: forcedWarnings.map((w) => String(w)),
     });
@@ -78,33 +88,34 @@ export class RoutePlanner {
   // - cold：经过 medium/high-loss mapper 或多步链
   // 返回 null 表示模型上无法到达。
   getRoute(readerInputModels = [], writerAcceptModels = []) {
-    const accepted = new Set(writerAcceptModels);
-    const directModel = readerInputModels.find((model) => accepted.has(model));
-    if (directModel) {
-      return { temperature: "hot", models: [directModel], mappers: [] };
-    }
+    for (const acceptedModel of writerAcceptModels) {
+      const directModel = readerInputModels.find((model) => model === acceptedModel);
+      if (directModel) {
+        return { temperature: "hot", models: [directModel], mappers: [] };
+      }
 
-    const visited = new Set(readerInputModels);
-    const queue = readerInputModels.map((model) => ({ model, models: [model], mappers: [] }));
-    while (queue.length > 0) {
-      const current = queue.shift();
-      for (const mapper of this.mappers) {
-        if (mapper.from !== current.model || visited.has(mapper.to)) continue;
-        const route = {
-          model: mapper.to,
-          models: [...current.models, mapper.to],
-          mappers: [...current.mappers, mapper],
-        };
-        if (accepted.has(mapper.to)) {
-          const warm = route.mappers.length === 1 && route.mappers[0].lossLevel === "low";
-          return {
-            temperature: warm ? "warm" : "cold",
-            models: route.models,
-            mappers: route.mappers,
+      const visited = new Set(readerInputModels);
+      const queue = readerInputModels.map((model) => ({ model, models: [model], mappers: [] }));
+      while (queue.length > 0) {
+        const current = queue.shift();
+        for (const mapper of this.mappers) {
+          if (mapper.from !== current.model || visited.has(mapper.to)) continue;
+          const route = {
+            model: mapper.to,
+            models: [...current.models, mapper.to],
+            mappers: [...current.mappers, mapper],
           };
+          if (mapper.to === acceptedModel) {
+            const warm = route.mappers.length === 1 && route.mappers[0].lossLevel === "low";
+            return {
+              temperature: warm ? "warm" : "cold",
+              models: route.models,
+              mappers: route.mappers,
+            };
+          }
+          visited.add(mapper.to);
+          queue.push(route);
         }
-        visited.add(mapper.to);
-        queue.push(route);
       }
     }
     return null;
@@ -122,6 +133,31 @@ export function getAllowedOutputFormats(from) {
   return [...(PRODUCT_MATRIX_BY_INPUT[normalizeFormat(from)] || [])];
 }
 
+function getPayload(model, type) {
+  if (type === "SemanticDoc") return model;
+  if (type === "WorkbookModel") return model.workbook;
+  if (type === "SlideModel") return model.slides;
+  if (type === "FixedLayoutModel") return model.fixedLayout;
+  return null;
+}
+
+function attachPayload(carrier, type, payload) {
+  if (type === "WorkbookModel") return { ...carrier, workbook: payload };
+  if (type === "SlideModel") return { ...carrier, slides: payload };
+  if (type === "FixedLayoutModel") return { ...carrier, fixedLayout: payload };
+  if (type === "SemanticDoc") {
+    return {
+      ...carrier,
+      ...payload,
+      metadata: carrier.metadata,
+      workbook: carrier.workbook,
+      slides: carrier.slides,
+      fixedLayout: carrier.fixedLayout,
+    };
+  }
+  return carrier;
+}
+
 export class ConverterRegistry {
   constructor() {
     this.readers = new Map();
@@ -132,6 +168,10 @@ export class ConverterRegistry {
     this.notes = new Map();
     this.inputModelsByFormat = new Map();
     this.acceptModelsByFormat = new Map();
+    this.producesModelsByFormat = new Map();
+    this.primaryModelByFormat = new Map();
+    this.writerModeByFormat = new Map();
+    this.readerMaturityByFormat = new Map();
     this.planner = new RoutePlanner();
   }
 
@@ -148,15 +188,26 @@ export class ConverterRegistry {
     degradation = "",
     inputModels = ["SemanticDoc"],
     outputModels = ["SemanticDoc"],
+    producesModels = inputModels,
+    acceptsModels = outputModels,
+    primaryModel = producesModels[0] || "",
+    writerMode = "native",
+    readerMaturity = "native",
   }) {
     const normalized = normalizeFormat(format);
+    const normalizedProducesModels = producesModels.map((model) => String(model));
+    const normalizedAcceptsModels = acceptsModels.map((model) => String(model));
     if (typeof read === "function") {
       this.readers.set(normalized, read);
-      this.inputModelsByFormat.set(normalized, inputModels.map((m) => String(m)));
+      this.inputModelsByFormat.set(normalized, normalizedProducesModels);
+      this.producesModelsByFormat.set(normalized, normalizedProducesModels);
+      this.primaryModelByFormat.set(normalized, String(primaryModel));
+      this.readerMaturityByFormat.set(normalized, String(readerMaturity));
     }
     if (typeof write === "function") {
       this.writers.set(normalized, write);
-      this.acceptModelsByFormat.set(normalized, outputModels.map((m) => String(m)));
+      this.acceptModelsByFormat.set(normalized, normalizedAcceptsModels);
+      this.writerModeByFormat.set(normalized, String(writerMode));
     }
     this.extensions.set(normalized, extension);
     this.mimes.set(normalized, mime);
@@ -179,19 +230,30 @@ export class ConverterRegistry {
   }
 
   getRouteTemperature(from, to) {
-    const fromFormat = normalizeFormat(from);
-    const toFormat = normalizeFormat(to);
-    const fromModels = this.inputModelsByFormat.get(fromFormat);
-    const toModels = this.acceptModelsByFormat.get(toFormat);
-    if (!fromModels || !toModels) return null;
-    return this.planner.getRouteTemperature(fromModels, toModels);
+    return this.getRouteDetails(from, to)?.temperature || null;
   }
 
   getRoute(from, to) {
-    const fromModels = this.inputModelsByFormat.get(normalizeFormat(from));
+    const fromFormat = normalizeFormat(from);
+    const fromModels = this.primaryModelByFormat.has(fromFormat)
+      ? [this.primaryModelByFormat.get(fromFormat)]
+      : this.inputModelsByFormat.get(fromFormat);
     const toModels = this.acceptModelsByFormat.get(normalizeFormat(to));
     if (!fromModels || !toModels) return null;
     return this.planner.getRoute(fromModels, toModels);
+  }
+
+  getRouteDetails(from, to) {
+    const fromFormat = normalizeFormat(from);
+    const toFormat = normalizeFormat(to);
+    const route = this.getRoute(fromFormat, toFormat);
+    if (!route) return null;
+    const routeClass = ROUTE_CLASS_OVERRIDES[`${fromFormat}->${toFormat}`]
+      || (route.mappers.length > 0 ? "degraded" : "recommended");
+    const temperature = routeClass === "generated" && route.temperature === "hot"
+      ? "cold"
+      : route.temperature;
+    return { ...route, routeClass, temperature };
   }
 
   isModelReachable(from, to) {
@@ -229,6 +291,11 @@ export class ConverterRegistry {
       note: this.notes.get(format) || "",
       inputModels: this.inputModelsByFormat.get(format) || [],
       outputModels: this.acceptModelsByFormat.get(format) || [],
+      producesModels: this.producesModelsByFormat.get(format) || [],
+      acceptsModels: this.acceptModelsByFormat.get(format) || [],
+      primaryModel: this.primaryModelByFormat.get(format) || "",
+      writerMode: this.writerModeByFormat.get(format) || "native",
+      readerMaturity: this.readerMaturityByFormat.get(format) || "native",
       ...(this.capabilityDetails?.get(format) || {}),
     }));
   }
@@ -287,24 +354,56 @@ export class ConverterRegistry {
     }
 
     const model = this.read({ content, from: fromFormat, title, fileName });
-    const route = this.getRoute(fromFormat, toFormat);
-    const routeWarnings = [...new Set((route?.mappers || []).flatMap((mapper) => mapper.forcedWarnings))]
+    const route = this.getRouteDetails(fromFormat, toFormat);
+    let mappedModel = model;
+    let routeExecutionActive = true;
+    const executedMappers = [];
+    for (const mapper of route?.mappers || []) {
+      if (!routeExecutionActive || typeof mapper.fn !== "function") {
+        routeExecutionActive = false;
+        continue;
+      }
+      const payload = getPayload(mappedModel, mapper.from);
+      if (!payload) {
+        routeExecutionActive = false;
+        continue;
+      }
+      const mappedPayload = mapper.fn(payload, {
+        title,
+        sourceFormat: fromFormat,
+        defaultSheetName: title,
+        includeSheetHeadings: fromFormat !== "csv",
+      });
+      mappedModel = attachPayload(mappedModel, mapper.to, mappedPayload);
+      executedMappers.push(mapper);
+    }
+    const routeWarnings = [...new Set(executedMappers.flatMap((mapper) => mapper.forcedWarnings))]
       .map((code) => createWarning(
         "lossy",
         code,
         `转换路径 ${fromFormat} -> ${toFormat} 会经过 ${route.temperature} 级模型降级: ${code}.`,
         { from: fromFormat, to: toFormat, routeTemperature: route.temperature }
       ));
+    const routeClassWarnings = ["generated", "restricted"].includes(route?.routeClass)
+      ? [createWarning(
+        "unsupported",
+        "PATH_NOT_RECOMMENDED",
+        `转换路径 ${fromFormat} -> ${toFormat} 属于 ${route.routeClass} 路径，输出不代表保真互转。`,
+        { from: fromFormat, to: toFormat, routeClass: route.routeClass }
+      )]
+      : [];
     const routedModel = {
-      ...model,
+      ...mappedModel,
       metadata: withWarnings({
-        ...(model.metadata || {}),
+        ...(mappedModel.metadata || {}),
         conversion: {
-          ...(model.metadata?.conversion || {}),
+          ...(mappedModel.metadata?.conversion || {}),
           routeTemperature: route?.temperature || "unknown",
           routeModels: route?.models || [],
+          routeClass: route?.routeClass || "recommended",
+          executedMappers: executedMappers.map((mapper) => mapper.name),
         },
-      }, routeWarnings),
+      }, [...routeWarnings, ...routeClassWarnings]),
     };
     return ensureDocumentAudit(routedModel, {
       content,

@@ -15,7 +15,9 @@
       "routeTemperature": "hot",
       "routeModels": [
         "SemanticDoc"
-      ]
+      ],
+      "routeClass": "recommended",
+      "executedMappers": []
     },
     "qualityReport": {
       "structureFidelity": "high",
