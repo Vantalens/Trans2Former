@@ -11,7 +11,13 @@
       "writer": "json",
       "targetFormat": "json",
       "schemaVersion": "trans2former.document.v1",
-      "options": {}
+      "options": {},
+      "routeTemperature": "hot",
+      "routeModels": [
+        "SemanticDoc"
+      ],
+      "routeClass": "recommended",
+      "executedMappers": []
     },
     "qualityReport": {
       "structureFidelity": "high",

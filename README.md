@@ -5,8 +5,8 @@
 Trans2Former 是一个专业级的桌面文档转换工具，支持 12 种输入格式和 11 种输出格式的相互转换。所有转换在本地完成，零上传，保护您的数据隐私。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-44%2F44%20passing-brightgreen.svg)](#)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](#)
+[![Tests](https://img.shields.io/badge/smoke-46%20groups%20passing-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](#)
 
 ---
 

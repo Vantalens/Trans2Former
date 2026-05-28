@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { convertContent, getRouteTemperature, toDocumentModel } from "../public/browser-transformer.js";
+import { convertContent, getRouteTemperature, toConversionDocumentModel, toDocumentModel } from "../public/browser-transformer.js";
 
 const QUALITY_TARGETS = [
   {
@@ -69,6 +69,8 @@ const QUALITY_TARGETS = [
     to: "md",
     keywords: ["| 名称 | 说明 |", "苹果", "中文单元格", "香蕉"],
     expectedTemperature: "warm",
+    expectedMapper: "workbookToSemantic",
+    forbiddenKeywords: ["## unicode.csv"],
     structureMin: { table: 1 },
   },
   {
@@ -149,9 +151,22 @@ for (const target of QUALITY_TARGETS) {
       throw new Error(`输出长度 ${data.length} 低于阈值 ${target.minLength}`);
     }
 
+    if (target.expectedMapper) {
+      const routedModel = toConversionDocumentModel(raw, target.from, target.to, fileName, fileName);
+      assert.equal(
+        routedModel.metadata.conversion.executedMappers.includes(target.expectedMapper),
+        true,
+        `${target.name} 未实际执行 ${target.expectedMapper}`
+      );
+    }
+
     const missingKeywords = target.keywords.filter((keyword) => !data.includes(keyword));
     if (missingKeywords.length > 0) {
       throw new Error(`关键词丢失：${missingKeywords.map((kw) => JSON.stringify(kw)).join(", ")}`);
+    }
+    const unexpectedKeywords = (target.forbiddenKeywords || []).filter((keyword) => data.includes(keyword));
+    if (unexpectedKeywords.length > 0) {
+      throw new Error(`出现不期望内容：${unexpectedKeywords.map((kw) => JSON.stringify(kw)).join(", ")}`);
     }
 
     if (target.structureMin) {

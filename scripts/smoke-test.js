@@ -1133,6 +1133,16 @@ test("Markdown advanced syntax keeps ordered lists, nesting hints, alignment, an
   assert.equal(preview.includes('<sup id="fnref-safe">'), true);
 });
 
+test("Markdown writer preserves task list syntax without exporting active raw HTML from text", () => {
+  const taskMarkdown = convertContent({ content: "- [x] done", from: "md", to: "md", title: "task" }).data;
+  assert.equal(taskMarkdown.includes("- [x] done"), true);
+
+  const unsafeText = "<img src=x onerror=alert(1)> & text";
+  const escapedMarkdown = convertContent({ content: unsafeText, from: "txt", to: "md", title: "unsafe" }).data;
+  assert.equal(escapedMarkdown.includes("\\<img src=x onerror=alert(1)\\>"), true);
+  assert.equal(escapedMarkdown.includes("<img src=x onerror=alert(1)>"), false);
+});
+
 test("JSON output wraps a DocumentModel with markdown and plain text projections", () => {
   const markdown = "# Title\n\nHello **Trans2Former**.";
   const jsonDocument = convertContent({ content: markdown, from: "md", to: "json", title: "sample" });

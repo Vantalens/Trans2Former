@@ -4,9 +4,11 @@ import {
   convertContent,
   getAllowedOutputFormats,
   getFormatCapabilities,
+  getRouteDetails,
   getRouteTemperature,
   isModelReachable,
   listFormats,
+  toConversionDocumentModel,
 } from "../public/browser-transformer.js";
 import { decodeTextBytes } from "../public/core/text-decoding.js";
 import { createDocumentModel, createHeading, createParagraph, getPlainText } from "../public/core/document-model.js";
@@ -144,27 +146,37 @@ const capabilities = getFormatCapabilities();
 const capabilityByFormat = new Map(capabilities.map((entry) => [entry.format, entry]));
 assert.deepEqual(capabilityByFormat.get("md").inputModels, ["SemanticDoc"]);
 assert.deepEqual(capabilityByFormat.get("md").outputModels, ["SemanticDoc"]);
-assert.deepEqual(capabilityByFormat.get("csv").inputModels, ["WorkbookModel"]);
-assert.deepEqual(capabilityByFormat.get("xlsx").outputModels, ["WorkbookModel"]);
-assert.deepEqual(capabilityByFormat.get("pptx").inputModels, ["SlideModel"]);
-assert.deepEqual(capabilityByFormat.get("pdf").inputModels, ["FixedLayoutModel"]);
-assert.deepEqual(capabilityByFormat.get("ofd").inputModels, ["FixedLayoutModel"]);
+assert.deepEqual(capabilityByFormat.get("csv").producesModels, ["WorkbookModel", "SemanticDoc"]);
+assert.equal(capabilityByFormat.get("csv").primaryModel, "WorkbookModel");
+assert.deepEqual(capabilityByFormat.get("csv").acceptsModels, ["SemanticDoc"]);
+assert.deepEqual(capabilityByFormat.get("xlsx").producesModels, ["WorkbookModel", "SemanticDoc"]);
+assert.equal(capabilityByFormat.get("xlsx").primaryModel, "WorkbookModel");
+assert.deepEqual(capabilityByFormat.get("xlsx").acceptsModels, ["WorkbookModel", "SemanticDoc"]);
+assert.deepEqual(capabilityByFormat.get("pptx").producesModels, ["SlideModel", "SemanticDoc"]);
+assert.equal(capabilityByFormat.get("pptx").writerMode, "generated");
+assert.deepEqual(capabilityByFormat.get("pdf").producesModels, ["FixedLayoutModel", "SemanticDoc"]);
+assert.deepEqual(capabilityByFormat.get("pdf").acceptsModels, ["FixedLayoutModel", "SemanticDoc"]);
+assert.deepEqual(capabilityByFormat.get("ofd").producesModels, ["SemanticDoc"]);
+assert.equal(capabilityByFormat.get("ofd").readerMaturity, "placeholder");
 
 // hot：reader / writer 共享同一模型
 assert.equal(getRouteTemperature("md", "html"), "hot");
 assert.equal(getRouteTemperature("md", "docx"), "hot");
 assert.equal(getRouteTemperature("csv", "xlsx"), "hot");
-assert.equal(getRouteTemperature("pptx", "pptx"), "hot");
+assert.notEqual(getRouteTemperature("pptx", "pptx"), "hot");
 
 // warm：经过一次 low-loss mapper（WorkbookModel ↔ SemanticDoc）
 assert.equal(getRouteTemperature("csv", "md"), "warm");
-assert.equal(getRouteTemperature("md", "csv"), "warm");
+assert.equal(getRouteTemperature("md", "csv"), "hot", "CSV writer currently consumes SemanticDoc table blocks directly");
 assert.equal(getRouteTemperature("xlsx", "html"), "warm");
 
 // cold：经过一次 medium/high-loss mapper（SlideModel/FixedLayoutModel → SemanticDoc）
 assert.equal(getRouteTemperature("pptx", "md"), "cold");
 assert.equal(getRouteTemperature("pdf", "md"), "cold");
 assert.equal(getRouteTemperature("pdf", "docx"), "cold");
+assert.equal(getRouteDetails("pptx", "pptx").routeClass, "generated");
+assert.equal(getRouteDetails("ofd", "pdf").routeClass, "restricted");
+assert.equal(getRouteTemperature("md", "pptx"), "cold", "generated PPTX output cannot be advertised as hot");
 
 // 模型可达性：当前所有产品矩阵中允许的路径在新机制下也都可达
 for (const from of listFormats().input) {
@@ -179,5 +191,52 @@ for (const from of listFormats().input) {
 
 const baseTemperature = getRouteTemperature("pdf", "docx");
 assert.equal(baseTemperature, "cold", "PDF -> DOCX 默认走 FixedLayoutModel→SemanticDoc 应当为 cold");
+
+const csvMarkdownModel = toConversionDocumentModel(sourceByFormat.csv, "csv", "md", "route.csv");
+assert.equal(
+  csvMarkdownModel.metadata.warnings.some((warning) => warning.code === "MODEL_STYLE_DROPPED"),
+  true,
+  "warm cross-model routes must expose their forced loss warning in the conversion quality report"
+);
+assert.equal(csvMarkdownModel.metadata.conversion.routeTemperature, "warm");
+
+const markdownTableSource = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+const markdownXlsxModel = toConversionDocumentModel(markdownTableSource, "md", "xlsx", "route.md");
+assert.deepEqual(markdownXlsxModel.metadata.conversion.executedMappers, ["semanticToWorkbook"]);
+assert.equal(markdownXlsxModel.workbook.sheets.length, 1);
+
+assert.deepEqual(csvMarkdownModel.metadata.conversion.executedMappers, ["workbookToSemantic"]);
+
+const xlsxFixture = convertContent({ content: markdownTableSource, from: "md", to: "xlsx", title: "route.xlsx" }).data;
+const xlsxSelfModel = toConversionDocumentModel(xlsxFixture, "xlsx", "xlsx", "route.xlsx");
+assert.deepEqual(xlsxSelfModel.metadata.conversion.executedMappers, []);
+
+const xlsxCsvModel = toConversionDocumentModel(xlsxFixture, "xlsx", "csv", "route.xlsx");
+assert.deepEqual(xlsxCsvModel.metadata.conversion.executedMappers, ["workbookToSemantic"]);
+
+const pdfDocxModel = toConversionDocumentModel(sourceByFormat.md, "pdf", "docx", "route.pdf");
+assert.equal(
+  pdfDocxModel.metadata.warnings.some((warning) => warning.code === "MODEL_VISUAL_FIDELITY_LOST"),
+  false,
+  "deferred fixed-layout topology must not emit mapper warnings until the mapper executes"
+);
+assert.equal(pdfDocxModel.metadata.conversion.routeTemperature, "cold");
+assert.deepEqual(pdfDocxModel.metadata.conversion.executedMappers, []);
+
+const generatedPptxModel = toConversionDocumentModel(sourceByFormat.md, "md", "pptx", "generated.md");
+assert.equal(generatedPptxModel.metadata.conversion.routeClass, "generated");
+assert.equal(
+  generatedPptxModel.metadata.warnings.some((warning) => warning.code === "PATH_NOT_RECOMMENDED"),
+  true,
+  "generated presentation output must disclose that it is not a fidelity-preserving route"
+);
+
+const restrictedOfdPdfModel = toConversionDocumentModel(sourceByFormat.ofd, "ofd", "pdf", "restricted.ofd");
+assert.equal(restrictedOfdPdfModel.metadata.conversion.routeClass, "restricted");
+assert.equal(
+  restrictedOfdPdfModel.metadata.warnings.some((warning) => warning.code === "PATH_NOT_RECOMMENDED"),
+  true,
+  "placeholder OFD fixed-layout capability must not be advertised as fidelity-preserving PDF export"
+);
 
 console.log("Capability Registry / RoutePlanner test passed: core model annotations and route temperatures cover the current product matrix.");

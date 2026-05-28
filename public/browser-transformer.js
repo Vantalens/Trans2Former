@@ -15,6 +15,7 @@ import { readPptx, writePptx } from "./formats/pptx.js";
 import { readXml, writeXml } from "./formats/xml.js";
 import { readXlsx, writeXlsx } from "./formats/xlsx.js";
 import { readOfdL0 } from "./formats/ofd.js";
+import { semanticToWorkbook, workbookToSemantic } from "./core/models/mappers.js";
 
 const EXT_TO_FORMAT = {
   md: "md",
@@ -85,8 +86,9 @@ registry.registerFormat("csv", {
   mime: "text/csv;charset=utf-8",
   label: "CSV",
   note: "以第一行作为表头导入 DocumentModel table",
-  inputModels: ["WorkbookModel"],
-  outputModels: ["WorkbookModel"],
+  producesModels: ["WorkbookModel", "SemanticDoc"],
+  primaryModel: "WorkbookModel",
+  acceptsModels: ["SemanticDoc"],
 });
 
 registry.registerFormat("xml", {
@@ -152,8 +154,9 @@ registry.registerFormat("xlsx", {
   warnings: ["XLSX_FORMULA_CACHE_ONLY", "XLSX_MERGED_CELLS_APPROXIMATED"],
   resourceBudget: { maxInputBytes: 30 * 1024 * 1024, maxRuntimeMemoryMb: 512 },
   degradation: "读取单元格显示值和表格结构；公式执行、图表和宏不进入核心包。",
-  inputModels: ["WorkbookModel"],
-  outputModels: ["WorkbookModel"],
+  producesModels: ["WorkbookModel", "SemanticDoc"],
+  primaryModel: "WorkbookModel",
+  acceptsModels: ["WorkbookModel", "SemanticDoc"],
 });
 
 registry.registerFormat("epub", {
@@ -182,8 +185,10 @@ registry.registerFormat("pptx", {
   warnings: ["PPTX_LAYOUT_APPROXIMATED", "PPTX_ANIMATION_IGNORED"],
   resourceBudget: { maxInputBytes: 80 * 1024 * 1024, maxRuntimeMemoryMb: 1024 },
   degradation: "读取幻灯片文本、表格和图片引用；动画、母版精确布局和媒体播放降级。",
-  inputModels: ["SlideModel"],
-  outputModels: ["SlideModel"],
+  producesModels: ["SlideModel", "SemanticDoc"],
+  primaryModel: "SlideModel",
+  acceptsModels: ["SemanticDoc"],
+  writerMode: "generated",
 });
 
 registry.registerFormat("pdf", {
@@ -197,8 +202,9 @@ registry.registerFormat("pdf", {
   warnings: ["PDF_TEXT_ORDER_APPROXIMATED", "PDF_SCAN_OCR_CORE_LIMITED"],
   resourceBudget: { maxInputBytes: 50 * 1024 * 1024, maxRuntimeMemoryMb: 1024 },
   degradation: "文本型 PDF 可抽取；扫描件 OCR、复杂版面和表格恢复后续直接进入核心，不走插件安装。",
-  inputModels: ["FixedLayoutModel"],
-  outputModels: ["SemanticDoc", "FixedLayoutModel"],
+  producesModels: ["FixedLayoutModel", "SemanticDoc"],
+  primaryModel: "FixedLayoutModel",
+  acceptsModels: ["FixedLayoutModel", "SemanticDoc"],
 });
 
 registry.registerFormat("ofd", {
@@ -211,16 +217,18 @@ registry.registerFormat("ofd", {
   warnings: ["OFD_L1_CORE_LIMITED", "OFD_RENDER_CORE_LIMITED"],
   resourceBudget: { maxInputBytes: 80 * 1024 * 1024, maxRuntimeMemoryMb: 1024 },
   degradation: "核心包直接登记 OFD 容器和 metadata；页面树、文本、图片、签章和渲染仍是核心内置路线的后续增强，不再提示安装插件。",
-  inputModels: ["FixedLayoutModel"],
+  producesModels: ["SemanticDoc"],
+  primaryModel: "SemanticDoc",
+  readerMaturity: "placeholder",
 });
 
-// 跨模型 mapper：P8-M1 阶段只声明拓扑，真实 fn 在 P8-M3/M4 落地。
-// 当前所有 reader/writer 实质上还共用 SemanticDoc，mapper 用来给 RoutePlanner
-// 提供"模型可达性"判断，让 csv/xlsx → md、pptx → md、pdf → md 这类跨类
-// 路径在 capability 视图中明确标注 warm/cold 温度。详见 docs/CONVERSION_ROUTING.md。
-registry.registerMapper({ from: "WorkbookModel", to: "SemanticDoc", lossLevel: "low",
+// 跨模型路由图：reader 仍提供可写出的 DocumentModel，同时保留 workbook /
+// slide / fixedLayout 附加模型。RoutePlanner 用该拓扑计算 warm/cold 温度并将
+// forcedWarnings 注入转换 QualityReport，让跨类转换的损失在工作台可见。
+// 详见 docs/CONVERSION_ROUTING.md。
+registry.registerMapper({ name: "workbookToSemantic", from: "WorkbookModel", to: "SemanticDoc", fn: workbookToSemantic, lossLevel: "low",
   forcedWarnings: ["MODEL_STYLE_DROPPED", "MODEL_FORMULA_AS_VALUE"] });
-registry.registerMapper({ from: "SemanticDoc", to: "WorkbookModel", lossLevel: "low",
+registry.registerMapper({ name: "semanticToWorkbook", from: "SemanticDoc", to: "WorkbookModel", fn: semanticToWorkbook, lossLevel: "low",
   forcedWarnings: ["MODEL_NO_FORMULA_INFO"] });
 registry.registerMapper({ from: "SlideModel", to: "SemanticDoc", lossLevel: "medium",
   forcedWarnings: ["MODEL_VISUAL_LAYOUT_DROPPED"] });
@@ -247,6 +255,10 @@ export function getRouteTemperature(from, to) {
   return registry.getRouteTemperature(from, to);
 }
 
+export function getRouteDetails(from, to) {
+  return registry.getRouteDetails(from, to);
+}
+
 export function isModelReachable(from, to) {
   return registry.isModelReachable(from, to);
 }
@@ -266,6 +278,10 @@ export function getFormatCapabilities() {
 
 export function toDocumentModel(content, fromFormat, title = "document") {
   return registry.read({ content, from: fromFormat, title });
+}
+
+export function toConversionDocumentModel(content, fromFormat, toFormat, title = "document", fileName = "") {
+  return registry.prepareConversionModel({ content, from: fromFormat, to: toFormat, title, fileName });
 }
 
 export function renderPreviewHtml(content, fromFormat, title = "document") {

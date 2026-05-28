@@ -4,22 +4,22 @@
 
 ## 推荐阅读顺序
 
-1. [PROJECT_ASSESSMENT_2026-05-03.md](PROJECT_ASSESSMENT_2026-05-03.md)：当前项目评估、问题清单和优化后的阶段方向。
+1. [PROJECT_ASSESSMENT_2026-05-27.md](PROJECT_ASSESSMENT_2026-05-27.md)：当前项目评估、已验证发布基线和下一阶段方向。
 2. [PRODUCT_STRATEGY.md](PRODUCT_STRATEGY.md)：产品边界、市场路线、差异化亮点和数据安全底线。
 3. [DESKTOP_APP_ARCHITECTURE.md](DESKTOP_APP_ARCHITECTURE.md)：Tauri 桌面壳、Web-GUI、体验标准、版本控制和本地处理架构。
 4. [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md)：P7 桌面发布、安装包、checksum、平台 smoke 和核心能力发布规则。
 5. [CONVERSION_PATHS.md](CONVERSION_PATHS.md)：输入格式到输出格式的产品路径矩阵。
 6. [MULTI_MODEL_ARCHITECTURE.md](MULTI_MODEL_ARCHITECTURE.md)：P8 多模型架构（SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel / AssetGraph）。
-7. [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md)：P8 Capability Registry + Route Planner，路径矩阵自动派生。
+7. [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md)：P8 Capability Registry + Route Planner，路径可见性基线与执行型 mapper 后续校准。
 8. [FORMAT_ROADMAP.md](FORMAT_ROADMAP.md)：格式覆盖矩阵、格式优先级和建议执行顺序。
-7. [DOCUMENT_MODEL_SCHEMA.md](DOCUMENT_MODEL_SCHEMA.md)：`DocumentModel` 的结构说明。
-8. [CONVERSION_POLICY.md](CONVERSION_POLICY.md)：不可逆转换、降级和 warnings 策略。
-9. [BASIC_FORMAT_QUALITY.md](BASIC_FORMAT_QUALITY.md)：P0 基础格式 before/after、保真范围和降级说明。
-10. [HEAVY_FORMAT_CAPABILITY_NOTES.md](HEAVY_FORMAT_CAPABILITY_NOTES.md)：重格式能力等级、warnings、资源预算和降级路径。
-11. [STRUCTURED_EDITING_MODEL.md](STRUCTURED_EDITING_MODEL.md)：桌面 Web-GUI 结构化编辑状态模型。
-12. [AI_READY_MARKDOWN.md](AI_READY_MARKDOWN.md)：AI/RAG 友好的 Markdown 输出准则。
-13. [SECURITY_POLICY.md](SECURITY_POLICY.md)：本地优先、零云端处理、安全模式和核心内置处理规则。
-14. [RESOURCE_BUDGET.md](RESOURCE_BUDGET.md)：核心包体积、依赖和重格式本地模块边界。
+9. [DOCUMENT_MODEL_SCHEMA.md](DOCUMENT_MODEL_SCHEMA.md)：`DocumentModel` 的结构说明。
+10. [CONVERSION_POLICY.md](CONVERSION_POLICY.md)：不可逆转换、降级和 warnings 策略。
+11. [BASIC_FORMAT_QUALITY.md](BASIC_FORMAT_QUALITY.md)：P0 基础格式 before/after、保真范围和降级说明。
+12. [HEAVY_FORMAT_CAPABILITY_NOTES.md](HEAVY_FORMAT_CAPABILITY_NOTES.md)：重格式能力等级、warnings、资源预算和降级路径。
+13. [STRUCTURED_EDITING_MODEL.md](STRUCTURED_EDITING_MODEL.md)：桌面 Web-GUI 结构化编辑状态模型。
+14. [AI_READY_MARKDOWN.md](AI_READY_MARKDOWN.md)：AI/RAG 友好的 Markdown 输出准则。
+15. [SECURITY_POLICY.md](SECURITY_POLICY.md)：本地优先、零云端处理、安全模式和核心内置处理规则。
+16. [RESOURCE_BUDGET.md](RESOURCE_BUDGET.md)：核心包体积、依赖和重格式本地模块边界。
 17. [DYNAMIC_CHUNKING_MERGE_DESIGN.md](DYNAMIC_CHUNKING_MERGE_DESIGN.md)：超大单文件动态分块与结构化合并设计。
 18. [OOXML_CONTAINER.md](OOXML_CONTAINER.md)：ZIP/OOXML 容器基础设施。
 19. [DOCX_INPUT_MVP.md](DOCX_INPUT_MVP.md)：DOCX input 支持范围和限制。
@@ -29,9 +29,10 @@
 23. [PPTX_INPUT_MVP.md](PPTX_INPUT_MVP.md)：PPTX input 支持范围和限制。
 24. [P4_OUTPUTS.md](P4_OUTPUTS.md)：DOCX/XLSX/EPUB/PPTX/PDF output 支持范围和限制，以及 PNG/JPEG 输出隐藏规则。
 25. [OFD_RESEARCH.md](OFD_RESEARCH.md)：OFD 政务格式高保真攻坚路线、能力等级和样例规则。
-26. [PROJECT_ASSESSMENT_2026-04-30.md](PROJECT_ASSESSMENT_2026-04-30.md)：早期项目评估、问题和修复结果。
-27. [RELEASE_PREP.md](RELEASE_PREP.md)：GitHub release 准备规则和本地 release 包流程。
-28. [development-standards/00_README.md](development-standards/00_README.md)：开发规范体系，覆盖文档、流程、AI 协作、质量门禁和成本资源治理。
+26. [PROJECT_ASSESSMENT_2026-05-03.md](PROJECT_ASSESSMENT_2026-05-03.md)：插件路线取消前的历史评估。
+27. [PROJECT_ASSESSMENT_2026-04-30.md](PROJECT_ASSESSMENT_2026-04-30.md)：早期项目评估、问题和修复结果。
+28. [RELEASE_PREP.md](RELEASE_PREP.md)：GitHub release 准备规则和本地 release 包流程。
+29. [development-standards/00_README.md](development-standards/00_README.md)：开发规范体系，覆盖文档、流程、AI 协作、质量门禁和成本资源治理。
 
 ## 文档职责
 
@@ -43,7 +44,8 @@
 | [../INSTALL.md](../INSTALL.md) | 安装、运行、验证、故障排除 |
 | [../COMMIT_CHECKLIST.md](../COMMIT_CHECKLIST.md) | 提交前检查 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 已发生的变更记录 |
-| [PROJECT_ASSESSMENT_2026-05-03.md](PROJECT_ASSESSMENT_2026-05-03.md) | 当前项目评估、问题清单和优化后的开发方向 |
+| [PROJECT_ASSESSMENT_2026-05-27.md](PROJECT_ASSESSMENT_2026-05-27.md) | 当前项目评估、发布基线证据和下一阶段方向 |
+| [PROJECT_ASSESSMENT_2026-05-03.md](PROJECT_ASSESSMENT_2026-05-03.md) | 插件路线取消前的历史评估 |
 | [BASIC_FORMAT_QUALITY.md](BASIC_FORMAT_QUALITY.md) | P0 基础格式质量、样例和可解释降级 |
 | [CONVERSION_PATHS.md](CONVERSION_PATHS.md) | 输入到输出的产品路径矩阵 |
 | [MULTI_MODEL_ARCHITECTURE.md](MULTI_MODEL_ARCHITECTURE.md) | P8 多模型架构：五个规范模型 + 共享资产图 |

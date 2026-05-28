@@ -12,11 +12,10 @@
 
 // 只转义在 markdown 内联里"无歧义就会被解析成语法"的字符：
 //   \ ` * _ ~
-// 不转义 [ ] < > —— 它们在文本节点里出现时（task list "[x]"、字面尖括号等）
-// 几乎都是用户期望的字面字符；inline 节点流里真正的 link/autolink 已经是
-// 结构化节点，不会再走 text 路径。
+// 不转义 [ ]，以便保留 task list "[x]" 这类文字语义。始终转义 < >，
+// 防止从 TXT/DOCX 等纯文本来源导出的 Markdown 激活原始 HTML 标签。
 function escapeMarkdownInlineText(value) {
-  return String(value ?? "").replace(/([\\`*_~])/g, "\\$1");
+  return String(value ?? "").replace(/([\\`*_~<>])/g, "\\$1");
 }
 
 function escapeHtmlInline(value) {

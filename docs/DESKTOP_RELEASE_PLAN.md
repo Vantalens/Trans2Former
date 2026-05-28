@@ -2,7 +2,7 @@
 
 版本：v0.1.0
 状态：生效
-最后更新：2026-05-08
+最后更新：2026-05-27
 
 本文是 P7 的发布产品化控制面，区分 Web preview、桌面开发构建和桌面安装包。OFD、OCR、版面分析等增强能力进入核心本地能力路线，不再发布插件补丁包。
 
@@ -19,8 +19,8 @@
 正式桌面 release 必须使用可机器校验的命名：
 
 ```text
-Trans2Former_<version>_windows_x64.msi
-Trans2Former_<version>_windows_x64.nsis.exe
+Trans2Former_<version>_x64_en-US.msi
+Trans2Former_<version>_x64-setup.exe
 Trans2Former_<version>_macos_universal.dmg
 Trans2Former_<version>_linux_x64.AppImage
 Trans2Former_<version>_linux_x64.deb
@@ -33,6 +33,13 @@ Trans2Former_<version>_checksums.sha256
 2. macOS：优先 `.app`/`.dmg`，验证 macOS WKWebView，正式公开发布前补签名和 notarization。
 3. Linux：优先 AppImage/deb，验证 Linux WebKitGTK 依赖提示清晰。
 4. 每个平台安装包均生成 SHA-256，并写入 `checksums.sha256`。
+
+### Windows P7-A 验证状态
+
+- 2026-05-27 已在 Windows 本机运行 `npm run desktop:build`。
+- 已产出 `src-tauri/target/release/bundle/msi/Trans2Former_2.2.0_x64_en-US.msi`。
+- 已产出 `src-tauri/target/release/bundle/nsis/Trans2Former_2.2.0_x64-setup.exe`。
+- 上述产物仅证明未签名构建链可工作；签名、安装后 smoke、自动更新和发布上传仍属于 P7-B。
 
 ## 平台 smoke
 
@@ -69,4 +76,4 @@ Trans2Former_<version>_checksums.sha256
 
 ## 当前 P7 边界
 
-本仓库已经具备 release preview、桌面壳配置、核心本地能力发布规则。实际跨平台安装包生成仍依赖各平台构建环境、签名证书和发布账号；这些不应伪装成已在本机完成。
+本仓库已经具备 release preview、桌面壳配置、核心本地能力发布规则和 Windows 未签名安装包构建基线。macOS/Linux 安装包、签名/公证、自动更新和跨平台 smoke 仍依赖对应环境与发布凭据；这些不应伪装成已完成。

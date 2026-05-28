@@ -1,6 +1,6 @@
 # Trans2Former Development Tasks
 
-最后更新：2026-05-26
+最后更新：2026-05-27
 
 维护规则：
 
@@ -17,7 +17,7 @@
 
 - 当前 Web 应用继续作为转换核心和 GUI 验证底座，最终面向桌面体验。
 - 桌面形态采用 Tauri，不依赖 Office、LibreOffice、Pandoc、云端转换或 OCR/AI。
-- 转换核心围绕 `input -> DocumentModel -> QualityReport / Warnings -> output`，避免 N×N 私有路径。
+- 转换核心围绕 `input -> canonical model -> executed mapper route -> QualityReport / Warnings -> output`，避免 N×N 私有路径；兼容期保留 `DocumentModel` 外壳，但不得用它掩盖专属模型的实际损失。
 - 热门基础格式必须免下载可用；高保真、OFD、本地 OCR/layout/table 全部进入核心本地模块，不再提供插件安装。
 - 文档处理、预览、编辑和导出阶段必须禁联网。
 
@@ -32,28 +32,46 @@
 | P4 架构收敛与质量基线 | 已完成 | app.js 拆分 / capability note / fixture 分层 |
 | P5 真实插件加载器 | 已取消（2026-05-24） | 同 P3 |
 | P6 高保真输出 / 本地模型 / OFD | 已完成 | DOCX/PDF 程序化输出 + OFD L0-L4 capability 登记 |
-| P7 桌面发布与产品化 | 进行中 | 平台真实安装包、签名/公证、平台 smoke 待补 |
-| P8 多模型架构与转换路由 | 已完成 | SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel + RoutePlanner |
+| P7-A Windows 发布构建基线 | 已完成（2026-05-27） | 2.2.0 版本同步 + ICO 配置 + MSI/NSIS 本机真实产出 |
+| P7-B 跨平台发布与签名 | 待启动 | macOS/Linux 构建、签名/公证、更新和平台 smoke 待补 |
+| P8-A 多模型路由可见性基线 | 已完成（2026-05-27 校准） | RoutePlanner 路径温度与强制降级 warnings 已接入 QualityReport |
+| P8-B 执行型 mapper 与路径校准 | 已完成（2026-05-27） | Workbook/Semantic 稳定链已真实执行；PPTX/OFD 高风险路径按证据分级 |
 | P9 质量证据升级 | 待启动 | SSIM 视觉对比框架已建立，待推进到可运行实现 |
 
 详细子任务和验收门槛见 [docs/archive/DEVELOPMENT_HISTORY.md](docs/archive/DEVELOPMENT_HISTORY.md)。
 
 ## 下一步执行顺序
 
-1. **P7 桌面发布产品化收尾**：平台安装包真实产出、签名/公证、自动更新、平台 smoke、文件关联和桌面权限体验（需对应 Windows/macOS/Linux 构建环境）。
-2. **P9 质量证据升级**：把 SSIM 视觉对比从框架推进到可运行实现，补 PDF/OFD/扫描件版面恢复的公开样例和质量报告。
-3. **转换质量持续回归**：近期跨格式 inline pipeline、blockquote、HTML 实体、列表嵌套等修复保持回归覆盖。
-4. **发布前回归**：`npm test`、`git diff --check`、`npm run release:prepare`、release manifest ignore 验证。
+1. **P9 质量证据升级**：以校准后的路径等级为基线，把 SSIM 视觉对比推进到可运行实现，补 PDF/OFD/扫描件版面恢复的公开样例和质量报告。
+2. **P7-B 跨平台发布与签名**：在转换能力表述准确后，于对应构建环境完成 macOS/Linux 安装包、签名/公证、自动更新、平台 smoke、文件关联和桌面权限体验。
+3. **发布前回归**：`npm test`、`git diff --check`、`npm run release:prepare`、release manifest ignore 验证。
+
+## P8-B 完成结果
+
+依据 2026-05-12 的研究报告《多格式文档与媒体互转的可行路径与工程化方案》，P8-B 未扩大格式组合，而是把语义文档链、表格链和定版终点链的实际执行能力说准、跑实、可回归。
+
+1. **B1 Capability 真值校准**：区分 reader 原生模型、兼容投影和 writer 实际可消费模型；`pptx -> pptx` 不再视为 hot 保真写回，`ofd -> pdf` 不再声称已有稳定布局保持能力。
+2. **B2 可执行 mapper 内核**：mapper 注册真实 `fn`；路由记录 `executedMappers`、温度与强制 warnings；仅对真实执行过的降级注入对应 warning。
+3. **B3 稳定路径首批接入**：优先接入 `SemanticDoc <-> WorkbookModel`，覆盖结构化文档/表格到 `xlsx` 与 `csv/xlsx` 到语义 writer 的路径，并以现有输出快照防止无意回归。
+4. **B4 高风险路径治理**：`SlideModel` 和 `FixedLayoutModel` 的自动映射须在对应 writer 或质量 fixture 具备证据后启用；`PPTX/PDF/OFD/PNG` 按生成型、降级型或受限型路径呈现。
+5. **B5 文档与质量门禁**：同步更新路径矩阵、路由说明、capability audit 与转换质量测试，确保 UI 展示的推荐程度等于真实执行证据。
+
+详细设计与实施顺序见：
+
+- [docs/superpowers/specs/2026-05-27-executable-cross-model-routing-design.md](docs/superpowers/specs/2026-05-27-executable-cross-model-routing-design.md)
+- [docs/superpowers/plans/2026-05-27-executable-cross-model-routing.md](docs/superpowers/plans/2026-05-27-executable-cross-model-routing.md)
 
 ## 当前主要不足
 
 - PDF / OFD / 扫描件的版面恢复偏弱：FixedLayoutModel 与本地 OCR/layout 需补真实实现，目前仅有坐标启发式和 capability 登记。
-- 平台安装包真实产出、签名/公证和跨平台 smoke 仍需在对应构建环境执行。
+- SlideModel / FixedLayoutModel 尚未获得自动 mapper 执行证据；PPTX 生成型输出与 OFD 受限路径已显式提示，但高保真闭环仍待 P9 补齐。
+- Windows MSI/NSIS 已真实产出；macOS/Linux 安装包、签名/公证和跨平台 smoke 仍需在对应构建环境执行。
 
 ## 最近验收修复
 
 > 仅保留最近 4 周内的记录；更早的归档到 [docs/archive/DEVELOPMENT_HISTORY.md](docs/archive/DEVELOPMENT_HISTORY.md)，逐次发布的细节走 [CHANGELOG.md](CHANGELOG.md)。
 
+- **2026-05-27**：完成审核整改阶段、P7-A Windows 发布构建基线与 P8-B 执行型 mapper 校准。修复 Tauri/Rust 仍停在 `2.0.0` 且无 bundle icon 导致 Windows 安装包失败的问题，新增配置门禁并实际生成 `Trans2Former_2.2.0_x64_en-US.msi` 与 `Trans2Former_2.2.0_x64-setup.exe`。`SemanticDoc <-> WorkbookModel` 已进入真实执行链并记录 `executedMappers`；`PPTX` 生成型与 `OFD -> PDF` 受限路径记录 `routeClass` 并发出 `PATH_NOT_RECOMMENDED`。修复 TXT 等纯文本导出 Markdown 时 `<img ...>` 原样激活 HTML 的回归，同时保留 `- [x]` task list。核心 smoke 扩展为 46 组。
 - **2026-05-26**：跨格式转换质量回归。Markdown writer 统一走 `getInlineTokens → inlinesToHtml/Markdown`，废弃旧 `inlineMarkdownToHtml` 正则兜底；脚注 `[^id]` 升级为 `footnoteRef` 一等公民 inline 节点（HTML/MD/XML/DOCX vertAlign superscript/PDF 各自渲染）。修复 md→md 嵌套有序列表跳号（独立 `orderedCounter` 仅在 depth=0 递增）；task list `[x]` 不再被错误转义（escape 字符集收窄到 ``\ ` * _ ~``，放过 `[]<>`）。markdown reader 合并连续 `>` 行消除 `<p>&gt;</p>` 孤段；html reader 修复 `<li>` 嵌套 `<ul>/<ol>` 被展平为 inline 文本，新增 70+ HTML 命名实体表。`npm test` 全套通过；DOCX/PDF/XLSX 二进制输出经字节级验证。
 - **2026-05-25**：修复用户回归报告三处问题（HTML 分级丢失 / 预览尺寸错乱 / 前端风格偏老旧）。DOCX reader 新增 `parseHeadingStyleMap` 多路兜底识别中英文 `Heading 1`/`标题 1`；`.viewer-card` 从 grid 改 flex column + `min-height: 0` 让预览/textarea 自适应；`.preview-markdown` 补 h4/h5/h6 字号梯度，h1/h2 加 border-bottom；色板换为 slate + teal，Inter `font-feature-settings: cv11/ss01/ss03`。补齐 P1 残留：PDF 输出回填 `autoLinkifySegments` 让纯文本 URL 生成 `/Annots`；`***粗斜体***` / `___...___` 优先识别为 strong×em 嵌套；XML inline 断言更新为结构化输出。
 - **2026-05-24**：六项发布卫生与跨格式修复。
@@ -66,7 +84,7 @@
 
 ## 文档入口
 
-- 当前项目评估：[docs/PROJECT_ASSESSMENT_2026-05-03.md](docs/PROJECT_ASSESSMENT_2026-05-03.md)
+- 当前项目评估：[docs/PROJECT_ASSESSMENT_2026-05-27.md](docs/PROJECT_ASSESSMENT_2026-05-27.md)
 - 多模型架构：[docs/MULTI_MODEL_ARCHITECTURE.md](docs/MULTI_MODEL_ARCHITECTURE.md)
 - 转换路由：[docs/CONVERSION_ROUTING.md](docs/CONVERSION_ROUTING.md)
 - 产品定位和零上传原则：[docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md)
@@ -89,4 +107,5 @@
 - `npm test`
 - `git diff --check`
 - `npm run release:prepare`
-- `git check-ignore -v release\trans2former-2.0.0\RELEASE_MANIFEST.json`
+- `git check-ignore -v release\trans2former-2.2.0\RELEASE_MANIFEST.json`
+- `npm run desktop:build`（Windows P7-A / 发布前安装包验证）
