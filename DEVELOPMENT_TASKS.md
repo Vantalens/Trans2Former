@@ -44,11 +44,9 @@
 | P9-A.1 OCR 契约与占位 | 已完成（2026-05-28） | OCRResult / OCREngine 契约、placeholder engine、S3 manifest 占位、PNG reader 发 OCR_UNAVAILABLE warning |
 | P9-A.2 接入轻量 OCR runtime（vendor + 骨架） | 已完成（2026-05-28） | tesseract.js optionalDependency + sync-tesseract-vendor + TesseractEngine 骨架 + OCRStorage 抽象 + Tauri CSP 加 wasm-unsafe-eval |
 | P9-A.2.b tessdata IDB + UI 启用 + 真实 OCR 接入 | 已完成（2026-05-28） | 真实 IndexedDBStorage、安全中心导入按钮 + SHA-256、recognize 接入 tesseract.js、enhanceWithOCR helper |
-| P9-A.3 端到端 PNG + 扫描 PDF | 待启动 | enhanceWithOCR 挂入 convert pipeline + 扫描 PDF 渲染 + 真实 PNG fixture |
 | P9-A.3 PNG 异步 OCR 接入 + Repair 入口 | 已完成（2026-05-28） | convertContentAsync + runOCRStage 把 OCR 写入 SemanticDoc；detectOCRLowConfidence 进入 Repair Engine 默认 validator |
 | P9-A.4 扫描 PDF OCR 检测 + Rasterizer 骨架 | 已完成（2026-05-28） | isScannedPdf 启发式 + PdfPageRasterizer 抽象 + 多页 OCR stage + convertAsync PDF 分支 |
 | P9-B OCR → FixedLayoutModel + 浏览器 rasterize | 已完成（2026-05-28） | OCR 多页结果 → FixedLayoutModel（含 bbox/confidence/readingOrder）→ fixedLayoutToSemantic 派生 blocks；浏览器端 defaultPdfPageRasterizer 自动 dynamic import vendor pdfjs |
-| P9-B OCR → FixedLayoutModel | 待启动 | OCRResult → FixedLayoutModel → SemanticDoc，保留 bbox / confidence / reading order |
 | P9-C 转换后检验三层 | 待启动 | 规则 diff、SSIM 视觉对比、OCR 回读检验统一写入 QualityReport |
 | P9-D 高级 OCR | 待启动 | PaddleOCR-VL / MinerU 等大模型作为独立本地资源按需下载，明确体积、内存、降级路径 |
 
