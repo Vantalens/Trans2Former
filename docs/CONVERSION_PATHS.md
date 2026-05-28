@@ -18,16 +18,17 @@ Trans2Former 区分两件事：
 | --- | --- | --- |
 | Markdown | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX | 作为结构化轻量源，可导出文档、网页、表格和演示；文档到图片输出等待真实视觉渲染器。 |
 | HTML | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX | 作为结构化轻量源，可转为常见发布和办公格式。 |
-| TXT | Markdown、HTML、TXT、JSON、DOCX、PDF、EPUB | 纯文本不直接导出表格或演示，避免误导。 |
+| TXT | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、EPUB | 纯文本不直接导出表格或演示，XML 输出仅表达可读文本结构，避免误导为复杂标记恢复。 |
 | JSON | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX | 仅当 JSON 可进入 DocumentModel 时适合多目标导出。 |
-| CSV | Markdown、CSV、XLSX、HTML、TXT、JSON、PDF | 表格源只提供表格、网页、文本和 PDF 路径。 |
-| XLSX | Markdown、CSV、XLSX、HTML、TXT、JSON、PDF | 表格源不提供 PPTX/DOCX 等不可靠跨类型输出。 |
-| DOC / DOCX | Markdown、HTML、TXT、JSON、DOCX、PDF | 文档源不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
-| EPUB | Markdown、HTML、TXT、JSON、DOCX、PDF、EPUB | 电子书源保留文档和发布路径。 |
-| PDF | Markdown、HTML、TXT、JSON、DOCX、PDF | 当前主要是文本型 PDF 抽取，不提供表格/演示高保真输出。 |
-| PPTX | Markdown、HTML、TXT、JSON、PDF、PPTX | 演示源可抽取为文档；PPTX 写出仅为重新生成的基础演示，不是原稿保真写回。 |
+| XML | Markdown、HTML、TXT、JSON、XML、PDF | XML 源保留可读结构、原始结构化表达和基础发布路径，不自动推断办公专属模型。 |
+| CSV | Markdown、CSV、XLSX、HTML、TXT、JSON、XML、PDF | 表格源只提供表格、网页、文本、XML 和 PDF 路径。 |
+| XLSX | Markdown、CSV、XLSX、HTML、TXT、JSON、XML、PDF | 表格源不提供 PPTX/DOCX 等不可靠跨类型输出。 |
+| DOC / DOCX | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 文档源不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
+| EPUB | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、EPUB | 电子书源保留文档和发布路径。 |
+| PDF | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 当前主要是文本型 PDF 抽取，不提供表格/演示高保真输出。 |
+| PPTX | Markdown、HTML、TXT、JSON、XML、PDF、PPTX | 演示源可抽取为文档；PPTX 写出仅为重新生成的基础演示，不是原稿保真写回。 |
 | PNG | HTML、TXT、JSON、PDF | 图片源进入资产/预览路径，OCR 和图片重渲染进入核心本地增强路线。 |
-| OFD | Markdown、HTML、TXT、JSON、PDF | 核心包提供 L0 级本地解析路径，高保真继续并入核心本地增强。 |
+| OFD | Markdown、HTML、TXT、JSON、XML、PDF | 核心包提供 L0 级本地解析路径，高保真继续并入核心本地增强。 |
 
 ## 路径分级
 
