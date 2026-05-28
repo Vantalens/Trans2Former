@@ -6,16 +6,19 @@
     <title>Trans2Former</title>
     <meta name="description" content="Trans2Former 本地优先多格式文档转换。" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles/landing.css" />
   </head>
-  <body>
+  <body data-active-view="landing">
     <div class="app-shell">
       <header class="topbar">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">T2F</div>
-          <div>
-            <h1>Trans2Former</h1>
-            <span>本地优先 · 格式转换</span>
-          </div>
+          <a href="#/" class="brand-link" data-nav-landing>
+            <div class="brand-mark" aria-hidden="true">T2F</div>
+            <div>
+              <h1>Trans2Former</h1>
+              <span>本地优先 · 格式转换</span>
+            </div>
+          </a>
         </div>
 
         <div class="topbar-center">
@@ -55,6 +58,8 @@
           <button id="transformButton" class="primary-button" type="button" title="开始转换文档">转换</button>
           <button id="cancelTransformButton" class="ghost-button" type="button" disabled hidden title="取消当前转换">取消</button>
           <a id="downloadOutputButton" class="ghost-button disabled" href="#" download title="下载转换结果">下载结果</a>
+          <button id="navWorkbenchButton" class="primary-button is-landing-only" type="button" data-nav-workbench title="打开工作台">打开工作台</button>
+          <button id="navLandingButton" class="ghost-button is-workbench-only" type="button" data-nav-landing title="返回首页" hidden>返回首页</button>
           <details class="auxiliary-actions">
             <summary aria-label="更多操作">更多</summary>
             <div class="auxiliary-menu">
@@ -65,7 +70,9 @@
         </div>
       </header>
 
-      <main class="workspace workspace-primary">
+      <section id="landingView" data-view="landing" class="landing-view" aria-label="Trans2Former 首页" hidden></section>
+
+      <main class="workspace workspace-primary" data-view="workbench" hidden>
         <section class="source-pane">
           <div class="upload-row">
             <label id="dropZone" class="drop-zone" for="fileInput">
@@ -177,7 +184,10 @@
             <article id="outputPreviewPanel" class="viewer-card workbench-panel">
               <div class="viewer-card-header">
                 <span>转换结果</span>
-                <button id="openPdfPreviewButton" class="mini-button" type="button" title="在新窗口打开 PDF 预览">打开 PDF</button>
+                <div class="viewer-card-actions">
+                  <button id="openStandalonePreviewButton" class="mini-button" type="button" title="在独立预览窗口打开当前输出" disabled>独立预览</button>
+                  <button id="openPdfPreviewButton" class="mini-button" type="button" title="在新窗口打开 PDF 预览">打开 PDF</button>
+                </div>
               </div>
               <section id="outputEditorPanel" class="output-editor-panel" hidden>
                 <div class="output-editor-header">
@@ -271,6 +281,16 @@
           <ul class="security-list" data-sec-same-origin data-empty="true">暂无加载记录</ul>
         </section>
 
+        <section class="security-card model-cache-card">
+          <div class="security-card-header">
+            <h3>模型缓存 · model-cache</h3>
+          </div>
+          <p class="security-hint" data-model-cache-summary>OCR / 版面 / 表格 / 质量审核模型资源不进入默认安装包；首次启用时本地导入到 model-cache 目录，SHA-256 校验通过后激活，可清理、可禁用、处理阶段不联网。</p>
+          <div class="model-cache-table" data-model-cache-table data-empty="true">尚未注册模型清单，将在 P9-A OCR 基线启动时填充。</div>
+          <input id="modelCacheFileInput" type="file" accept=".traineddata" hidden />
+          <div class="model-cache-status-message" data-model-cache-status hidden></div>
+        </section>
+
         <footer class="security-dialog-footer">
           <button class="ghost-button" type="button" data-sec-refresh>刷新</button>
           <button class="primary-button" type="button" data-sec-close>完成</button>
@@ -280,5 +300,32 @@
 
     <script type="module" src="/security-center.js"></script>
     <script type="module" src="/app.js"></script>
+    <script type="module">
+      import { initRouter, navigate, onViewChange } from "/router.js";
+      import { mountLanding } from "/landing-view.js";
+
+      const landingRoot = document.getElementById("landingView");
+      if (landingRoot) mountLanding(landingRoot);
+      initRouter();
+
+      const onView = (view) => {
+        document.body.dataset.activeView = view;
+      };
+      document.body.dataset.activeView = (location.hash || "").includes("workbench") ? "workbench" : "landing";
+      onViewChange(onView);
+
+      for (const node of document.querySelectorAll("[data-nav-landing]")) {
+        node.addEventListener("click", (event) => {
+          event.preventDefault();
+          navigate("landing");
+        });
+      }
+      for (const node of document.querySelectorAll("[data-nav-workbench]")) {
+        node.addEventListener("click", (event) => {
+          event.preventDefault();
+          navigate("workbench");
+        });
+      }
+    </script>
   </body>
 </html>

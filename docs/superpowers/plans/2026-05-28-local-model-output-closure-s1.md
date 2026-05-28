@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-05-28 修订声明**：S1 已于 2026-05-28 落地。其中「模型资源随正式安装包交付」「安装包内置、按需加载、可禁用」等方向描述已被同日 [../specs/2026-05-28-lightweight-default-bundle-direction.md](../specs/2026-05-28-lightweight-default-bundle-direction.md) 替换为「OCR 模型资源不进入默认安装包；首次启用时本地下载到 model-cache」。对应守门测试 `scripts/local-model-direction-test.js` 关键词已同步。本 plan 中文件改动清单与测试关键词作为历史快照保留，不再作为后续工作真值。
+
 **Goal:** Establish the first development slice for local-model output closure by making the product matrix and direction docs testable truth surfaces before implementing Repair Engine or high-fidelity writers.
 
 **Architecture:** Keep runtime conversion behavior unchanged in S1. Add focused Node test scripts that compare `docs/CONVERSION_PATHS.md` to `getAllowedOutputFormats()` and assert the approved local-model direction appears in active docs. Then update only docs and package test wiring until these gates pass.

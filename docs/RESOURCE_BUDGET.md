@@ -47,15 +47,21 @@ format-heavy-core
 
 这些预算是当前阶段的护栏，不是最终能力上限。未来引入重格式时，应放入核心按需加载目录，并同步调整预算。
 
-## 模型增强桌面包预算
+## OCR 模型缓存目录预算
 
-模型增强桌面包是正式安装包形态，不与轻量 Web-GUI core 预算混用。模型资源随安装包交付，但不得进入首屏启动路径；只有当前任务需要 OCR、layout、table、质量审核或 Repair Engine 自动修复时才按需加载。
+OCR / 版面 / 表格能力的代码核心内置，但**模型资源不进入默认安装包**。默认安装包目标体积 30–80 MB；模型资源仅在用户首次启用对应能力时下载到本地 model-cache 目录。
 
-- 模型资源随安装包交付，必须记录 manifest、checksum、量化方式、任务范围、最低内存和 fallback。
-- 交付包只包含推理资源，不包含训练检查点、优化器状态、标注数据或调试样本。
-- OCR、layout、table、quality-reviewer 共享资源必须去重，避免重复打包 tokenizer、字典、字体、运行库或视觉 backbone。
-- Windows 安装包构建后必须报告应用本体、推理运行时、模型资产和压缩后总包体积。
-- 具体 MB/GB 上限以首个可运行模型构建后的质量、速度、内存和体积测试确定，不沿用轻量核心预算。
+- 默认安装包构建后必须报告主程序、轻量依赖、空 model-cache 占位的分项体积总和，目标 30–80 MB。
+- 任何 GB 级模型（PaddleOCR-VL / Qwen-VL / MinerU 等）不得进入默认 dependencies 或安装包本体。
+- model-cache 目录必须支持：manifest 记录每个模型资产的版本、checksum、量化方式、任务范围、最低内存和 fallback；用户可见的缓存路径、清理入口、禁用入口；断网降级提示与失败 fallback。
+- 缓存包只保存推理资源，不保存训练检查点、优化器状态、标注数据、调试样本或任何用户文档内容。
+- OCR、layout、table、quality-reviewer 共享资源必须去重，避免重复下载 tokenizer、字典、字体、运行库或视觉 backbone。
+- 轻量 OCR（Tesseract.js / 轻量 PaddleOCR）与高级 OCR（PaddleOCR-VL / MinerU）使用独立缓存条目；高级 OCR 启用前展示体积、运行内存、降级路径和失败提示。
+- 具体 MB/GB 上限以首个可运行 OCR 模型构建后的质量、速度、内存测试结果确定，不沿用默认安装包预算。
+
+### model-cache 目录结构
+
+S3 已经落地 `public/core/model-cache/` 模块骨架。所有模型资源必须遵守统一目录约定 `model-cache/<task>/<engine>/<modelVersion>/<file>`，task ∈ `{ocr-text, ocr-layout, ocr-table, quality-reviewer}`，engine ∈ `{tesseract, paddleocr, paddleocr-vl, mineru, custom}`，由 `getCacheKey` / `getCacheDirectory` / `getCacheFilePath` 统一推导，禁止使用 `..` / 绝对路径 / 反斜杠。Manifest 强制 SHA-256 checksum，校验前状态停留在 `verifying`；校验失败进入 `degraded` 并保留可清理入口。详见 [docs/superpowers/specs/2026-05-28-on-demand-model-cache-design.md](superpowers/specs/2026-05-28-on-demand-model-cache-design.md)。
 
 ## 核心重能力预算原则
 

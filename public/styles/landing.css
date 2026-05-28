@@ -1,0 +1,447 @@
+/* Landing 视图样式 — Trans2Former 入口页面
+   复用 styles.css 顶部的 CSS 变量；只新增 hero/卡片/格式矩阵的动画与布局。 */
+
+.landing-view {
+  display: block;
+  width: 100%;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(13, 148, 136, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 90% 10%, rgba(15, 118, 110, 0.14), transparent 60%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 60%, #e9eef5 100%);
+  color: var(--text);
+  overflow-y: auto;
+}
+
+.landing-section {
+  padding: 80px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.landing-section-heading {
+  margin-bottom: 40px;
+  max-width: 720px;
+}
+
+.landing-section-eyebrow {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(13, 148, 136, 0.12);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.landing-section-heading h3 {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.landing-section-sub {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.landing-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-block;
+  vertical-align: -4px;
+}
+
+/* Hero ----------------------------------------------------------- */
+.landing-hero {
+  position: relative;
+  padding: 96px 24px 64px;
+  max-width: 1200px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.landing-hero-glow {
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 480px;
+  background:
+    radial-gradient(closest-side, rgba(13, 148, 136, 0.35), transparent 70%),
+    radial-gradient(closest-side at 70% 50%, rgba(94, 234, 212, 0.32), transparent 70%);
+  filter: blur(80px);
+  opacity: 0.85;
+  z-index: 0;
+  pointer-events: none;
+  animation: landingHeroGlow 18s ease-in-out infinite alternate;
+}
+
+.landing-hero-inner {
+  position: relative;
+  z-index: 1;
+  text-align: left;
+  max-width: 820px;
+}
+
+.landing-hero-eyebrow {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-bottom: 22px;
+}
+
+.landing-hero-title {
+  margin: 0;
+  font-size: clamp(34px, 4.6vw, 56px);
+  line-height: 1.12;
+  font-weight: 800;
+  color: #0b1220;
+  letter-spacing: -0.01em;
+}
+
+.landing-hero-accent {
+  background: linear-gradient(120deg, #0d9488 0%, #14b8a6 45%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 200% 100%;
+  animation: landingGradientShift 8s ease-in-out infinite alternate;
+}
+
+.landing-hero-sub {
+  margin: 22px 0 36px;
+  font-size: 17px;
+  line-height: 1.7;
+  color: #334155;
+  max-width: 720px;
+}
+
+.landing-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.landing-cta-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 26px;
+  background: linear-gradient(180deg, #0d9488 0%, #0f766e 100%);
+  color: #fff;
+  border: 0;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 14px 34px -16px rgba(15, 118, 110, 0.65), 0 4px 10px -4px rgba(15, 118, 110, 0.45);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.landing-cta-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 40px -18px rgba(15, 118, 110, 0.75), 0 8px 14px -6px rgba(15, 118, 110, 0.5);
+  filter: brightness(1.05);
+}
+
+.landing-cta-primary:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 3px;
+}
+
+.landing-cta-ghost {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.25);
+  color: var(--accent-strong);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.landing-cta-ghost:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(15, 118, 110, 0.45);
+}
+
+.landing-hero-badges {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.landing-hero-badges li {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  color: #0f172a;
+  font-size: 12.5px;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+}
+
+/* Features -------------------------------------------------------- */
+.landing-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.landing-feature-card {
+  position: relative;
+  padding: 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 16px 40px -32px rgba(15, 23, 42, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.landing-feature-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 22px 46px -28px rgba(15, 118, 110, 0.3);
+  border-color: rgba(15, 118, 110, 0.45);
+}
+
+.landing-feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(56, 189, 248, 0.18));
+  color: var(--accent-strong);
+  margin-bottom: 16px;
+}
+
+.landing-feature-card h4 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.landing-feature-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #475569;
+}
+
+/* Formats matrix --------------------------------------------------- */
+.landing-format-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.landing-format-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 18px;
+  align-items: center;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.landing-format-row:hover {
+  background: #ffffff;
+  border-color: rgba(15, 118, 110, 0.35);
+}
+
+.landing-format-input {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.landing-format-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.landing-format-key {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono, ui-monospace, "SFMono-Regular", "Consolas", monospace);
+  letter-spacing: 0.04em;
+}
+
+.landing-route-chips {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.landing-route-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--mono, ui-monospace, "SFMono-Regular", "Consolas", monospace);
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent-strong);
+  border: 1px solid transparent;
+}
+
+.landing-route-chip.is-recommended { background: rgba(16, 185, 129, 0.14); color: #047857; }
+.landing-route-chip.is-degraded { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.landing-route-chip.is-generated { background: rgba(99, 102, 241, 0.14); color: #4338ca; }
+.landing-route-chip.is-restricted { background: rgba(225, 29, 72, 0.12); color: #be123c; }
+
+.landing-format-legend {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Workflow -------------------------------------------------------- */
+.landing-workflow-track {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.landing-workflow-step {
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.landing-workflow-index {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0d9488, #38bdf8);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.landing-workflow-step strong {
+  display: block;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.landing-workflow-step p {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+/* CTA ------------------------------------------------------------- */
+.landing-cta {
+  text-align: center;
+  padding: 80px 24px 96px;
+  background: linear-gradient(180deg, rgba(15, 118, 110, 0.05) 0%, rgba(15, 118, 110, 0.12) 100%);
+  border-radius: 24px;
+  margin: 40px auto 80px;
+  max-width: 1100px;
+}
+
+.landing-cta h3 {
+  margin: 0 0 12px;
+  font-size: 28px;
+  color: #0f172a;
+}
+
+.landing-cta p {
+  margin: 0 auto 28px;
+  max-width: 640px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.landing-cta .landing-cta-primary {
+  font-size: 16px;
+  padding: 15px 30px;
+}
+
+/* Scroll reveal --------------------------------------------------- */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.reveal-on-scroll.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Animations ------------------------------------------------------ */
+@keyframes landingGradientShift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+@keyframes landingHeroGlow {
+  0% { transform: translate3d(-3%, 0, 0) scale(1); opacity: 0.7; }
+  100% { transform: translate3d(3%, 2%, 0) scale(1.06); opacity: 0.95; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-glow,
+  .landing-hero-accent,
+  .reveal-on-scroll {
+    animation: none !important;
+    transition: none !important;
+  }
+  .reveal-on-scroll {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Responsive ------------------------------------------------------ */
+@media (max-width: 820px) {
+  .landing-section { padding: 56px 18px; }
+  .landing-hero { padding: 72px 18px 48px; }
+  .landing-section-heading h3 { font-size: 26px; }
+  .landing-format-row { grid-template-columns: 1fr; gap: 10px; }
+  .landing-cta { margin: 24px 12px 60px; padding: 56px 18px 64px; }
+}

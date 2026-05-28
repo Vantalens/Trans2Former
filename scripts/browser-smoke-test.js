@@ -76,6 +76,15 @@ try {
   assert.equal(indexHtml.includes("class=\"viewer-grid single-view\""), true, "modern workbench should show one right-side work view at a time");
   assert.equal(indexHtml.includes("class=\"topbar-progress\""), true, "progress should be embedded in the topbar instead of a separate row");
   assert.equal(indexHtml.includes("data-drawer-tab=\"drawerPluginsGroup\""), false, "drawer should not expose plugin groups after core integration");
+  assert.equal(indexHtml.includes("data-view=\"landing\""), true, "landing section should be mounted alongside workbench");
+  assert.equal(indexHtml.includes("data-view=\"workbench\""), true, "workbench section should be tagged with data-view");
+  assert.equal(indexHtml.includes("id=\"landingView\""), true, "landing view container should be present in the shell");
+  assert.equal(indexHtml.includes("id=\"openStandalonePreviewButton\""), true, "workbench should expose standalone-preview entry on output card");
+  assert.equal(indexHtml.includes("/styles/landing.css"), true, "landing stylesheet should be linked from the shell");
+  assert.equal(indexHtml.includes("/router.js"), true, "shell should bootstrap the hash router");
+  assert.equal(indexHtml.includes("/landing-view.js"), true, "shell should mount the landing view module");
+  assert.equal(indexHtml.includes("data-nav-workbench"), true, "topbar should expose a navigation hook into the workbench");
+  assert.equal(indexHtml.includes("data-nav-landing"), true, "topbar should expose a navigation hook back to the landing view");
 
   const smokeHtml = await fetchText(baseUrl, "/smoke-test.html");
   assert.equal(smokeHtml.includes("Trans2Former Browser Smoke Test"), true);
@@ -160,6 +169,33 @@ try {
   assert.equal(indexHtml.includes("data-sec-mode"), true, "security center should expose a runtime intercept mode control");
   assert.equal(indexHtml.includes("data-sec-external"), true, "security center should expose an external-request list anchor");
   assert.equal(indexHtml.includes("/security-center.js"), true, "security center module should be loaded before app.js");
+
+  const previewHtml = await fetchText(baseUrl, "/preview.html");
+  assert.equal(previewHtml.includes("id=\"previewStage\""), true, "preview page should expose the preview stage container");
+  assert.equal(previewHtml.includes("/preview.js"), true, "preview page should load its module entry");
+  assert.equal(previewHtml.includes("/styles/preview.css"), true, "preview page should load its dedicated stylesheet");
+
+  const previewJs = await fetchText(baseUrl, "/preview.js");
+  assert.equal(previewJs.includes("readPreviewPayload"), true, "preview page should read payload via router helper");
+  assert.equal(previewJs.includes("renderPreviewHtml"), true, "preview page should render text-like outputs via existing transformer");
+  assert.equal(previewJs.includes("toDocumentModel"), true, "preview page should fall back to reader-based HTML for binary formats");
+
+  const routerJs = await fetchText(baseUrl, "/router.js");
+  assert.equal(routerJs.includes("openPreview"), true, "router should expose openPreview helper");
+  assert.equal(routerJs.includes("PREVIEW_PAYLOAD_PREFIX"), true, "router should namespace preview payloads in storage");
+  assert.equal(routerJs.includes("hashchange"), true, "router should listen for hash changes");
+
+  const landingJs = await fetchText(baseUrl, "/landing-view.js");
+  assert.equal(landingJs.includes("getFormatCapabilities"), true, "landing view should source format capabilities from the registry");
+  assert.equal(landingJs.includes("reveal-on-scroll"), true, "landing view should attach scroll-reveal classes");
+  assert.equal(landingJs.includes("mountLanding"), true, "landing view should expose mountLanding entry");
+
+  const landingCss = await fetchText(baseUrl, "/styles/landing.css");
+  assert.equal(landingCss.includes(".landing-hero"), true, "landing stylesheet should style the hero section");
+  assert.equal(landingCss.includes("prefers-reduced-motion"), true, "landing stylesheet should respect reduced-motion preferences");
+
+  const previewCss = await fetchText(baseUrl, "/styles/preview.css");
+  assert.equal(previewCss.includes(".preview-canvas"), true, "preview stylesheet should style the rendered canvas surface");
 
   const securityCenterJs = await fetchText(baseUrl, "/security-center.js");
   assert.equal(securityCenterJs.includes("getEntriesByType"), true, "security center should sample the resource timing buffer");

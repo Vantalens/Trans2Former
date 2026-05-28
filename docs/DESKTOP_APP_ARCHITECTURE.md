@@ -14,9 +14,11 @@ Tauri desktop shell
 + TypeScript conversion core
 + Web Worker / WASM
 + core local enhancement modules
-+ bundled local document models
++ on-demand local OCR/layout model resources (downloaded to model-cache on first enable)
 + Repair Engine
 ```
+
+默认安装包目标体积 30–80 MB；默认包不含 PaddleOCR-VL / Qwen-VL / MinerU 等 GB 级模型。OCR / 版面 / 表格能力的代码核心内置，模型资源仅在用户首次启用对应能力时下载到本地 model-cache，可清理、可禁用，处理阶段不联网、不上传任何文档内容。
 
 当前浏览器 Web 应用继续作为 GUI 和转换核心验证底座。桌面化不是推翻现有实现，而是把现有 Web-GUI 放入 Tauri 壳，并补齐文件系统、版本历史和桌面权限隔离。
 
@@ -30,7 +32,7 @@ Tauri + Web-GUI 是当前最合理的桌面路线。
 - 高体验上限：Web-GUI 更适合做现代工作台、分栏编辑、实时预览、虚拟滚动、质量报告和 diff。
 - 本地安全：Tauri 的能力边界更适合做最小文件系统权限和显式目录授权。
 - 技术连续性：当前浏览器转换核心、Worker、DocumentModel、前端工作台和测试可以继续复用。
-- 核心模块友好：重格式、高保真渲染器、本地 OCR/OFD、文档图像文字专用模型和 Repair Engine 可以本地按需加载，不必进入首屏启动路径。
+- 核心模块友好：重格式、高保真渲染器、本地 OCR/OFD、文档图像文字专用模型和 Repair Engine 代码核心内置，模型资源按需本地下载到 model-cache，不必进入首屏启动路径。
 
 主要风险：
 
@@ -51,7 +53,7 @@ Tauri + Web-GUI 是当前最合理的桌面路线。
 - 可恢复：转换失败、重能力失败、预览失败时，用户的输入、编辑和输出状态不丢。
 - 信息密度合理：主界面服务操作，不堆说明文案；复杂解释放入 warnings、quality report 和详情面板。
 - 安全可见：local-only、no-upload、核心本地处理、历史保存状态在关键位置可见。
-- 资源可控：默认核心轻，重格式和模型安装包内置、按需加载、可禁用、清理、回滚。
+- 资源可控：默认安装包轻量（目标 30–80 MB），重格式与 OCR 等增强模块代码核心内置；OCR 模型资源不进入默认安装包，首次启用时下载到本地 model-cache，可禁用、可清理、可回滚。
 - 数据可控：版本历史默认只在会话内；持久保存必须 opt-in，并提供清除入口。
 
 ## GUI 边界
@@ -129,7 +131,9 @@ Tauri + Web-GUI 是当前最合理的桌面路线。
 | 50MB+ 文件 | Worker + 渐进预览 |
 | 100MB+ 文件 | 分块 / 降级预览 |
 | 重格式 | 核心本地按需加载 |
-| 本地模型 | 安装包内置、按需加载、可禁用 |
+| 默认安装包 | 30–80 MB，不打包 GB 级模型 |
+| OCR 模型 | 不进入默认安装包；首次启用时本地下载到 model-cache，可清理、可禁用 |
+| 高级 OCR（PaddleOCR-VL / MinerU 等） | 独立本地资源，按需获取，明确体积与硬件要求 |
 
 ## 当前实现
 

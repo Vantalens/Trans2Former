@@ -1,5 +1,6 @@
 import {
   convertContent as convertInBrowser,
+  convertContentAsync as convertInBrowserAsync,
   detectFormatFromName,
   getAllowedOutputFormats,
   getFormatCapabilities,
@@ -28,6 +29,7 @@ import {
 } from "./core/workbench-state.js";
 import { readBlobAsDecodedText } from "./core/text-decoding.js";
 import { expandPdfContentForTextExtraction } from "./formats/pdf.js";
+import { openPreview } from "./router.js";
 
 const inputContent = document.getElementById("inputContent");
 const sourcePane = document.querySelector(".source-pane");
@@ -46,6 +48,7 @@ const outputUndoButton = document.getElementById("outputUndoButton");
 const outputRedoButton = document.getElementById("outputRedoButton");
 const outputCheckpointButton = document.getElementById("outputCheckpointButton");
 const openPdfPreviewButton = document.getElementById("openPdfPreviewButton");
+const openStandalonePreviewButton = document.getElementById("openStandalonePreviewButton");
 const errorDetailsPanel = document.getElementById("errorDetailsPanel");
 const errorDetailsSummary = document.getElementById("errorDetailsSummary");
 const errorCategory = document.getElementById("errorCategory");
@@ -890,10 +893,37 @@ function updateDownloadState(enabled) {
   if (enabled) {
     downloadOutputButton.classList.remove("disabled");
     openPdfPreviewButton.disabled = !lastOutputIsPdf;
+    if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = false;
   } else {
     downloadOutputButton.classList.add("disabled");
     downloadOutputButton.href = "#";
     openPdfPreviewButton.disabled = true;
+    if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = true;
+  }
+}
+
+function openCurrentOutputInPreview() {
+  if (!currentOutputType || currentOutputType === "none") return;
+  const payload = {
+    source: {
+      format: fromFormatSelect?.value || "",
+      fileName: currentFileName || "",
+    },
+    output: {
+      type: currentOutputType,
+      format: currentOutputFormat || "",
+      mime: currentOutputMime || "",
+      text: outputEditor?.value || textOutputPreview?.textContent || "",
+      blobUrl: currentOutputBlobUrl || "",
+      printHtml: currentPrintHtml || "",
+      isPdf: Boolean(lastOutputIsPdf),
+    },
+    meta: { generatedAt: Date.now() },
+  };
+  try {
+    openPreview(payload);
+  } catch (error) {
+    setStatus(`无法打开独立预览：${error?.message || error}`, "error");
   }
 }
 
@@ -1202,6 +1232,9 @@ function releaseConversionResources() {
 function convertWithWorker(payload) {
   const worker = createConvertWorker();
   if (!worker) {
+    if (String(payload?.from || "").toLowerCase() === "png") {
+      return Promise.resolve(convertInBrowserAsync(payload));
+    }
     return Promise.resolve(convertInBrowser(payload));
   }
 
@@ -1558,6 +1591,9 @@ cancelTransformButton.addEventListener("click", () => {
   setStatus("转换已取消", "info");
 });
 openPdfPreviewButton.addEventListener("click", printCurrentPdf);
+if (openStandalonePreviewButton) {
+  openStandalonePreviewButton.addEventListener("click", openCurrentOutputInPreview);
+}
 
 outputUndoButton?.addEventListener("click", () => {
   if (outputVersionIndex > 0) {
@@ -1634,4 +1670,5 @@ bootstrapInitialSample();
 syncMarkdownProfileControl();
 syncPdfPaperControl();
 openPdfPreviewButton.disabled = true;
+if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = true;
 updateConversionProgress({ stage: "idle", progress: 0 });

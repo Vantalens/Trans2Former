@@ -1,9 +1,11 @@
 # Local Document Model Auto-Repair And Output Closure Design
 
-状态：待实施
+状态：部分被替换
 日期：2026-05-27
 适用阶段：P9 质量证据升级之后的本地模型与输出闭环主线
 前置基础：P7-A Windows 安装包构建基线、P8-B 可执行 Workbook/Semantic 路由与高风险路径分级
+
+> **2026-05-28 修订声明**：本 spec 中「模型随桌面安装包内置」「正式安装包包含 document recognition and review model assets」「内置模型 manifest 随包交付」等结论已被 [2026-05-28-lightweight-default-bundle-direction.md](2026-05-28-lightweight-default-bundle-direction.md) 替换，调整为「OCR 模型资源不进入默认安装包；首次启用时本地下载到 model-cache」。Repair Engine、规范模型、自动修复闭环、QualityReport 数据契约和模型职责分层等设计仍然生效。阶段编排 S3 重新定义为「按需下载与缓存治理」；后续推进 P9-A/B/C/D（OCR 基线 → OCR→Model → 转换后检验 → 高级 OCR）。
 
 ## 目标
 

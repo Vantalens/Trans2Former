@@ -4,6 +4,9 @@ import {
   createHeading,
 } from "../core/document-model.js";
 import { createAssetStore } from "../core/asset-store.js";
+import { withWarnings } from "../core/warnings.js";
+import { defaultOCRRegistry } from "../core/ocr/ocr-engine.js";
+import { createOCRUnavailableWarning } from "../core/ocr/ocr-warnings.js";
 
 export function readPng({ content, title = "image", fileName = "", format = "png" }) {
   const data = String(content ?? "");
@@ -21,6 +24,16 @@ export function readPng({ content, title = "image", fileName = "", format = "png
     role: "image",
   });
 
+  const ocrEngine = defaultOCRRegistry.pickForTask("ocr-text");
+  const ocrWarnings = [];
+  if (!ocrEngine || !ocrEngine.isAvailable()) {
+    ocrWarnings.push(createOCRUnavailableWarning({
+      engineId: ocrEngine?.id || "none",
+      manifestId: ocrEngine?.manifestId || "",
+      reason: ocrEngine ? "engine-not-enabled" : "no-engine-registered",
+    }));
+  }
+
   return createDocumentModel({
     title,
     sourceFormat: format,
@@ -29,5 +42,6 @@ export function readPng({ content, title = "image", fileName = "", format = "png
       createAssetReference(asset.id, { alt: title, title }),
     ],
     assets: assetStore.toJSON(),
+    metadata: withWarnings({}, ocrWarnings),
   });
 }

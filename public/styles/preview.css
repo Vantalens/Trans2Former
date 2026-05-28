@@ -1,0 +1,311 @@
+/* 独立预览页样式 — Trans2Former
+   复用 styles.css 顶部的 CSS 变量；新增暗色背景、工具栏、图片/PDF 容器、错误态。 */
+
+.preview-body {
+  min-height: 100vh;
+  margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  font-family: var(--font-ui, "Inter", "Segoe UI", system-ui, sans-serif);
+}
+
+.preview-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.preview-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.preview-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+  text-decoration: none;
+  font-size: 13px;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.preview-back:hover {
+  background: rgba(148, 163, 184, 0.2);
+  transform: translateX(-2px);
+}
+
+.preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.preview-meta strong {
+  font-size: 15px;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
+}
+
+.preview-meta span {
+  font-size: 12px;
+  color: #94a3b8;
+  font-family: var(--mono, ui-monospace, "SFMono-Regular", "Consolas", monospace);
+}
+
+.preview-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
+}
+
+.preview-tool-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #e2e8f0;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.preview-tool-button:hover {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.preview-tool-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.preview-tool-button.preview-tool-primary {
+  background: linear-gradient(180deg, #0d9488 0%, #0f766e 100%);
+  color: #fff;
+  padding: 8px 16px;
+  font-weight: 600;
+  box-shadow: 0 6px 18px -10px rgba(15, 118, 110, 0.75);
+}
+
+.preview-tool-button.preview-tool-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.preview-zoom-level {
+  min-width: 48px;
+  text-align: center;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.preview-stage {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 32px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.preview-stage > * {
+  flex: 1 1 auto;
+  max-width: 1280px;
+  min-height: 100%;
+}
+
+.preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 80px 32px;
+  color: #cbd5e1;
+  gap: 14px;
+}
+
+.preview-empty h1 {
+  margin: 0;
+  font-size: 22px;
+  color: #f1f5f9;
+}
+
+.preview-empty p {
+  margin: 0;
+  max-width: 520px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #94a3b8;
+}
+
+.preview-back-cta {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 10px 22px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #0d9488 0%, #0f766e 100%);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+/* Content surfaces -------------------------------------------------- */
+.preview-canvas {
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 16px;
+  box-shadow: 0 30px 60px -28px rgba(0, 0, 0, 0.55);
+  min-height: calc(100vh - 140px);
+  padding: 56px 64px;
+  font-family: var(--font-ui);
+  line-height: 1.75;
+  overflow: auto;
+}
+
+.preview-canvas h1,
+.preview-canvas h2,
+.preview-canvas h3 {
+  color: #0f172a;
+}
+
+.preview-canvas pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 16px 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.preview-canvas code {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+.preview-canvas table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+
+.preview-canvas th,
+.preview-canvas td {
+  border: 1px solid #e2e8f0;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.preview-canvas th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.preview-pdf-frame,
+.preview-iframe {
+  width: 100%;
+  height: calc(100vh - 140px);
+  border: 0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 30px 60px -28px rgba(0, 0, 0, 0.55);
+}
+
+.preview-image-host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  border-radius: 16px;
+  background: repeating-conic-gradient(#1e293b 0% 25%, #0f172a 0% 50%) 50% / 24px 24px;
+  min-height: calc(100vh - 140px);
+  overflow: hidden;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: calc(100vh - 220px);
+  border-radius: 8px;
+  box-shadow: 0 30px 60px -28px rgba(0, 0, 0, 0.7);
+  transform-origin: center center;
+  transition: transform 0.18s ease;
+}
+
+.preview-fallback {
+  padding: 48px 32px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  text-align: center;
+}
+
+.preview-fallback h2 {
+  margin: 0 0 10px;
+  color: #f8fafc;
+  font-size: 20px;
+}
+
+.preview-fallback p {
+  margin: 0 0 18px;
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.preview-error {
+  border: 1px solid rgba(225, 29, 72, 0.4);
+  background: rgba(225, 29, 72, 0.12);
+  color: #fecdd3;
+  padding: 24px 28px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* Responsive -------------------------------------------------------- */
+@media (max-width: 820px) {
+  .preview-topbar { padding: 12px 14px; flex-wrap: wrap; gap: 10px; }
+  .preview-stage { padding: 14px; }
+  .preview-canvas { padding: 28px 22px; }
+  .preview-pdf-frame,
+  .preview-iframe { height: calc(100vh - 180px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-back,
+  .preview-image {
+    transition: none !important;
+  }
+}
