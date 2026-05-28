@@ -1,5 +1,6 @@
 import { ConversionError } from "./conversion-error.js";
 import { ensureDocumentAudit } from "./document-audit.js";
+import { defaultRepairEngine } from "./repair-engine.js";
 import { createWarning, withWarnings } from "./warnings.js";
 
 const FORMAT_ALIASES = {
@@ -131,6 +132,10 @@ export class RoutePlanner {
 // canReachWriter 校验。
 export function getAllowedOutputFormats(from) {
   return [...(PRODUCT_MATRIX_BY_INPUT[normalizeFormat(from)] || [])];
+}
+
+export function getKnownInputFormats() {
+  return Object.keys(PRODUCT_MATRIX_BY_INPUT);
 }
 
 function getPayload(model, type) {
@@ -415,8 +420,131 @@ export class ConverterRegistry {
     });
   }
 
+  _buildRepairCtx({ content, fromFormat, toFormat, title, fileName, options }) {
+    return {
+      content,
+      from: fromFormat,
+      to: toFormat,
+      title,
+      fileName,
+      options,
+      read: ({ content: readContent, from: readFrom, title: readTitle = "round-trip" }) =>
+        this.read({ content: readContent, from: readFrom, title: readTitle }),
+      write: ({ model: writeModel, to: writeTo, title: writeTitle, options: writeOptions }) =>
+        this.write({ model: writeModel, to: writeTo, title: writeTitle, options: writeOptions }),
+      prepareConversionModel: (args) => this.prepareConversionModel(args),
+      getAllowedOutputFormats,
+      getRouteDetails: (fromArg, toArg) => this.getRouteDetails(fromArg, toArg),
+    };
+  }
+
+  _wrapWithRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options }) {
+    let cycle;
+    try {
+      cycle = defaultRepairEngine.runCycle({ model, output, ctx });
+    } catch (error) {
+      const repairWarning = createWarning(
+        "info",
+        "REPAIR_CYCLE_FAILED",
+        `Repair cycle skipped due to internal error: ${error?.code || error?.message || "unknown"}.`,
+        { cause: error?.code || "unknown" },
+      );
+      const audited = ensureDocumentAudit({
+        ...model,
+        metadata: withWarnings(model.metadata || {}, [repairWarning]),
+      }, {
+        content,
+        reader: fromFormat,
+        writer: toFormat,
+        targetFormat: toFormat,
+        fileName,
+        options,
+      });
+      return {
+        ...output,
+        quality: {
+          qualityReport: audited.metadata?.qualityReport || null,
+          modelReview: null,
+          autoRepair: { attempted: false, error: error?.code || "unknown", finalDecision: "failed-quality-gate" },
+          conversion: audited.metadata?.conversion || null,
+        },
+      };
+    }
+    const finalModel = ensureDocumentAudit({
+      ...cycle.model,
+      metadata: {
+        ...(cycle.model.metadata || {}),
+        autoRepair: cycle.autoRepair,
+        modelReview: cycle.modelReview,
+      },
+    }, {
+      content,
+      reader: fromFormat,
+      writer: cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat,
+      targetFormat: cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat,
+      fileName,
+      options,
+    });
+    const baseQualityReport = finalModel.metadata?.qualityReport || {};
+    const qualityReport = {
+      ...baseQualityReport,
+      repairStatus: cycle.autoRepair?.attempted ? "verified" : "not-attempted",
+      finalDecision: cycle.autoRepair?.finalDecision || "pending",
+    };
+    return {
+      ...cycle.output,
+      quality: {
+        qualityReport,
+        modelReview: finalModel.metadata?.modelReview || null,
+        autoRepair: finalModel.metadata?.autoRepair || null,
+        conversion: finalModel.metadata?.conversion || null,
+      },
+    };
+  }
+
   convert({ content, from, to, title = "document", fileName = "", options = {} }) {
+    const fromFormat = normalizeFormat(from);
+    const toFormat = normalizeFormat(to);
     const model = this.prepareConversionModel({ content, from, to, title, fileName, options });
-    return this.write({ model, to, title, options });
+    const output = this.write({ model, to, title, options });
+    if (options?.repair === false) {
+      return output;
+    }
+    const ctx = this._buildRepairCtx({ content, fromFormat, toFormat, title, fileName, options });
+    return this._wrapWithRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options });
+  }
+
+  async convertAsync({ content, from, to, title = "document", fileName = "", options = {} }) {
+    const fromFormat = normalizeFormat(from);
+    const toFormat = normalizeFormat(to);
+    let model = this.prepareConversionModel({ content, from, to, title, fileName, options });
+
+    if (options?.ocr?.enabled !== false && fromFormat === "png") {
+      const stage = await import("./ocr/ocr-stage.js");
+      model = await stage.runOCRStage(model, {
+        options,
+        from: fromFormat,
+        to: toFormat,
+      });
+    } else if (options?.ocr?.enabled !== false && fromFormat === "pdf") {
+      const { isScannedPdf } = await import("./ocr/pdf-rasterizer.js");
+      const detection = await isScannedPdf(content, options?.ocr || {});
+      if (detection.scanned) {
+        const stage = await import("./ocr/scan-pdf-stage.js");
+        model = await stage.runScannedPdfOCRStage(model, {
+          content,
+          options,
+          from: fromFormat,
+          to: toFormat,
+        });
+      }
+    }
+
+    const output = this.write({ model, to, title, options });
+    if (options?.repair === false) {
+      return output;
+    }
+    const ctx = this._buildRepairCtx({ content, fromFormat, toFormat, title, fileName, options });
+    return this._wrapWithRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options });
   }
 }

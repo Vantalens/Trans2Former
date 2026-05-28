@@ -1,3 +1,17 @@
+import {
+  defaultModelCache,
+  defaultOCRStorage,
+  STATUS_AVAILABLE,
+  STATUS_NOT_DOWNLOADED,
+  STATUS_VERIFYING,
+  getStatusLabel,
+  getTaskLabel,
+  listKnownTaskLabels,
+  markTesseractVendorReady,
+  sha256Hex,
+  tesseractOCREngine,
+} from "/browser-transformer.js";
+
 const ORIGIN = location.origin;
 const externalRequests = [];
 let interceptMode = "off";
@@ -175,6 +189,155 @@ function render(dialog) {
       }
     }
   }
+
+  renderModelCache(dialog);
+}
+
+function renderModelCache(dialog) {
+  const card = dialog.querySelector(".model-cache-card");
+  if (!card) return;
+  const table = card.querySelector("[data-model-cache-table]");
+  const summary = card.querySelector("[data-model-cache-summary]");
+  if (!table) return;
+
+  table.innerHTML = "";
+  const entries = defaultModelCache.listManifests();
+  if (entries.length === 0) {
+    table.dataset.empty = "true";
+    table.textContent = "尚未注册模型清单，将在 P9-A OCR 基线启动时填充。当前默认安装包不包含任何 GB 级模型。";
+  } else {
+    table.dataset.empty = "false";
+    const list = document.createElement("ul");
+    list.className = "model-cache-list";
+    for (const entry of entries) {
+      const li = document.createElement("li");
+      li.className = "model-cache-row";
+      li.dataset.status = entry.status;
+      const headerHtml = `
+        <div class="model-cache-row-main">
+          <strong>${getTaskLabel(entry.manifest.task)}</strong>
+          <span class="model-cache-engine">${entry.manifest.engine} · ${entry.manifest.modelVersion}</span>
+        </div>
+        <div class="model-cache-row-meta">
+          <span class="model-cache-status" data-status="${entry.status}">${getStatusLabel(entry.status)}</span>
+          <span class="model-cache-size">${formatBundleSize(entry.manifest.bundleSize)}</span>
+        </div>
+      `;
+      const actionsHtml = entry.manifest.task === "ocr-text" && entry.manifest.engine === "tesseract"
+        ? renderTesseractActions(entry)
+        : "";
+      li.innerHTML = headerHtml + actionsHtml;
+      list.appendChild(li);
+    }
+    table.appendChild(list);
+  }
+
+  if (summary) {
+    const labels = listKnownTaskLabels().map((entry) => entry.label).join(" / ");
+    summary.textContent = `规划任务：${labels}。模型资源不进入默认安装包，启用时本地导入到 model-cache 目录并执行 SHA-256 校验。`;
+  }
+}
+
+function renderTesseractActions(entry) {
+  const ready = entry.status === STATUS_AVAILABLE;
+  return `
+    <div class="model-cache-row-actions">
+      <button class="mini-button model-cache-import-button" data-import-tessdata data-manifest-id="${entry.manifestId}" data-language="chi_sim" type="button">导入 chi_sim.traineddata</button>
+      <button class="mini-button model-cache-import-button" data-import-tessdata data-manifest-id="${entry.manifestId}" data-language="eng" type="button">导入 eng.traineddata</button>
+      <button class="mini-button model-cache-clear-button" data-clear-tessdata data-manifest-id="${entry.manifestId}" type="button" ${ready ? "" : "disabled"}>清除缓存</button>
+    </div>
+  `;
+}
+
+function setStatusMessage(dialog, text, level = "info") {
+  const target = dialog.querySelector("[data-model-cache-status]");
+  if (!target) return;
+  if (!text) {
+    target.hidden = true;
+    target.textContent = "";
+    target.dataset.level = "";
+    return;
+  }
+  target.hidden = false;
+  target.textContent = text;
+  target.dataset.level = level;
+}
+
+async function importTessdata(dialog, button) {
+  const language = button.dataset.language || "chi_sim";
+  const manifestId = button.dataset.manifestId;
+  const fileInput = dialog.querySelector("#modelCacheFileInput");
+  if (!fileInput) {
+    setStatusMessage(dialog, "无法找到文件选择器", "error");
+    return;
+  }
+  await new Promise((resolve) => {
+    const handler = async () => {
+      fileInput.removeEventListener("change", handler);
+      const file = fileInput.files?.[0];
+      fileInput.value = "";
+      if (!file) {
+        resolve();
+        return;
+      }
+      try {
+        defaultModelCache.setStatus(manifestId, STATUS_VERIFYING, { message: `校验 ${file.name}…` });
+        setStatusMessage(dialog, `正在校验 ${file.name} (${(file.size / 1024).toFixed(0)} KB)…`, "info");
+        const buffer = await file.arrayBuffer();
+        const sha256 = await sha256Hex(buffer);
+        await defaultOCRStorage.put(`tesseract/${language}.traineddata`, buffer, { sha256 });
+        if (typeof tesseractOCREngine.ensureProbe === "function") {
+          await tesseractOCREngine.ensureProbe();
+        }
+        markTesseractVendorReady(true);
+        defaultModelCache.setStatus(manifestId, STATUS_AVAILABLE, {
+          message: `已导入 ${language} (${(buffer.byteLength / (1024 * 1024)).toFixed(2)} MB, sha256=${sha256.slice(0, 12)}…)`,
+          language,
+          sha256,
+          size: buffer.byteLength,
+        });
+        setStatusMessage(dialog, `${language}.traineddata 已就绪 (sha256=${sha256.slice(0, 12)}…)`, "success");
+      } catch (error) {
+        defaultModelCache.setStatus(manifestId, STATUS_NOT_DOWNLOADED, {
+          message: `导入失败：${error?.message || error}`,
+        });
+        setStatusMessage(dialog, `导入 ${language} 失败：${error?.message || error}`, "error");
+      }
+      resolve();
+    };
+    fileInput.addEventListener("change", handler);
+    fileInput.click();
+  });
+}
+
+async function clearTessdata(dialog, button) {
+  const manifestId = button.dataset.manifestId;
+  try {
+    for (const language of ["chi_sim", "eng"]) {
+      await defaultOCRStorage.delete(`tesseract/${language}.traineddata`);
+    }
+    if (typeof tesseractOCREngine.ensureProbe === "function") {
+      await tesseractOCREngine.ensureProbe();
+    }
+    defaultModelCache.setStatus(manifestId, STATUS_NOT_DOWNLOADED, {
+      message: "已清除本地 tessdata；下次启用 OCR 需要重新导入。",
+    });
+    setStatusMessage(dialog, "tessdata 已清除", "info");
+  } catch (error) {
+    setStatusMessage(dialog, `清除失败：${error?.message || error}`, "error");
+  }
+}
+
+function formatBundleSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "未声明体积";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let idx = 0;
+  while (value >= 1024 && idx < units.length - 1) {
+    value /= 1024;
+    idx += 1;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[idx]}`;
 }
 
 function init() {
@@ -184,6 +347,7 @@ function init() {
 
   const refresh = () => render(dialog);
   listeners.add(refresh);
+  defaultModelCache.onChange(refresh);
 
   button.addEventListener("click", () => {
     if (typeof dialog.showModal === "function") {
@@ -209,6 +373,18 @@ function init() {
       notify();
     });
   }
+
+  dialog.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.matches("[data-import-tessdata]")) {
+      event.preventDefault();
+      importTessdata(dialog, target);
+    } else if (target.matches("[data-clear-tessdata]")) {
+      event.preventDefault();
+      clearTessdata(dialog, target);
+    }
+  });
 }
 
 if (document.readyState === "loading") {

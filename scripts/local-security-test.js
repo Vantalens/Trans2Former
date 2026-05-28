@@ -22,12 +22,42 @@ const ALLOWED_PUBLIC_FILES = new Set([
   path.normalize("public/smoke-test.html"),
   path.normalize("public/smoke-test.js"),
   path.normalize("public/security-center.js"),
+  // UI-A 三视图重构：router.js 用 localStorage 短期持久化预览 payload；
+  // preview.js 通过 fetch 读取同源 blob: URL 转 ArrayBuffer 后传给本地 reader。
+  // 两者均不联网，不上传任何文档内容，所有 URL 必须以 blob:/同源资源为限。
+  path.normalize("public/router.js"),
+  path.normalize("public/preview.js"),
+  // P9-A.2 OCR runtime：ocr-storage.js 抽象 IndexedDB tessdata 缓存接口；
+  // indexeddb-storage.js 落地真实 IDB I/O；tesseract-engine.js / tesseract-bootstrap.js
+  // / tesseract-runtime.js 通过同源 vendor 资源加载 tesseract.js；png-ocr.js 通过 reader
+  // 反读图片资产并调用注册过的 OCR engine 异步 enhance。所有文件均不联网；下方
+  // STRICT_LOCAL_ONLY_FILES 守门它们不得出现任何远程协议。
+  path.normalize("public/core/ocr/ocr-storage.js"),
+  path.normalize("public/core/ocr/indexeddb-storage.js"),
+  path.normalize("public/core/ocr/tesseract-engine.js"),
+  path.normalize("public/core/ocr/tesseract-bootstrap.js"),
+  path.normalize("public/core/ocr/tesseract-runtime.js"),
+  path.normalize("public/core/ocr/png-ocr.js"),
+  // P9-A.4 scan PDF: pdf-rasterizer 用 dynamic import 同源 vendor pdfjs + canvas；
+  // scan-pdf-stage 串联 enhanceWithOCR 异步多页路径。两者均不联网。
+  path.normalize("public/core/ocr/pdf-rasterizer.js"),
+  path.normalize("public/core/ocr/scan-pdf-stage.js"),
+  // P9-B FixedLayoutModel + 浏览器 rasterize：ocr-to-fixed-layout 仅做数据映射；
+  // pdf-rasterizer-browser dynamic import 同源 vendor pdfjs，运行时画布在浏览器/Tauri。
+  path.normalize("public/core/ocr/ocr-to-fixed-layout.js"),
+  path.normalize("public/core/ocr/pdf-rasterizer-browser.js"),
 ]);
 
-function isLocalVendorPdfJs(normalizedPath, content) {
-  return normalizedPath.startsWith(path.normalize("public/vendor/pdfjs/"))
-    && !content.includes("http://")
-    && !content.includes("https://");
+function isLocalVendorAsset(normalizedPath, content) {
+  const isVendor = normalizedPath.startsWith(path.normalize("public/vendor/pdfjs/"))
+    || normalizedPath.startsWith(path.normalize("public/vendor/tesseract/"));
+  if (!isVendor) return false;
+  // Vendor 资源（pdfjs / tesseract）允许内部 fetch / XHR 之类访问同源 wasm/worker；
+  // 但禁止任何远程 URL（http(s):// / ws(s)://）。
+  return !content.includes("http://")
+    && !content.includes("https://")
+    && !content.includes("ws://")
+    && !content.includes("wss://");
 }
 
 async function listFiles(directory) {
@@ -53,7 +83,7 @@ function assertNoForbiddenPublicApis(filePath, content) {
   if (ALLOWED_PUBLIC_FILES.has(normalizedPath)) {
     return;
   }
-  if (isLocalVendorPdfJs(normalizedPath, content)) {
+  if (isLocalVendorAsset(normalizedPath, content)) {
     return;
   }
 
@@ -69,6 +99,33 @@ function assertNoForbiddenPublicApis(filePath, content) {
   }
 }
 
+const STRICT_LOCAL_ONLY_FILES = new Set([
+  path.normalize("public/router.js"),
+  path.normalize("public/preview.js"),
+  path.normalize("public/core/ocr/tesseract-engine.js"),
+  path.normalize("public/core/ocr/tesseract-bootstrap.js"),
+  path.normalize("public/core/ocr/tesseract-runtime.js"),
+  path.normalize("public/core/ocr/ocr-storage.js"),
+  path.normalize("public/core/ocr/indexeddb-storage.js"),
+  path.normalize("public/core/ocr/png-ocr.js"),
+  path.normalize("public/core/ocr/pdf-rasterizer.js"),
+  path.normalize("public/core/ocr/scan-pdf-stage.js"),
+  path.normalize("public/core/ocr/ocr-to-fixed-layout.js"),
+  path.normalize("public/core/ocr/pdf-rasterizer-browser.js"),
+]);
+
+function assertNoRemoteUrlsInStrictFiles(filePath, content) {
+  const normalizedPath = path.normalize(relativeToProject(filePath));
+  if (!STRICT_LOCAL_ONLY_FILES.has(normalizedPath)) return;
+  for (const protocol of ["http://", "https://", "ws://", "wss://"]) {
+    assert.equal(
+      content.includes(protocol),
+      false,
+      `${relativeToProject(filePath)} (preview-related whitelist) must not reference any remote URL protocol: ${protocol}`,
+    );
+  }
+}
+
 async function assertPublicAppIsLocalOnly() {
   const publicFiles = (await listFiles(PUBLIC_ROOT))
     .filter((filePath) => /\.(js|html|css)$/i.test(filePath));
@@ -76,6 +133,7 @@ async function assertPublicAppIsLocalOnly() {
   for (const filePath of publicFiles) {
     const content = await readFile(filePath, "utf8");
     assertNoForbiddenPublicApis(filePath, content);
+    assertNoRemoteUrlsInStrictFiles(filePath, content);
   }
 }
 

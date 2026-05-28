@@ -250,6 +250,124 @@ export function listFormats() {
 export { normalizeFormat };
 export { getAllowedOutputFormats };
 export { expandPdfContentForTextExtraction };
+export { defaultRepairEngine, RepairEngine, MIN_CONFIDENCE } from "./core/repair-engine.js";
+export { REPAIR_ACTION_TYPES, createRepairAction, validateRepairAction } from "./core/repair-actions.js";
+export {
+  MODEL_MANIFEST_SCHEMA_VERSION,
+  MODEL_TASKS,
+  MODEL_ENGINES,
+  MODEL_QUANTIZATIONS,
+  FALLBACK_STRATEGIES,
+  createModelManifest,
+  validateModelManifest,
+  summarizeManifest,
+} from "./core/model-cache/manifest.js";
+export { sha256Hex, verifyChecksum } from "./core/model-cache/checksum.js";
+export {
+  MODEL_CACHE_ROOT,
+  getCacheKey,
+  getCacheDirectory,
+  parseCacheKey,
+  getCacheFilePath,
+} from "./core/model-cache/cache-paths.js";
+export {
+  STATUS_NOT_DOWNLOADED,
+  STATUS_IMPORTING,
+  STATUS_VERIFYING,
+  STATUS_AVAILABLE,
+  STATUS_DEGRADED,
+  STATUS_DISABLED,
+  MODEL_CACHE_STATUSES,
+  ModelCacheRegistry,
+  defaultModelCache,
+} from "./core/model-cache/availability.js";
+export {
+  getFirstEnableHint,
+  getOfflineFallbackHint,
+  getClearCacheHint,
+  getStatusLabel,
+  getTaskLabel,
+  listKnownTaskLabels,
+} from "./core/model-cache/ui-text.js";
+import "./core/ocr/ocr-bootstrap.js";
+import "./core/ocr/tesseract-bootstrap.js";
+export {
+  OCR_RESULT_SCHEMA_VERSION,
+  OCR_LANGUAGES,
+  createOCRResult,
+  validateOCRResult,
+  summarizeOCRResult,
+} from "./core/ocr/ocr-result.js";
+export {
+  OCREngineRegistry,
+  defaultOCRRegistry,
+} from "./core/ocr/ocr-engine.js";
+export {
+  placeholderOCREngine,
+  PLACEHOLDER_OCR_MANIFEST_ID,
+} from "./core/ocr/placeholder-engine.js";
+export {
+  OCR_UNAVAILABLE,
+  OCR_LOW_CONFIDENCE,
+  OCR_ENGINE_FAILED,
+  OCR_DEGRADED_ROUTE,
+  OCR_WARNING_CODES,
+  createOCRUnavailableWarning,
+  createOCREngineFailedWarning,
+  createOCRLowConfidenceWarning,
+  createOCRDegradedRouteWarning,
+} from "./core/ocr/ocr-warnings.js";
+export { ensureOCRBootstrap } from "./core/ocr/ocr-bootstrap.js";
+export {
+  tesseractOCREngine,
+  TESSERACT_MANIFEST_ID,
+  markTesseractVendorReady,
+} from "./core/ocr/tesseract-engine.js";
+export { ensureTesseractBootstrap } from "./core/ocr/tesseract-bootstrap.js";
+export {
+  InMemoryStorage,
+  createIndexedDBStorage,
+  defaultOCRStorage,
+} from "./core/ocr/ocr-storage.js";
+export { IndexedDBStorage } from "./core/ocr/indexeddb-storage.js";
+export {
+  OCR_VENDOR_LOAD_FAILED,
+  TESSERACT_VENDOR_PATHS,
+  loadTesseractRuntime,
+  createTesseractWorker,
+  runRecognize,
+  disposeWorker,
+} from "./core/ocr/tesseract-runtime.js";
+export { enhanceWithOCR } from "./core/ocr/png-ocr.js";
+export { runOCRStage, getDefaultOCRLanguage } from "./core/ocr/ocr-stage.js";
+export { detectOCRLowConfidence } from "./core/ocr/ocr-validator.js";
+export {
+  isScannedPdf,
+  defaultPdfPageRasterizer,
+  setPdfPageRasterizer,
+  resetPdfPageRasterizer,
+  OCR_RASTERIZER_UNAVAILABLE,
+  OCR_RASTERIZER_FAILED,
+} from "./core/ocr/pdf-rasterizer.js";
+export {
+  runScannedPdfOCRStage,
+  MODEL_VISUAL_FIDELITY_LOST,
+  MODEL_TEXT_ORDER_HEURISTIC,
+} from "./core/ocr/scan-pdf-stage.js";
+export {
+  ocrResultToFixedLayoutPage,
+  mergeOCRResultsToFixedLayout,
+  READING_ORDER_HEURISTIC,
+} from "./core/ocr/ocr-to-fixed-layout.js";
+export { createBrowserPdfPageRasterizer } from "./core/ocr/pdf-rasterizer-browser.js";
+export {
+  createFixedLayoutModel,
+  createPage as createFixedLayoutPage,
+  createTextRun as createFixedLayoutTextRun,
+  createBbox as createFixedLayoutBbox,
+  getFixedLayoutSummary,
+} from "./core/models/fixed-layout.js";
+export { fixedLayoutToSemantic } from "./core/models/mappers.js";
 
 export function getRouteTemperature(from, to) {
   return registry.getRouteTemperature(from, to);
@@ -291,4 +409,8 @@ export function renderPreviewHtml(content, fromFormat, title = "document") {
 
 export function convertContent({ content, from, to, title = "document", fileName = "", options = {} }) {
   return registry.convert({ content, from, to, title, fileName, options });
+}
+
+export async function convertContentAsync({ content, from, to, title = "document", fileName = "", options = {} }) {
+  return registry.convertAsync({ content, from, to, title, fileName, options });
 }

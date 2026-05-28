@@ -97,9 +97,9 @@ release/trans2former-2.0.0/RELEASE_MANIFEST.json
 ## 当前限制
 
 1. PDF 当前支持程序化二进制输出，不再依赖浏览器打印作为主要路径。
-2. DOCX、XLSX、EPUB、PDF text extraction、PPTX input 已完成 P3；DOCX/PDF output 已完成 P4/P6 基线；OFD 和本地 OCR 增强进入核心本地路线。
-3. 不需要安装 Office、LibreOffice、Pandoc、Playwright 或桌面壳程序。
-4. 不提供远程 OCR、远程转写、远程 AI 增强或云端文档处理；本地模型和 OFD 高保真渲染必须保持本地、可删除、可禁用、可回滚。
+2. DOCX、XLSX、EPUB、PDF text extraction、PPTX input 已完成 P3；DOCX/PDF output 已完成 P4/P6 基线；OFD 和本地 OCR 增强代码核心内置，OCR 模型资源不预装，首次启用 OCR 时本地下载到 model-cache。
+3. 不需要安装 Office、LibreOffice、Pandoc、Playwright 或桌面壳程序。默认安装包目标 30–80 MB，不内置 PaddleOCR-VL / Qwen-VL / MinerU 等 GB 级模型。
+4. 不提供远程 OCR、远程转写、远程 AI 增强或云端文档处理；OCR 模型与 OFD 高保真渲染必须保持本地执行、可删除、可禁用、可回滚；高级 OCR 资源（PaddleOCR-VL / MinerU 等）作为独立本地资源按需获取。
 
 ## 升级
 

@@ -125,6 +125,31 @@ P8-B 已引入真实 mapper 执行证据字段 `executedMappers` 并接入 `Sema
 - 新增格式时必须声明 reader/writer 的真实模型能力，并在新增推荐路径时同步产品矩阵与测试。
 - [scripts/conversion-capability-audit-test.js](../scripts/conversion-capability-audit-test.js) 用 Planner 输出做矩阵稳定性断言
 
+## Repair Cycle（S2 落地）
+
+S2 在 `ConverterRegistry.convert()` 内、writer 输出之后增加 Repair Cycle，让转换从「读 → 路由 → 写」扩展为「读 → 路由 → 写 → 复核 → 必要时修复 → 再复核 → 输出」。完整步骤：
+
+1. **propose**：`defaultRepairEngine.proposeActions(model, ctx)` 跑两个默认 validator —— `detectLossyRepairHints` 提取 `metadata.warnings[*].details.repairAction` 中的结构化建议；`detectRouteClassDegradation` 对 `routeClass ∈ {generated, restricted}` 路径建议更保守的输出。
+2. **apply**：对每个候选 action 校验 `confidence ≥ MIN_CONFIDENCE (0.6)` 后查表派发到 handler。`replaceTextRun` 改写 SemanticDoc block 字符串字段；`selectFallbackRoute` 默认仅写入 `autoRepair.recommendations`，需 `options.repair.applyFallback === true` 才真正切换 writer 并替换 output；其余 5 类动作目前注册为占位 reject。
+3. **reverify (model-level)**：cycle 用 `ensureDocumentAudit` 重算 `qualityReport`，要求 `warningCount` / `downgradeCount` 不超过 repair 之前。
+4. **reverify (round-trip)**：当 `from === to` 且格式属于 `md/html/json/csv/txt/xml` 自映射白名单时，cycle 把 writer 输出反读回模型并比对指纹；非白名单路径写 `roundTripDelta.skipped = "format-not-round-trip-safe"`，不阻塞输出。
+5. **finalDecision**：`verified`（无动作或复核通过）/ `degraded`（候选全被 reject）/ `failed-quality-gate`（apply 后复核失败）写入 `autoRepair.finalDecision` 和 `qualityReport.finalDecision`。
+
+`convert()` 返回结构变为 `{ ...writerOutput, quality: { qualityReport, modelReview, autoRepair, conversion } }` 的非破坏性 superset。`options.repair === false` 跳过整个 cycle 并返回原 writer payload，给 legacy 测试和未来需要纯净输出的调用方留口子。S2 阶段所有 validator/handler 仍是规则驱动，真实模型审核由 S3 接入。
+
+P9-A.3 之后，PNG 输入路径建议走 `convertContentAsync(payload)` —— 在 `prepareConversionModel` 与 `write` 之间插入 `runOCRStage(model, ctx)`，让 OCR 识别文本作为 paragraph blocks 写入 SemanticDoc；之后走同一 `_wrapWithRepairCycle` helper。Repair Engine 自动激活 `detectOCRLowConfidence` validator，把 `metadata.ocr.lines` 中 confidence < 0.55 的行转成 `replaceTextRun` 候选 action。同步 `convert()` 保留不变以保证现有调用方与 18+ 测试脚本零回归。
+
+P9-A.4 之后，扫描 PDF 输入路径在 `convertAsync` 的 PDF 分支自动检测（`isScannedPdf(content)`）并走 `runScannedPdfOCRStage(model, ctx)`：rasterizer 渲染每页 → enhanceWithOCR → 多页合并；文本 PDF 沿用 P8-B 既有文本提取路径，不动。
+
+P9-B 之后，扫描 PDF 路径的输出携带完整 FixedLayoutModel + SemanticDoc 双视图：`mergeOCRResultsToFixedLayout` 把每页 OCR 结果按 bbox.y → bbox.x 排序合并 + 携带 confidence，写入 `model.fixedLayout`；`fixedLayoutToSemantic` 派生 `model.blocks`；发 `MODEL_VISUAL_FIDELITY_LOST` + `MODEL_TEXT_ORDER_HEURISTIC` info warning。`defaultPdfPageRasterizer` 现在在浏览器/Tauri 自动 dynamic import `pdf-rasterizer-browser.js` + vendor pdfjs + canvas.toDataURL；Node 测试仍用 stub。
+
 ## 后续增强
 
-P8-B 的首批执行链已闭环。后续由 P9 补齐 `slide` / `fixedLayout` 路径的 writer 能力、公开 fixture 与视觉质量证据；在证据成立前不将规划边提升为实际 mapper 执行。
+P8-B 的首批执行链已闭环。后续按 2026-05-28 [lightweight-default-bundle-direction](superpowers/specs/2026-05-28-lightweight-default-bundle-direction.md) 决策推进 P9-A/B/C/D：
+
+- **P9-A OCR 基线**：PNG 与扫描 PDF 接入轻量 OCR（Tesseract.js / 轻量 PaddleOCR），OCR 模型资源按需下载到 model-cache，不进入默认安装包。
+- **P9-B OCR → FixedLayoutModel**：OCRResult → FixedLayoutModel → SemanticDoc，保留 bbox / confidence / page index / reading order，让 Repair Engine 的 `fixedLayoutToSemantic` 路径获得真实证据。
+- **P9-C 转换后检验**：规则 diff + SSIM 视觉对比 + OCR 回读三层组合统一写入 QualityReport，作为核心差异化能力提升。
+- **P9-D 高级 OCR**：PaddleOCR-VL / MinerU 等大模型作为独立本地资源按需下载，明确体积、运行内存、降级路径。
+
+在 P9-A 启动前必须先完成 **S3 按需下载与本地缓存治理**：定义 model-cache 目录结构、manifest、checksum、可清理入口、断网降级提示和首次启用下载提示流程。`slide` / `fixedLayout` 路径的 writer 能力和视觉质量证据在 P9-B/C 推进过程中补齐；在证据成立前不将规划边提升为实际 mapper 执行。

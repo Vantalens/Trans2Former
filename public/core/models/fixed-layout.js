@@ -22,6 +22,7 @@ export function createPage({
   annotations = [],
   signatures = [],
   assets = [],
+  readingOrderHint = "",
 } = {}) {
   return {
     pageNumber: Number(pageNumber) || 0,
@@ -41,6 +42,7 @@ export function createPage({
       assetId: String(asset?.assetId || ""),
       bbox: asset?.bbox ? createBbox(asset.bbox) : null,
     })),
+    readingOrderHint: String(readingOrderHint || ""),
   };
 }
 
@@ -50,6 +52,7 @@ export function createTextRun({
   fontName = "",
   fontSize = 0,
   fontWeight = "",
+  confidence = 0,
 } = {}) {
   return {
     text: String(text ?? ""),
@@ -57,6 +60,7 @@ export function createTextRun({
     fontName: String(fontName || ""),
     fontSize: Number(fontSize) || 0,
     fontWeight: String(fontWeight || ""),
+    confidence: Number.isFinite(Number(confidence)) ? Math.max(0, Math.min(1, Number(confidence))) : 0,
   };
 }
 

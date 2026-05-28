@@ -48,7 +48,9 @@ Trans2Former_<version>_checksums.sha256
 - 应用可启动到主窗口。
 - Markdown -> HTML、TXT -> PDF、CSV -> XLSX 基础路径可转换并下载。
 - OFD、PNG/image、PDF、OOXML 等核心本地能力在无插件安装入口的情况下可见。
-- 文档处理阶段不发起网络请求。
+- 默认安装包体积控制在 30–80 MB；不内置 PaddleOCR-VL / Qwen-VL / MinerU 等 GB 级模型。
+- OCR 启用后必须可触发首次本地下载，并展示 manifest、checksum、缓存路径、分项体积报告、可清理入口和断网降级提示。
+- 文档处理阶段不发起网络请求；OCR 模型下载是显式动作，仅在用户首次启用 OCR 时联网，下载完成后所有识别在本机执行。
 - 关闭再打开后不会自动恢复用户文档，除非用户显式开启历史持久化。
 
 ## 文件关联和权限
@@ -71,7 +73,11 @@ Trans2Former_<version>_checksums.sha256
 - 新增格式转换能力优先并入核心本地模块，必要时通过本地 worker、vendor 或 WASM 按需加载。
 - Release 包不得包含 `plugin-patches` 或 `.t2f-plugin.json`。
 - OFD、OCR、版面分析、表格恢复等能力必须声明资源预算、fallback 和兼容说明。
-- 本地模型资源必须手动安装、可删除、可禁用，不得上传数据。
+- OCR 模型资源不进入默认安装包；首次启用时本地下载到 model-cache，必须提供 manifest、checksum、缓存路径、可清理入口、体积报告、断网降级提示和失败 fallback，处理过程不上传任何文档内容。
+- `release:prepare` 必须依次执行 `sync-pdfjs-vendor` 与 `sync-tesseract-vendor`；后者在 `tesseract.js` optionalDependency 缺失时退出 0，不阻塞 CI/发布流程。
+- Tauri CSP 必须保留 `'wasm-unsafe-eval'`（让本地 tesseract.js wasm 在 WebView 中可实例化），且 `connect-src 'self'` 不可放开 —— 模型资源仅同源 vendor 与本地 IndexedDB，禁止任何远程 URL。
+- 高级 OCR 资源（PaddleOCR-VL / MinerU 等大模型）作为独立本地资源按需获取，启用前展示体积、运行内存、降级路径和失败提示。
+- 转换后检验三层（规则 diff、SSIM 视觉对比、OCR 回读）必须可在断网状态运行，验证 Repair Engine 修复后的输出质量并写入 QualityReport。
 - 文档处理模式始终禁止网络访问。
 
 ## 当前 P7 边界
