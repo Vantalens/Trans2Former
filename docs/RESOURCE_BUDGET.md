@@ -35,7 +35,7 @@ format-heavy-core
 - Release 的 `RELEASE_MANIFEST.json` manifest 必须记录核心本地能力、样例、预算和生成时间。
 - 文档处理、预览、编辑和导出阶段必须禁联网。
 
-## 当前预算
+## 轻量核心预算
 
 - `public/core`: <= 0.25 MB
 - `public/formats`: <= 0.50 MB
@@ -46,6 +46,16 @@ format-heavy-core
 - `pdfjs-dist`: 只能在 `optionalDependencies` 中出现，并由 `scripts/sync-pdfjs-vendor.js` 同步到本地 vendor。
 
 这些预算是当前阶段的护栏，不是最终能力上限。未来引入重格式时，应放入核心按需加载目录，并同步调整预算。
+
+## 模型增强桌面包预算
+
+模型增强桌面包是正式安装包形态，不与轻量 Web-GUI core 预算混用。模型资源随安装包交付，但不得进入首屏启动路径；只有当前任务需要 OCR、layout、table、质量审核或 Repair Engine 自动修复时才按需加载。
+
+- 模型资源随安装包交付，必须记录 manifest、checksum、量化方式、任务范围、最低内存和 fallback。
+- 交付包只包含推理资源，不包含训练检查点、优化器状态、标注数据或调试样本。
+- OCR、layout、table、quality-reviewer 共享资源必须去重，避免重复打包 tokenizer、字典、字体、运行库或视觉 backbone。
+- Windows 安装包构建后必须报告应用本体、推理运行时、模型资产和压缩后总包体积。
+- 具体 MB/GB 上限以首个可运行模型构建后的质量、速度、内存和体积测试确定，不沿用轻量核心预算。
 
 ## 核心重能力预算原则
 

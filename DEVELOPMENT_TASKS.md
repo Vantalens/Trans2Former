@@ -1,6 +1,6 @@
 # Trans2Former Development Tasks
 
-最后更新：2026-05-27
+最后更新：2026-05-28
 
 维护规则：
 
@@ -16,9 +16,9 @@
 > Trans2Former Desktop：基于 Tauri + Web-GUI 的专业级、本地优先、零上传、多格式、高质量桌面格式转换工作台。
 
 - 当前 Web 应用继续作为转换核心和 GUI 验证底座，最终面向桌面体验。
-- 桌面形态采用 Tauri，不依赖 Office、LibreOffice、Pandoc、云端转换或 OCR/AI。
+- 桌面形态采用 Tauri，不依赖 Office、LibreOffice、Pandoc、云端转换或云端 OCR/AI；复杂文档识别、质量审核和自动修复采用内置本地专用模型。
 - 转换核心围绕 `input -> canonical model -> executed mapper route -> QualityReport / Warnings -> output`，避免 N×N 私有路径；兼容期保留 `DocumentModel` 外壳，但不得用它掩盖专属模型的实际损失。
-- 热门基础格式必须免下载可用；高保真、OFD、本地 OCR/layout/table 全部进入核心本地模块，不再提供插件安装。
+- 热门基础格式必须免下载可用；高保真、OFD、本地 OCR/layout/table、Repair Engine 和本地模型全部进入核心本地模块，不再提供插件安装。
 - 文档处理、预览、编辑和导出阶段必须禁联网。
 
 ## 阶段状态
@@ -42,9 +42,11 @@
 
 ## 下一步执行顺序
 
-1. **P9 质量证据升级**：以校准后的路径等级为基线，把 SSIM 视觉对比推进到可运行实现，补 PDF/OFD/扫描件版面恢复的公开样例和质量报告。
-2. **P7-B 跨平台发布与签名**：在转换能力表述准确后，于对应构建环境完成 macOS/Linux 安装包、签名/公证、自动更新、平台 smoke、文件关联和桌面权限体验。
-3. **发布前回归**：`npm test`、`git diff --check`、`npm run release:prepare`、release manifest ignore 验证。
+1. **S1 设计同步与矩阵真值校准**：用测试锁定 `format-registry` 与 `CONVERSION_PATHS` 一致性，并清理本地模型手动安装、无 OCR/AI 等旧方向表述。
+2. **S2 Repair Engine 与审核数据契约**：实现结构化修复动作、质量报告扩展、修复后二次复核和 fallback 机制，但不提前声称 PNG/OFD/PDF/PPTX 高保真闭环完成。
+3. **P9 质量证据升级**：以校准后的路径等级为基线，把 SSIM 视觉对比推进到可运行实现，补 PDF/OFD/扫描件版面恢复的公开样例和质量报告。
+4. **P7-B 跨平台发布与签名**：在转换能力表述准确后，于对应构建环境完成 macOS/Linux 安装包、签名/公证、自动更新、平台 smoke、文件关联和桌面权限体验。
+5. **发布前回归**：`npm test`、`git diff --check`、`npm run release:prepare`、release manifest ignore 验证。
 
 ## P8-B 完成结果
 

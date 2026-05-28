@@ -48,6 +48,7 @@ Trans2Former_<version>_checksums.sha256
 - 应用可启动到主窗口。
 - Markdown -> HTML、TXT -> PDF、CSV -> XLSX 基础路径可转换并下载。
 - OFD、PNG/image、PDF、OOXML 等核心本地能力在无插件安装入口的情况下可见。
+- 含模型版本必须包含内置模型 manifest、checksum、分项体积报告和至少一个离线修复 smoke。
 - 文档处理阶段不发起网络请求。
 - 关闭再打开后不会自动恢复用户文档，除非用户显式开启历史持久化。
 
@@ -71,7 +72,8 @@ Trans2Former_<version>_checksums.sha256
 - 新增格式转换能力优先并入核心本地模块，必要时通过本地 worker、vendor 或 WASM 按需加载。
 - Release 包不得包含 `plugin-patches` 或 `.t2f-plugin.json`。
 - OFD、OCR、版面分析、表格恢复等能力必须声明资源预算、fallback 和兼容说明。
-- 本地模型资源必须手动安装、可删除、可禁用，不得上传数据。
+- 模型资源随正式安装包交付，必须提供内置模型 manifest、checksum、可禁用入口、体积报告和失败 fallback，不得上传数据。
+- 离线修复 smoke 必须在断网状态验证基础转换、模型资源校验、Repair Engine 修复后复核和无网络访问。
 - 文档处理模式始终禁止网络访问。
 
 ## 当前 P7 边界
