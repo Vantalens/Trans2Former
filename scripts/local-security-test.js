@@ -42,6 +42,10 @@ const ALLOWED_PUBLIC_FILES = new Set([
   // scan-pdf-stage 串联 enhanceWithOCR 异步多页路径。两者均不联网。
   path.normalize("public/core/ocr/pdf-rasterizer.js"),
   path.normalize("public/core/ocr/scan-pdf-stage.js"),
+  // P9-D.1 PP-OCRv5 高级 OCR 骨架：engine 实现 OCREngine 契约；bootstrap 注册 engine +
+  // ONNX manifest。本轮不引入 onnxruntime、不实跑推理；均不联网。
+  path.normalize("public/core/ocr/paddle-ocr-engine.js"),
+  path.normalize("public/core/ocr/paddle-ocr-bootstrap.js"),
   // P9-B FixedLayoutModel + 浏览器 rasterize：ocr-to-fixed-layout 仅做数据映射；
   // pdf-rasterizer-browser dynamic import 同源 vendor pdfjs，运行时画布在浏览器/Tauri。
   path.normalize("public/core/ocr/ocr-to-fixed-layout.js"),
@@ -126,6 +130,8 @@ const STRICT_LOCAL_ONLY_FILES = new Set([
   path.normalize("public/core/ocr/scan-pdf-stage.js"),
   path.normalize("public/core/ocr/ocr-to-fixed-layout.js"),
   path.normalize("public/core/ocr/pdf-rasterizer-browser.js"),
+  path.normalize("public/core/ocr/paddle-ocr-engine.js"),
+  path.normalize("public/core/ocr/paddle-ocr-bootstrap.js"),
   path.normalize("public/core/verification/block-fingerprint.js"),
   path.normalize("public/core/verification/rule-diff.js"),
   path.normalize("public/core/verification/verification-stage.js"),

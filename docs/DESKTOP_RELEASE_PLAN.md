@@ -76,7 +76,7 @@ Trans2Former_<version>_checksums.sha256
 - OCR 模型资源不进入默认安装包；首次启用时本地下载到 model-cache，必须提供 manifest、checksum、缓存路径、可清理入口、体积报告、断网降级提示和失败 fallback，处理过程不上传任何文档内容。
 - `release:prepare` 必须依次执行 `sync-pdfjs-vendor` 与 `sync-tesseract-vendor`；后者在 `tesseract.js` optionalDependency 缺失时退出 0，不阻塞 CI/发布流程。
 - Tauri CSP 必须保留 `'wasm-unsafe-eval'`（让本地 tesseract.js wasm 在 WebView 中可实例化），且 `connect-src 'self'` 不可放开 —— 模型资源仅同源 vendor 与本地 IndexedDB，禁止任何远程 URL。
-- 高级 OCR 资源（PaddleOCR-VL / MinerU 等大模型）作为独立本地资源按需获取，启用前展示体积、运行内存、降级路径和失败提示。
+- 高级 OCR 内置目标为 PP-OCRv5（ONNX Runtime + WebGPU，WASM 回退），ONNX 模型按需下载到 model-cache，启用前展示体积、运行内存、降级路径和失败提示；PaddleOCR-VL / MinerU 等 VLM 为远期/外部资源（浏览器/Tauri 本地暂不可内嵌）。
 - 转换后检验三层（规则 diff、SSIM 视觉对比、OCR 回读）必须可在断网状态运行，验证 Repair Engine 修复后的输出质量并写入 QualityReport。
 - 文档处理模式始终禁止网络访问。
 

@@ -31,7 +31,7 @@ Tauri 桌面壳
 - 中间模型优先：新增格式必须走 `input -> DocumentModel -> output`，避免 `N * N` 转换路线。
 - 软件自动修复：质量问题由本地模型识别并由 Repair Engine 执行结构化修复，用户不承担逐项修复判断。
 - 核心模块优先：默认安装包保持轻量（目标 30–80 MB）；热门基础格式免下载；重格式与 OCR 等增强能力代码核心内置，模型资源按需下载到本地 model-cache，默认包不含 GB 级模型。
-- 高保真攻坚：难格式不是回避项，OFD、PDF、Office 复杂文档和本地 OCR 是长期差异化攻坚方向；高级 OCR（PaddleOCR-VL / MinerU 等）作为独立本地资源按需获取，不与默认安装包绑定。
+- 高保真攻坚：难格式不是回避项，OFD、PDF、Office 复杂文档和本地 OCR 是长期差异化攻坚方向；高级 OCR 内置目标为 PP-OCRv5（ONNX/WebGPU，按需下载 ONNX 模型），PaddleOCR-VL / MinerU 等 VLM 作为远期/外部资源，不与默认安装包绑定。
 - 可验证交付：每个阶段都必须有样例、自动化测试、质量报告和可解释 warnings。
 
 ## 产品壁垒

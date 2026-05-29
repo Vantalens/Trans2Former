@@ -56,7 +56,7 @@ OCR / 版面 / 表格能力的代码核心内置，但**模型资源不进入默
 - model-cache 目录必须支持：manifest 记录每个模型资产的版本、checksum、量化方式、任务范围、最低内存和 fallback；用户可见的缓存路径、清理入口、禁用入口；断网降级提示与失败 fallback。
 - 缓存包只保存推理资源，不保存训练检查点、优化器状态、标注数据、调试样本或任何用户文档内容。
 - OCR、layout、table、quality-reviewer 共享资源必须去重，避免重复下载 tokenizer、字典、字体、运行库或视觉 backbone。
-- 轻量 OCR（Tesseract.js / 轻量 PaddleOCR）与高级 OCR（PaddleOCR-VL / MinerU）使用独立缓存条目；高级 OCR 启用前展示体积、运行内存、降级路径和失败提示。
+- 轻量 OCR（Tesseract.js）与高级 OCR（PP-OCRv5 ONNX/WebGPU）使用独立缓存条目；高级 OCR 启用前展示体积、运行内存、降级路径和失败提示。PaddleOCR-VL / MinerU 等 VLM 为远期/外部资源，不进入默认 dependencies 或安装包本体。
 - 具体 MB/GB 上限以首个可运行 OCR 模型构建后的质量、速度、内存测试结果确定，不沿用默认安装包预算。
 
 ### model-cache 目录结构

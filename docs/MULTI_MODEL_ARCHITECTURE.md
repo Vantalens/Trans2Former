@@ -251,9 +251,19 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 - `runOcrReadbackLayer({ model, output, ctx, engine?, rasterizer? })`：资格 `ctx.to === "pdf"` 且原文非空 且 OCR engine 可用；经 OCR `defaultPdfPageRasterizer` 栅格化输出 PDF → `engine.recognize` → `compareText` → `qualityReport.ocrReadback = { recall, precision, f1, threshold, passed, engineId, originalLength, recognizedLength, averageConfidence }`；低于阈值（默认 f1 ≥ 0.7）发 info `OCR_READBACK_DRIFT`；engine/rasterizer 不可用或 recognize 抛错 → eligible:false（`OCR_READBACK_FAILED` info），不抛、不阻塞。
 - `runVerificationStageAsync` 末尾 dynamic import `ocr-readback.js` 跑第三层，合并进 envelope；`qualityReport.ocrReadback` 同步路径恒 `null`。
 - 命中路径：`md/html/txt/json/xml/docx/doc/epub/csv/xlsx → pdf`（凡产出 PDF 的文本路径），engine 复用已注册的 `ocr-text`（tesseract，需用户导入 tessdata）。
-- 本轮 stub-only（Node 无 canvas/tessdata；真实 OCR 回读端到端留给浏览器手动验证）；不让 Repair Engine 消费 `ocrReadback`；高级 OCR（PaddleOCR-VL / MinerU）属 P9-D。
+- 本轮 stub-only（Node 无 canvas/tessdata；真实 OCR 回读端到端留给浏览器手动验证）；不让 Repair Engine 消费 `ocrReadback`；高级 OCR 属 P9-D。
 
 至此 P9-C 三层检验（rule-diff + ssim + ocr-readback）齐备，统一写入 `qualityReport.{ ruleDiff, ssim, ocrReadback }` + `qualityReport.verification` envelope。
+
+### 高级 OCR · PP-OCRv5 (ONNX/WebGPU)（P9-D 方向 + P9-D.1 骨架）
+
+调研结论（[2026-05-29-p9d-advanced-ocr-research.md](superpowers/specs/2026-05-29-p9d-advanced-ocr-research.md)）：**PaddleOCR-VL（0.9B VLM）/ MinerU** 在「浏览器/Tauri 本地 + 零云端 + 30–80MB 轻量默认包」约束下当前不可内嵌（VLM 无成熟 ONNX/WebGPU 路径、需 ~500MB + 1–2GB VRAM 或 vLLM 服务；MinerU 是 Python/vLLM 工具）。因此 **P9-D 高级 OCR 的内置目标改为 PP-OCRv5（ONNX Runtime + WebGPU，WASM 回退）**；PaddleOCR-VL / MinerU 标注为**远期/外部资源**，不作为内置路径。
+
+P9-D.1 骨架（同 tesseract 骨架先行）：
+
+- `paddleOcrEngine`（`public/core/ocr/paddle-ocr-engine.js`，id `paddleocr-v5`，taskCapabilities `["ocr-text","ocr-layout"]`）实现现有 `OCREngine` 契约，注册到 `defaultOCRRegistry`；`isAvailable()` 检查 vendor 就位 + det/cls/rec 模型在本地缓存，Node/未就位恒 false；`recognize()` 三阶段拒绝（vendor-not-ready / model-missing / runtime-not-wired）。
+- `paddle-ocr-bootstrap.js` 注册 PP-OCRv5 ONNX ModelManifest（`engine: "paddleocr"`，int8，det/cls/rec perFile 占位）到 `defaultModelCache`，状态 `not-downloaded`，按需下载到 `model-cache`。
+- 本轮**不引入 onnxruntime-web、不实跑推理**（P9-D.2 接 ONNX/WebGPU 运行时；P9-D.3 模型按需下载 + 安全中心 UI；P9-D.4 接入转换链并让 paddle 在可用时优先于 tesseract）。
 
 ## 不做什么（明确边界）
 

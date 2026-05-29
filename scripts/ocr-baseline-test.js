@@ -50,6 +50,10 @@ import {
   MODEL_TEXT_ORDER_HEURISTIC,
   getFixedLayoutSummary,
   fixedLayoutToSemantic,
+  paddleOcrEngine,
+  PADDLE_OCR_MANIFEST_ID,
+  markPaddleOcrVendorReady,
+  ensurePaddleOcrBootstrap,
 } from "../public/browser-transformer.js";
 import { ConversionError } from "../public/core/conversion-error.js";
 
@@ -218,9 +222,9 @@ function makeStubEngine(overrides = {}) {
   // registered. With both isAvailable()=false, pickForTask falls back to the last
   // registered engine. Both ids are acceptable here.
   const picked = defaultOCRRegistry.pickForTask("ocr-text");
-  assert.ok(picked, "pickForTask should return either placeholder or tesseract");
+  assert.ok(picked, "pickForTask should return a fallback engine");
   assert.equal(
-    ["placeholder", "tesseract-zh-en"].includes(picked.id),
+    ["placeholder", "tesseract-zh-en", "paddleocr-v5"].includes(picked.id),
     true,
     `pickForTask returned unexpected engine: ${picked.id}`,
   );
@@ -236,9 +240,9 @@ function makeStubEngine(overrides = {}) {
   assert.ok(ocrWarning, "PNG reader should attach OCR_UNAVAILABLE warning");
   assert.equal(ocrWarning.severity, "info");
   assert.equal(
-    ["placeholder", "tesseract-zh-en"].includes(ocrWarning.details?.engineId),
+    ["placeholder", "tesseract-zh-en", "paddleocr-v5"].includes(ocrWarning.details?.engineId),
     true,
-    `expected engineId to be placeholder or tesseract-zh-en, got ${ocrWarning.details?.engineId}`,
+    `expected engineId to be placeholder/tesseract/paddle, got ${ocrWarning.details?.engineId}`,
   );
 }
 
@@ -883,4 +887,38 @@ function makeStubEngine(overrides = {}) {
   );
 }
 
-console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback all verified.");
+// 35. PP-OCRv5 advanced OCR engine skeleton (P9-D.1): registered, unavailable in Node,
+//     manifest registered, recognize three-stage rejection.
+{
+  ensurePaddleOcrBootstrap();
+  ensurePaddleOcrBootstrap();
+  assert.equal(defaultOCRRegistry.has(paddleOcrEngine.id), true, "paddle engine should be registered after bootstrap");
+  assert.equal(paddleOcrEngine.id, "paddleocr-v5");
+  assert.equal(paddleOcrEngine.taskCapabilities.includes("ocr-text"), true);
+  assert.equal(paddleOcrEngine.taskCapabilities.includes("ocr-layout"), true);
+  assert.equal(paddleOcrEngine.isAvailable(), false, "paddle engine should report unavailable until P9-D.2 wires onnxruntime");
+
+  const status = defaultModelCache.getStatus(PADDLE_OCR_MANIFEST_ID);
+  assert.ok(status, "paddle manifest should be registered in defaultModelCache");
+  assert.equal(status.status, STATUS_NOT_DOWNLOADED);
+
+  // vendor not ready => OCR_UNAVAILABLE / vendor-not-ready
+  markPaddleOcrVendorReady(false);
+  await assert.rejects(
+    () => paddleOcrEngine.recognize({ image: { width: 10, height: 10 } }),
+    (err) => err instanceof ConversionError && err.code === OCR_UNAVAILABLE && err.details?.reason === "vendor-not-ready",
+  );
+
+  // vendor ready but models missing => OCR_UNAVAILABLE / model-missing
+  markPaddleOcrVendorReady(true);
+  try {
+    await assert.rejects(
+      () => paddleOcrEngine.recognize({ image: { width: 10, height: 10 } }),
+      (err) => err instanceof ConversionError && err.code === OCR_UNAVAILABLE && err.details?.reason === "model-missing",
+    );
+  } finally {
+    markPaddleOcrVendorReady(false);
+  }
+}
+
+console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback + PP-OCRv5 advanced engine skeleton all verified.");

@@ -343,6 +343,7 @@ export {
 } from "./core/model-cache/ui-text.js";
 import "./core/ocr/ocr-bootstrap.js";
 import "./core/ocr/tesseract-bootstrap.js";
+import "./core/ocr/paddle-ocr-bootstrap.js";
 export {
   OCR_RESULT_SCHEMA_VERSION,
   OCR_LANGUAGES,
@@ -376,6 +377,13 @@ export {
   markTesseractVendorReady,
 } from "./core/ocr/tesseract-engine.js";
 export { ensureTesseractBootstrap } from "./core/ocr/tesseract-bootstrap.js";
+export {
+  paddleOcrEngine,
+  PADDLE_OCR_MANIFEST_ID,
+  PADDLE_OCR_MODEL_FILES,
+  markPaddleOcrVendorReady,
+} from "./core/ocr/paddle-ocr-engine.js";
+export { ensurePaddleOcrBootstrap } from "./core/ocr/paddle-ocr-bootstrap.js";
 export {
   InMemoryStorage,
   createIndexedDBStorage,
