@@ -41,8 +41,9 @@ for (const file of REQUIRED_FILES) {
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 assert.equal(packageJson.scripts["vendor:pdfjs"], "node scripts/sync-pdfjs-vendor.js");
-assert.equal(packageJson.scripts["release:prepare"], "node scripts/sync-pdfjs-vendor.js && node scripts/sync-tesseract-vendor.js && node scripts/prepare-release.js");
+assert.equal(packageJson.scripts["release:prepare"], "node scripts/sync-pdfjs-vendor.js && node scripts/sync-tesseract-vendor.js && node scripts/sync-onnxruntime-vendor.js && node scripts/prepare-release.js");
 assert.equal(packageJson.scripts["vendor:tesseract"], "node scripts/sync-tesseract-vendor.js");
+assert.equal(packageJson.scripts["vendor:onnx"], "node scripts/sync-onnxruntime-vendor.js");
 
 const releasePrep = await readFile("docs/RELEASE_PREP.md", "utf8");
 for (const requiredText of [

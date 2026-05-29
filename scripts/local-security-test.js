@@ -42,10 +42,11 @@ const ALLOWED_PUBLIC_FILES = new Set([
   // scan-pdf-stage 串联 enhanceWithOCR 异步多页路径。两者均不联网。
   path.normalize("public/core/ocr/pdf-rasterizer.js"),
   path.normalize("public/core/ocr/scan-pdf-stage.js"),
-  // P9-D.1 PP-OCRv5 高级 OCR 骨架：engine 实现 OCREngine 契约；bootstrap 注册 engine +
-  // ONNX manifest。本轮不引入 onnxruntime、不实跑推理；均不联网。
+  // P9-D.1/D.2 PP-OCRv5 高级 OCR：engine 实现 OCREngine 契约；bootstrap 注册 engine +
+  // ONNX manifest；runtime 通过同源 vendor 加载 onnxruntime-web + WebGPU/WASM 后端。均不联网。
   path.normalize("public/core/ocr/paddle-ocr-engine.js"),
   path.normalize("public/core/ocr/paddle-ocr-bootstrap.js"),
+  path.normalize("public/core/ocr/paddle-ocr-runtime.js"),
   // P9-B FixedLayoutModel + 浏览器 rasterize：ocr-to-fixed-layout 仅做数据映射；
   // pdf-rasterizer-browser dynamic import 同源 vendor pdfjs，运行时画布在浏览器/Tauri。
   path.normalize("public/core/ocr/ocr-to-fixed-layout.js"),
@@ -68,7 +69,8 @@ const ALLOWED_PUBLIC_FILES = new Set([
 
 function isLocalVendorAsset(normalizedPath, content) {
   const isVendor = normalizedPath.startsWith(path.normalize("public/vendor/pdfjs/"))
-    || normalizedPath.startsWith(path.normalize("public/vendor/tesseract/"));
+    || normalizedPath.startsWith(path.normalize("public/vendor/tesseract/"))
+    || normalizedPath.startsWith(path.normalize("public/vendor/onnxruntime/"));
   if (!isVendor) return false;
   // Vendor 资源（pdfjs / tesseract）允许内部 fetch / XHR 之类访问同源 wasm/worker；
   // 但禁止任何远程 URL（http(s):// / ws(s)://）。
@@ -132,6 +134,7 @@ const STRICT_LOCAL_ONLY_FILES = new Set([
   path.normalize("public/core/ocr/pdf-rasterizer-browser.js"),
   path.normalize("public/core/ocr/paddle-ocr-engine.js"),
   path.normalize("public/core/ocr/paddle-ocr-bootstrap.js"),
+  path.normalize("public/core/ocr/paddle-ocr-runtime.js"),
   path.normalize("public/core/verification/block-fingerprint.js"),
   path.normalize("public/core/verification/rule-diff.js"),
   path.normalize("public/core/verification/verification-stage.js"),

@@ -9,8 +9,9 @@
     "web": "node src/web-server.js",
     "vendor:pdfjs": "node scripts/sync-pdfjs-vendor.js",
     "vendor:tesseract": "node scripts/sync-tesseract-vendor.js",
+    "vendor:onnx": "node scripts/sync-onnxruntime-vendor.js",
     "samples:generate": "node scripts/generate-samples.js",
-    "release:prepare": "node scripts/sync-pdfjs-vendor.js && node scripts/sync-tesseract-vendor.js && node scripts/prepare-release.js",
+    "release:prepare": "node scripts/sync-pdfjs-vendor.js && node scripts/sync-tesseract-vendor.js && node scripts/sync-onnxruntime-vendor.js && node scripts/prepare-release.js",
     "desktop:check": "node scripts/desktop-shell-test.js",
     "desktop:dev": "npm exec @tauri-apps/cli -- dev",
     "desktop:build": "npm exec @tauri-apps/cli -- build",
@@ -40,6 +41,7 @@
   "homepage": "https://github.com/Vantalens/Trans2Former#readme",
   "optionalDependencies": {
     "pdfjs-dist": "^5.7.284",
-    "tesseract.js": "^5.1.1"
+    "tesseract.js": "^5.1.1",
+    "onnxruntime-web": "^1.20.1"
   }
 }

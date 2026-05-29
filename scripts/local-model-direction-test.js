@@ -160,6 +160,7 @@ assertIncludes("multiModel", "PP-OCRv5");
 assertIncludes("multiModel", "ONNX");
 assertIncludes("multiModel", "WebGPU");
 assertIncludes("multiModel", "paddleOcrEngine");
+assertIncludes("multiModel", "onnxruntime-web");
 assertIncludes("budget", "model-cache/<task>/<engine>/<modelVersion>");
 assertIncludes("budget", "SHA-256");
 assertExcludes("multiModel", "external engine 一律插件化");

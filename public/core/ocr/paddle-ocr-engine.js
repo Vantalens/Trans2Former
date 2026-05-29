@@ -8,6 +8,7 @@ import {
   OCR_ENGINE_FAILED,
   OCR_UNAVAILABLE,
 } from "./ocr-warnings.js";
+import { loadOnnxRuntime, pickExecutionProviders } from "./paddle-ocr-runtime.js";
 
 export const PADDLE_OCR_MANIFEST_ID = "ocr-text.paddleocr.v5";
 
@@ -78,13 +79,16 @@ export const paddleOcrEngine = Object.freeze({
         details: { engineId: "paddleocr-v5", reason: "missing-image" },
       });
     }
-    // 真实 ONNX/WebGPU 推理留给 P9-D.2；本轮以 runtime-not-wired 拒绝，给后续接入测试留信号。
+    // P9-D.2：真实尝试加载 ONNX Runtime（同源 vendor）。Node/未 vendor 抛 OCR_VENDOR_LOAD_FAILED。
+    // 浏览器装好 vendor + 模型后，det/cls/rec 推理管线 + CTC 解码留给 P9-D.2.b 接管。
+    const providers = pickExecutionProviders();
+    await loadOnnxRuntime();
     throw new ConversionError(
-      "PP-OCRv5 ONNX 推理尚未接入（P9-D.2 接 onnxruntime-web + WebGPU）。",
+      `PP-OCRv5 ONNX Runtime 已加载（执行后端 ${providers.join("/")}），但 det/cls/rec 推理管线尚未接入（P9-D.2.b）。`,
       {
         category: "convert",
         code: OCR_ENGINE_FAILED,
-        details: { engineId: "paddleocr-v5", reason: "runtime-not-wired", options: options || null },
+        details: { engineId: "paddleocr-v5", reason: "pipeline-not-wired", providers, options: options || null },
       },
     );
   },

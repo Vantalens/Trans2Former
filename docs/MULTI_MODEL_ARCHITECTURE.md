@@ -263,7 +263,9 @@ P9-D.1 骨架（同 tesseract 骨架先行）：
 
 - `paddleOcrEngine`（`public/core/ocr/paddle-ocr-engine.js`，id `paddleocr-v5`，taskCapabilities `["ocr-text","ocr-layout"]`）实现现有 `OCREngine` 契约，注册到 `defaultOCRRegistry`；`isAvailable()` 检查 vendor 就位 + det/cls/rec 模型在本地缓存，Node/未就位恒 false；`recognize()` 三阶段拒绝（vendor-not-ready / model-missing / runtime-not-wired）。
 - `paddle-ocr-bootstrap.js` 注册 PP-OCRv5 ONNX ModelManifest（`engine: "paddleocr"`，int8，det/cls/rec perFile 占位）到 `defaultModelCache`，状态 `not-downloaded`，按需下载到 `model-cache`。
-- 本轮**不引入 onnxruntime-web、不实跑推理**（P9-D.2 接 ONNX/WebGPU 运行时；P9-D.3 模型按需下载 + 安全中心 UI；P9-D.4 接入转换链并让 paddle 在可用时优先于 tesseract）。
+- P9-D.1 本轮不引入 onnxruntime-web、不实跑推理。
+
+P9-D.2 接入 onnxruntime-web 运行时骨架：`onnxruntime-web` 作为 optionalDependency + `scripts/sync-onnxruntime-vendor.js`（缺包 exit 0）同步到 `public/vendor/onnxruntime/`；`public/core/ocr/paddle-ocr-runtime.js` 提供 `loadOnnxRuntime`（dynamic import 同源 vendor ORT，设 `ort.env.wasm.wasmPaths` 同源、Node 抛 `OCR_VENDOR_LOAD_FAILED`）、`pickExecutionProviders`（`navigator.gpu` → `["webgpu","wasm"]`，否则 `["wasm"]`）、`createOcrSession`/`disposeOcrSession` 骨架。`paddleOcrEngine.recognize` 第三阶段经 `loadOnnxRuntime()`，浏览器装好 vendor + 模型后以 `pipeline-not-wired` 拒绝（det/cls/rec 推理管线 + CTC 解码留给 P9-D.2.b）。Tauri CSP 已含 `wasm-unsafe-eval` + `worker-src blob:` + `connect-src 'self'`，无需改动。后续：P9-D.3 模型按需下载 + 安全中心 UI；P9-D.4 接入转换链并让 paddle 在可用时优先于 tesseract。
 
 ## 不做什么（明确边界）
 

@@ -54,6 +54,9 @@ import {
   PADDLE_OCR_MANIFEST_ID,
   markPaddleOcrVendorReady,
   ensurePaddleOcrBootstrap,
+  loadOnnxRuntime,
+  pickExecutionProviders,
+  PADDLE_VENDOR_PATHS,
 } from "../public/browser-transformer.js";
 import { ConversionError } from "../public/core/conversion-error.js";
 
@@ -921,4 +924,37 @@ function makeStubEngine(overrides = {}) {
   }
 }
 
-console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback + PP-OCRv5 advanced engine skeleton all verified.");
+// 36. PP-OCRv5 onnxruntime-web runtime loader (P9-D.2): EP selection + Node vendor-load reject.
+{
+  // Node has no navigator.gpu => wasm-only execution providers.
+  assert.deepEqual(pickExecutionProviders(), ["wasm"], "Node should pick wasm-only execution provider");
+  assert.equal(PADDLE_VENDOR_PATHS.mainBundle, "/vendor/onnxruntime/ort.min.mjs");
+
+  // loadOnnxRuntime dynamic-imports a same-origin vendor path that does not resolve in Node => throws.
+  await assert.rejects(
+    () => loadOnnxRuntime(),
+    (err) => err instanceof ConversionError && err.code === OCR_VENDOR_LOAD_FAILED,
+    "loadOnnxRuntime should reject with OCR_VENDOR_LOAD_FAILED when vendor onnxruntime-web is absent (Node)",
+  );
+
+  // With vendor + models simulated ready, recognize reaches the runtime loader and surfaces
+  // the vendor-load failure (rather than the earlier vendor-not-ready / model-missing stages).
+  markPaddleOcrVendorReady(true);
+  for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    await paddleOcrEngine._storage.put(`paddleocr/v5/${file}`, new Uint8Array([1]).buffer, { sha256: "x" });
+  }
+  try {
+    await assert.rejects(
+      () => paddleOcrEngine.recognize({ image: { width: 4, height: 4 } }),
+      (err) => err instanceof ConversionError && err.code === OCR_VENDOR_LOAD_FAILED,
+      "paddle recognize should reach loadOnnxRuntime and reject with OCR_VENDOR_LOAD_FAILED in Node",
+    );
+  } finally {
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+      await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
+    }
+    markPaddleOcrVendorReady(false);
+  }
+}
+
+console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback + PP-OCRv5 advanced engine skeleton + onnxruntime-web runtime loader all verified.");

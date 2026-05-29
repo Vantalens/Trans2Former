@@ -385,6 +385,14 @@ export {
 } from "./core/ocr/paddle-ocr-engine.js";
 export { ensurePaddleOcrBootstrap } from "./core/ocr/paddle-ocr-bootstrap.js";
 export {
+  loadOnnxRuntime,
+  pickExecutionProviders,
+  createOcrSession,
+  disposeOcrSession,
+  resetOnnxRuntimeCache,
+  PADDLE_VENDOR_PATHS,
+} from "./core/ocr/paddle-ocr-runtime.js";
+export {
   InMemoryStorage,
   createIndexedDBStorage,
   defaultOCRStorage,
