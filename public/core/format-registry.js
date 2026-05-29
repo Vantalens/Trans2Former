@@ -1,6 +1,7 @@
 import { ConversionError } from "./conversion-error.js";
 import { ensureDocumentAudit } from "./document-audit.js";
 import { defaultRepairEngine } from "./repair-engine.js";
+import { runVerificationStage } from "./verification/verification-stage.js";
 import { createWarning, withWarnings } from "./warnings.js";
 
 const FORMAT_ALIASES = {
@@ -470,7 +471,8 @@ export class ConverterRegistry {
         },
       };
     }
-    const finalModel = ensureDocumentAudit({
+    const effectiveTo = cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat;
+    const auditedModel = ensureDocumentAudit({
       ...cycle.model,
       metadata: {
         ...(cycle.model.metadata || {}),
@@ -480,16 +482,41 @@ export class ConverterRegistry {
     }, {
       content,
       reader: fromFormat,
-      writer: cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat,
-      targetFormat: cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat,
+      writer: effectiveTo,
+      targetFormat: effectiveTo,
       fileName,
       options,
     });
+
+    // P9-C 转换后检验：在 Repair Engine cycle 之后跑独立验证阶段（本批仅 rule-diff 层）。
+    const verification = runVerificationStage({ model: auditedModel, output: cycle.output, ctx });
+    const finalModel = verification.warnings.length > 0
+      ? ensureDocumentAudit({
+        ...auditedModel,
+        metadata: withWarnings(auditedModel.metadata || {}, verification.warnings),
+      }, {
+        content,
+        reader: fromFormat,
+        writer: effectiveTo,
+        targetFormat: effectiveTo,
+        fileName,
+        options,
+      })
+      : auditedModel;
+
     const baseQualityReport = finalModel.metadata?.qualityReport || {};
     const qualityReport = {
       ...baseQualityReport,
       repairStatus: cycle.autoRepair?.attempted ? "verified" : "not-attempted",
       finalDecision: cycle.autoRepair?.finalDecision || "pending",
+      ruleDiff: verification.ruleDiff,
+      verification: {
+        eligible: verification.eligible,
+        reason: verification.reason,
+        layers: verification.layers,
+        skipped: verification.skipped,
+        runtimeMs: verification.runtimeMs,
+      },
     };
     return {
       ...cycle.output,

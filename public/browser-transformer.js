@@ -253,6 +253,25 @@ export { expandPdfContentForTextExtraction };
 export { defaultRepairEngine, RepairEngine, MIN_CONFIDENCE } from "./core/repair-engine.js";
 export { REPAIR_ACTION_TYPES, createRepairAction, validateRepairAction } from "./core/repair-actions.js";
 export {
+  ROUND_TRIP_FORMATS,
+  blockFingerprint,
+  modelFingerprint,
+  getBlockKey,
+  extractBlockFields,
+  BLOCK_FIELDS_BY_TYPE,
+} from "./core/verification/block-fingerprint.js";
+export {
+  diffSemanticDocs,
+  MAJOR_WEIGHT,
+  MINOR_WEIGHT,
+  STRUCTURAL_PENALTY,
+} from "./core/verification/rule-diff.js";
+export {
+  runVerificationStage,
+  RULE_DIFF_DRIFT,
+  RULE_DIFF_READBACK_FAILED,
+} from "./core/verification/verification-stage.js";
+export {
   MODEL_MANIFEST_SCHEMA_VERSION,
   MODEL_TASKS,
   MODEL_ENGINES,

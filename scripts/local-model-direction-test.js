@@ -41,6 +41,7 @@ assertIncludes("tasks", "model-cache");
 assertIncludes("tasks", "30–80 MB");
 assertIncludes("tasks", "默认包不含 GB 级模型");
 assertIncludes("tasks", "OCR 模型按需下载");
+assertIncludes("tasks", "qualityReport.ruleDiff");
 assertExcludes("tasks", "不依赖 Office、LibreOffice、Pandoc、云端转换或 OCR/AI");
 assertExcludesPattern(
   "tasks",
@@ -146,6 +147,9 @@ assertIncludes("multiModel", "ocrResultToFixedLayoutPage");
 assertIncludes("multiModel", "mergeOCRResultsToFixedLayout");
 assertIncludes("multiModel", "createBrowserPdfPageRasterizer");
 assertIncludes("multiModel", "MODEL_TEXT_ORDER_HEURISTIC");
+assertIncludes("multiModel", "runVerificationStage");
+assertIncludes("multiModel", "diffSemanticDocs");
+assertIncludes("multiModel", "RULE_DIFF_DRIFT");
 assertIncludes("budget", "model-cache/<task>/<engine>/<modelVersion>");
 assertIncludes("budget", "SHA-256");
 assertExcludes("multiModel", "external engine 一律插件化");

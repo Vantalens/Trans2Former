@@ -220,6 +220,17 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 - `createTextRun` 新增 `confidence` 字段（clamp 到 [0,1]）；`createPage` 新增 `readingOrderHint` 字段。
 - 不实现高级阅读顺序（multi-column / heading detection）——留给 P9-C / P9-D。
 
+### 转换后检验三层 · 规则 diff 层（P9-C.1 落地）
+
+转换后检验是项目核心差异化能力，三层组合（规则 diff + SSIM 视觉对比 + OCR 回读）统一写入 `qualityReport`。P9-C.1 落地第一层规则 diff 与统一编排骨架：
+
+- `runVerificationStage({ model, output, ctx })` (`public/core/verification/verification-stage.js`)：在 Repair Engine `runCycle` 之后跑的独立验证阶段，只读不改 output，结果写入 `qualityReport.ruleDiff` 与 `qualityReport.verification` envelope（`eligible / reason / layers / skipped / runtimeMs`）。层名列表 `layers` 当前只含 `"rule-diff"`，P9-C.2 加 `"ssim"`、P9-C.3 加 `"ocr-readback"`。
+- `diffSemanticDocs(original, readBack)` (`public/core/verification/rule-diff.js`)：在原始 SemanticDoc 与 writer→reader 回读 model 之间做字段级 diff，输出 `{ identical, blockCounts, changedBlocks, addedBlocks, removedBlocks, fidelity, overallScore }`。`fidelity` ∈ `exact / minor-drift / major-drift / broken`；`overallScore` 由 `MAJOR_WEIGHT / MINOR_WEIGHT / STRUCTURAL_PENALTY` 加权惩罚算出。
+- 共享指纹模块 `public/core/verification/block-fingerprint.js`：`blockFingerprint` / `modelFingerprint`（从 Repair Engine 抽出，行为不变）+ `getBlockKey` / `extractBlockFields` / `BLOCK_FIELDS_BY_TYPE` 字段子集 + `ROUND_TRIP_FORMATS` 单一来源。Repair Engine 的 `reverifyRoundTrip` / `roundTripDelta` 改 import 共享 `modelFingerprint`，作为粗粒度兼容层与细粒度 `ruleDiff` 并存。
+- 资格判断：from/to 都在 text-canonical 集合（md/html/json/csv/txt/xml）且 `output.data` 为字符串才跑；同格式直接回读 diff，跨格式仅首批开放 `md ↔ html` 回环；其余 writer（PDF/DOCX/XLSX/PPTX/PNG/OFD/EPUB）记 `eligible: false, reason: "writer-not-text-canonical"`，不阻塞转换。
+- 失败兜底：回读抛错发 `RULE_DIFF_READBACK_FAILED`（info）；`fidelity !== "exact"` 发 `RULE_DIFF_DRIFT`（info），details 含 from/to/fidelity/score/added/removed/changed 摘要。
+- 本阶段不让 Repair Engine 消费 `ruleDiff`（避免循环依赖），UI 验证卡片留给 P9-C.2 落地后统一做。
+
 ## 不做什么（明确边界）
 
 - **不引入 DOCX / HTML / PDF 文件级 pivot**：pivot 是内存对象，不是落盘文件。

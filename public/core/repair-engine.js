@@ -3,35 +3,10 @@ import { validateRepairAction, summarizeAction } from "./repair-actions.js";
 import { DEFAULT_HANDLERS } from "./repair-handlers.js";
 import { DEFAULT_VALIDATORS } from "./repair-validators.js";
 import { detectOCRLowConfidence } from "./ocr/ocr-validator.js";
+import { ROUND_TRIP_FORMATS, modelFingerprint } from "./verification/block-fingerprint.js";
 import { createWarning, withWarnings } from "./warnings.js";
 
 export const MIN_CONFIDENCE = 0.6;
-
-const ROUND_TRIP_FORMATS = new Set(["md", "html", "json", "csv", "txt", "xml"]);
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function blockFingerprint(block) {
-  if (!isPlainObject(block)) return "";
-  if (block.type === "heading") return `h${block.level}|${block.text || ""}`;
-  if (block.type === "paragraph" || block.type === "quote") return `${block.type}|${block.text || ""}`;
-  if (block.type === "code") return `code|${block.language || ""}|${block.code || ""}`;
-  if (block.type === "list") return `list|${block.ordered ? "ol" : "ul"}|${(block.items || []).join("")}`;
-  if (block.type === "table") {
-    return `table|${(block.headers || []).join("")}|${(block.rows || []).map((row) => (row || []).join("")).join("")}`;
-  }
-  if (block.type === "image" || block.type === "asset") {
-    return `${block.type}|${block.src || ""}|${block.alt || ""}|${block.assetId || ""}`;
-  }
-  if (block.type === "raw") return `raw|${block.format || ""}|${block.content || ""}`;
-  return block.type || "";
-}
-
-function modelFingerprint(model) {
-  return (model.blocks || []).map(blockFingerprint).join("");
-}
 
 function summarizeQuality(model) {
   const report = model.metadata?.qualityReport || {};
