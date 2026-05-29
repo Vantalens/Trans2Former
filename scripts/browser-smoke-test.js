@@ -56,6 +56,7 @@ try {
   assert.equal(indexHtml.includes("id=\"inputPreviewPanel\""), true, "P0 workbench should expose input preview pane");
   assert.equal(indexHtml.includes("id=\"documentModelPanel\""), true, "P0 workbench should expose DocumentModel pane");
   assert.equal(indexHtml.includes("id=\"outputPreviewPanel\""), true, "P0 workbench should expose output preview pane");
+  assert.equal(indexHtml.includes("id=\"verificationReportPanel\""), true, "P9-C.4 workbench should expose post-conversion verification report panel");
   assert.equal(indexHtml.includes("id=\"workbenchTabs\""), true, "P0 workbench should expose narrow-screen tabs");
   assert.equal(indexHtml.includes("id=\"bottomReportPanel\""), false, "bottom report panel has been removed from the primary workflow");
   assert.equal(indexHtml.includes("id=\"warningsPanel\""), false, "warnings panel has been removed with the bottom drawer");

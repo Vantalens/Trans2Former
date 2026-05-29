@@ -225,6 +225,17 @@
               </section>
               <iframe id="pdfPreview" title="PDF 预览" class="preview-frame pdf-frame"></iframe>
               <div id="textOutputPreview" class="preview-frame text-output-preview"></div>
+              <details id="verificationReportPanel" class="verification-report" hidden>
+                <summary>转换检验报告 <span id="verificationReportBadge" class="verification-badge"></span></summary>
+                <p class="verification-note">检验仅在具备证据的路径触发；标记为「跳过」的层不代表转换失败。</p>
+                <dl class="verification-grid">
+                  <div class="verification-row" data-layer="repair"><dt>自动修复</dt><dd id="verificationRepair">-</dd></div>
+                  <div class="verification-row" data-layer="rule-diff"><dt>规则 diff</dt><dd id="verificationRuleDiff">-</dd></div>
+                  <div class="verification-row" data-layer="ssim"><dt>SSIM 视觉对比</dt><dd id="verificationSsim">-</dd></div>
+                  <div class="verification-row" data-layer="ocr-readback"><dt>OCR 回读</dt><dd id="verificationOcrReadback">-</dd></div>
+                  <div class="verification-row" data-layer="warnings"><dt>warnings</dt><dd id="verificationWarnings">-</dd></div>
+                </dl>
+              </details>
             </article>
           </div>
         </section>

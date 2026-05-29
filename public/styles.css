@@ -1420,6 +1420,100 @@ button:disabled {
   color: #ffe5eb;
 }
 
+/* P9-C.4 转换检验报告：呈现规则 diff + SSIM + OCR 回读三层检验结果 */
+.verification-report {
+  margin: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.78rem;
+}
+
+.verification-report[hidden] {
+  display: none;
+}
+
+.verification-report > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  list-style: revert;
+}
+
+.verification-badge {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  background: rgba(45, 156, 142, 0.14);
+  color: #1f6f64;
+}
+
+.verification-badge[data-state="skip"] {
+  background: rgba(120, 132, 148, 0.16);
+  color: #586172;
+}
+
+.verification-note {
+  margin: 8px 0 6px;
+  color: var(--muted, #6b7280);
+  font-size: 0.7rem;
+}
+
+.verification-grid {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.verification-row {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.verification-row dt {
+  margin: 0;
+  color: #586172;
+  font-size: 0.72rem;
+}
+
+.verification-row dd {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  word-break: break-word;
+}
+
+.verification-row dd[data-state="ok"] {
+  color: #1f6f64;
+}
+
+.verification-row dd[data-state="drift"] {
+  color: #9a5b18;
+}
+
+.verification-row dd[data-state="skip"] {
+  color: #8a93a3;
+}
+
+.verification-row:has(dd[data-state="ok"]) {
+  border-left-color: #2d9c8e;
+}
+
+.verification-row:has(dd[data-state="drift"]) {
+  border-left-color: #d08a3a;
+}
+
 .bottom-drawer {
   border-top: 1px solid var(--border);
   background: var(--surface);
