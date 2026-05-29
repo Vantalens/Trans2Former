@@ -52,6 +52,11 @@ const ALLOWED_PUBLIC_FILES = new Set([
   path.normalize("public/core/verification/block-fingerprint.js"),
   path.normalize("public/core/verification/rule-diff.js"),
   path.normalize("public/core/verification/verification-stage.js"),
+  // P9-C.2 转换后检验三层（SSIM 视觉回环层）：ssim 纯算法；page-image-source 像素源抽象；
+  // page-image-source-browser 通过同源 vendor pdfjs + canvas 取像素。三者不联网。
+  path.normalize("public/core/verification/ssim.js"),
+  path.normalize("public/core/verification/page-image-source.js"),
+  path.normalize("public/core/verification/page-image-source-browser.js"),
 ]);
 
 function isLocalVendorAsset(normalizedPath, content) {
@@ -121,6 +126,9 @@ const STRICT_LOCAL_ONLY_FILES = new Set([
   path.normalize("public/core/verification/block-fingerprint.js"),
   path.normalize("public/core/verification/rule-diff.js"),
   path.normalize("public/core/verification/verification-stage.js"),
+  path.normalize("public/core/verification/ssim.js"),
+  path.normalize("public/core/verification/page-image-source.js"),
+  path.normalize("public/core/verification/page-image-source-browser.js"),
 ]);
 
 function assertNoRemoteUrlsInStrictFiles(filePath, content) {

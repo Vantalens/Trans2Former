@@ -268,9 +268,32 @@ export {
 } from "./core/verification/rule-diff.js";
 export {
   runVerificationStage,
+  runVerificationStageAsync,
+  runSsimLayer,
   RULE_DIFF_DRIFT,
   RULE_DIFF_READBACK_FAILED,
+  SSIM_VISUAL_DRIFT,
+  SSIM_SOURCE_UNAVAILABLE,
+  DEFAULT_SSIM_THRESHOLD,
 } from "./core/verification/verification-stage.js";
+export {
+  computeSSIM,
+  compareImages,
+  rgbaToGrayscale,
+  resampleGrayscale,
+  SSIM_C1,
+  SSIM_C2,
+  DEFAULT_WINDOW_SIZE,
+  DEFAULT_TARGET_WIDTH,
+} from "./core/verification/ssim.js";
+export {
+  defaultPageImageSource,
+  setPageImageSource,
+  resetPageImageSource,
+  RASTERIZABLE_FORMATS,
+  VERIFICATION_IMAGE_SOURCE_UNAVAILABLE,
+  VERIFICATION_IMAGE_SOURCE_FAILED,
+} from "./core/verification/page-image-source.js";
 export {
   MODEL_MANIFEST_SCHEMA_VERSION,
   MODEL_TASKS,

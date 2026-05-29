@@ -231,6 +231,17 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 - 失败兜底：回读抛错发 `RULE_DIFF_READBACK_FAILED`（info）；`fidelity !== "exact"` 发 `RULE_DIFF_DRIFT`（info），details 含 from/to/fidelity/score/added/removed/changed 摘要。
 - 本阶段不让 Repair Engine 消费 `ruleDiff`（避免循环依赖），UI 验证卡片留给 P9-C.2 落地后统一做。
 
+### 转换后检验三层 · SSIM 视觉回环层（P9-C.2 落地）
+
+第二层 SSIM 视觉对比采用**视觉回环**语义：对视觉保真型输入（PDF / PNG），把输入页与输出页各自栅格化为像素做结构相似度对比，写入 `qualityReport.ssim`，衡量「这次转换是否保住视觉外观」。
+
+- `computeSSIM(grayA, grayB, width, height, opts)` (`public/core/verification/ssim.js`)：纯函数、零依赖、非重叠窗口均值 SSIM（C1=6.5025 / C2=58.5225）；配套 `rgbaToGrayscale` / `resampleGrayscale`（box 重采样到公共网格）/ `compareImages`（两图归一后算分）。Node / 浏览器均可运行、完整可测。
+- `runVerificationStageAsync({ model, output, ctx })` (`public/core/verification/verification-stage.js`)：异步编排，先调同步 `runVerificationStage` 拿 rule-diff 基底，再跑 `runSsimLayer` 视觉回环，合并 `layers` / `skipped` / `warnings` / `runtimeMs` + `ssim` 字段。同步 `runVerificationStage` 不变，供 sync `convert()` 用（其 `qualityReport.ssim` 恒为 `null`）。
+- `runSsimLayer({ ctx, output })`：资格判断 `ctx.from ∈ {pdf,png}` 且 `ctx.to ∈ {pdf,png}`（当前实际命中 `pdf→pdf` / `png→pdf`）；经 `defaultPageImageSource` 取源图 + 输出图像素 → `compareImages` → `qualityReport.ssim = { score, threshold, passed, width, height, pageIndex, sourceFormat, outputFormat }`；低于阈值（默认 0.85）发 info 级 `SSIM_VISUAL_DRIFT`。
+- 像素源抽象 `public/core/verification/page-image-source.js`：`defaultPageImageSource`（Node 抛 `VERIFICATION_IMAGE_SOURCE_UNAVAILABLE`；浏览器首次调用 dynamic import `page-image-source-browser.js` 用 vendor pdfjs + canvas `getImageData` 取 RGBA）+ `setPageImageSource` / `resetPageImageSource` 让测试注入 stub。
+- `format-registry.js` 抽出 `_runRepairCycle` / `_assembleQuality` 共享，`convert()`（sync）走 `_wrapWithRepairCycle`（rule-diff），`convertAsync()` 走 `_wrapWithRepairCycleAsync`（rule-diff + SSIM）。`options.repair === false` 仍短路整个验证阶段。
+- 注意：Trans2Former 的 `pdf → pdf` 走「reader 抽文本 → writer 重排版」，视觉本就不保真，SSIM 偏低是**诚实信号**，故仅发 info warning，不判失败、不阻塞。本轮渲染 stub-only（Node 无 canvas；真实 PDF/PNG 渲染 fixture + 浏览器端端到端验证留给后续）。
+
 ## 不做什么（明确边界）
 
 - **不引入 DOCX / HTML / PDF 文件级 pivot**：pivot 是内存对象，不是落盘文件。

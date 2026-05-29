@@ -4,9 +4,18 @@
 import { createWarning } from "../warnings.js";
 import { ROUND_TRIP_FORMATS } from "./block-fingerprint.js";
 import { diffSemanticDocs } from "./rule-diff.js";
+import { compareImages } from "./ssim.js";
+import {
+  defaultPageImageSource,
+  RASTERIZABLE_FORMATS,
+} from "./page-image-source.js";
 
 export const RULE_DIFF_DRIFT = "RULE_DIFF_DRIFT";
 export const RULE_DIFF_READBACK_FAILED = "RULE_DIFF_READBACK_FAILED";
+export const SSIM_VISUAL_DRIFT = "SSIM_VISUAL_DRIFT";
+export const SSIM_SOURCE_UNAVAILABLE = "SSIM_SOURCE_UNAVAILABLE";
+
+export const DEFAULT_SSIM_THRESHOLD = 0.85;
 
 const CROSS_FORMAT_LOOPBACK_PAIRS = new Set([
   "md->html",
@@ -163,5 +172,109 @@ export function runVerificationStage({ model, output, ctx } = {}) {
     ruleDiff,
     warnings,
     runtimeMs: nowMs() - start,
+  };
+}
+
+// ---- SSIM 视觉回环层（P9-C.2，异步） ----
+
+function ssimGate(ctx) {
+  if (!RASTERIZABLE_FORMATS.has(ctx?.from)) {
+    return { ok: false, reason: ctx?.from ? "source-not-rasterizable" : "no-source-format" };
+  }
+  if (!RASTERIZABLE_FORMATS.has(ctx?.to)) {
+    return { ok: false, reason: "output-not-rasterizable" };
+  }
+  return { ok: true };
+}
+
+export async function runSsimLayer({ ctx, output, imageSource = defaultPageImageSource } = {}) {
+  const start = nowMs();
+  const gate = ssimGate(ctx);
+  if (!gate.ok) {
+    return {
+      eligible: false,
+      reason: gate.reason,
+      ssim: null,
+      warnings: [],
+      runtimeMs: nowMs() - start,
+    };
+  }
+
+  const threshold = typeof ctx?.options?.verification?.ssimThreshold === "number"
+    ? ctx.options.verification.ssimThreshold
+    : DEFAULT_SSIM_THRESHOLD;
+
+  let sourceImage;
+  let outputImage;
+  try {
+    sourceImage = await imageSource.getPageImage({ format: ctx.from, content: ctx.content, pageIndex: 0 });
+    outputImage = await imageSource.getPageImage({ format: ctx.to, content: output?.data, pageIndex: 0 });
+  } catch (error) {
+    const cause = error?.code || error?.message || "unknown";
+    const reason = cause === "VERIFICATION_IMAGE_SOURCE_UNAVAILABLE" ? "image-source-unavailable" : `image-source-failed:${cause}`;
+    return {
+      eligible: false,
+      reason,
+      ssim: null,
+      warnings: cause === "VERIFICATION_IMAGE_SOURCE_UNAVAILABLE"
+        ? []
+        : [createWarning("info", SSIM_SOURCE_UNAVAILABLE, `SSIM 视觉对比跳过：${reason}.`, { from: ctx.from, to: ctx.to, cause })],
+      runtimeMs: nowMs() - start,
+    };
+  }
+
+  const comparison = compareImages(sourceImage, outputImage, ctx?.options?.verification || {});
+  const passed = comparison.score >= threshold;
+  const ssim = {
+    score: comparison.score,
+    threshold,
+    passed,
+    width: comparison.width,
+    height: comparison.height,
+    pageIndex: 0,
+    sourceFormat: ctx.from,
+    outputFormat: ctx.to,
+    dimensionsMatched: comparison.dimensionsMatched,
+  };
+  const warnings = passed
+    ? []
+    : [createWarning(
+      "info",
+      SSIM_VISUAL_DRIFT,
+      `SSIM 视觉对比 ${ctx.from} → ${ctx.to} 低于阈值（score ${comparison.score.toFixed(3)} < ${threshold}）。`,
+      { from: ctx.from, to: ctx.to, score: comparison.score, threshold },
+    )];
+
+  return {
+    eligible: true,
+    reason: "completed",
+    ssim,
+    warnings,
+    runtimeMs: nowMs() - start,
+  };
+}
+
+// 异步编排：同步 rule-diff 基底 + 异步 SSIM 视觉回环，合并为统一 envelope。
+export async function runVerificationStageAsync({ model, output, ctx, imageSource } = {}) {
+  const base = runVerificationStage({ model, output, ctx });
+  const ssimLayer = await runSsimLayer({ ctx, output, imageSource });
+
+  const layers = [...base.layers];
+  const skipped = [...base.skipped];
+  if (ssimLayer.eligible) {
+    layers.push("ssim");
+  } else {
+    skipped.push({ layer: "ssim", reason: ssimLayer.reason });
+  }
+
+  return {
+    eligible: base.eligible || ssimLayer.eligible,
+    reason: base.reason,
+    layers,
+    skipped,
+    ruleDiff: base.ruleDiff,
+    ssim: ssimLayer.ssim,
+    warnings: [...base.warnings, ...ssimLayer.warnings],
+    runtimeMs: base.runtimeMs + ssimLayer.runtimeMs,
   };
 }
