@@ -1,0 +1,330 @@
+// PP-OCRv5 推理管线（P9-D.2.b）：检测(det) + 方向(cls) + 识别(rec) 三段 ONNX 前向 +
+// 经典前后处理串成 OCRResult。前后处理为纯函数，Node 可完整单测；runPaddlePipeline 接受
+// 可注入 session，便于用 mock 端到端测试（无需真实模型）。数据全程留在本地。
+
+import { ConversionError } from "../conversion-error.js";
+import { createOCRResult } from "./ocr-result.js";
+
+export const DET_LIMIT_SIDE_LEN = 960;
+export const REC_IMAGE_HEIGHT = 48;
+export const DET_MEAN = [0.485, 0.456, 0.406];
+export const DET_STD = [0.229, 0.224, 0.225];
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+// PP-OCR 字典：每行一个 token；CTC blank 占 index 0，末尾追加空格。
+export function parseCharDictionary(text) {
+  const lines = String(text ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const chars = [];
+  for (const line of lines) {
+    if (line.length === 0) continue;
+    chars.push(line);
+  }
+  return ["<blank>", ...chars, " "];
+}
+
+// 最近邻重采样 RGBA 到目标尺寸。imageData = { data: Uint8ClampedArray(RGBA), width, height }。
+export function resizeRgba(imageData, dstW, dstH) {
+  const { data, width, height } = imageData;
+  if (width <= 0 || height <= 0 || dstW <= 0 || dstH <= 0) {
+    throw new RangeError("resizeRgba: dimensions must be positive.");
+  }
+  const out = new Uint8ClampedArray(dstW * dstH * 4);
+  for (let y = 0; y < dstH; y += 1) {
+    const sy = Math.min(height - 1, Math.floor((y * height) / dstH));
+    for (let x = 0; x < dstW; x += 1) {
+      const sx = Math.min(width - 1, Math.floor((x * width) / dstW));
+      const so = (sy * width + sx) * 4;
+      const dstO = (y * dstW + x) * 4;
+      out[dstO] = data[so];
+      out[dstO + 1] = data[so + 1];
+      out[dstO + 2] = data[so + 2];
+      out[dstO + 3] = data[so + 3];
+    }
+  }
+  return { data: out, width: dstW, height: dstH };
+}
+
+function roundToMultiple(value, multiple, min) {
+  const rounded = Math.max(min, Math.round(value / multiple) * multiple);
+  return rounded;
+}
+
+// 检测预处理：限制最长边 + 取 32 倍数 + ImageNet 归一化 → NCHW Float32。
+export function preprocessForDetection(imageData, { limitSideLen = DET_LIMIT_SIDE_LEN } = {}) {
+  const { width, height } = imageData;
+  const maxSide = Math.max(width, height);
+  const ratio = maxSide > limitSideLen ? limitSideLen / maxSide : 1;
+  const resizedW = roundToMultiple(width * ratio, 32, 32);
+  const resizedH = roundToMultiple(height * ratio, 32, 32);
+  const resized = resizeRgba(imageData, resizedW, resizedH);
+  const data = new Float32Array(3 * resizedH * resizedW);
+  const plane = resizedH * resizedW;
+  for (let i = 0; i < plane; i += 1) {
+    const o = i * 4;
+    data[i] = (resized.data[o] / 255 - DET_MEAN[0]) / DET_STD[0];
+    data[plane + i] = (resized.data[o + 1] / 255 - DET_MEAN[1]) / DET_STD[1];
+    data[2 * plane + i] = (resized.data[o + 2] / 255 - DET_MEAN[2]) / DET_STD[2];
+  }
+  return {
+    data,
+    dims: [1, 3, resizedH, resizedW],
+    resizedWidth: resizedW,
+    resizedHeight: resizedH,
+    scaleW: width / resizedW,
+    scaleH: height / resizedH,
+  };
+}
+
+// 识别预处理：高度固定 48，宽按比例（封顶），归一化到 [-1,1] → NCHW Float32。
+export function preprocessForRecognition(imageData, { height = REC_IMAGE_HEIGHT, maxWidth = 1280 } = {}) {
+  const ratio = imageData.height > 0 ? imageData.width / imageData.height : 1;
+  const targetW = clamp(Math.max(1, Math.round(height * ratio)), 1, maxWidth);
+  const resized = resizeRgba(imageData, targetW, height);
+  const data = new Float32Array(3 * height * targetW);
+  const plane = height * targetW;
+  for (let i = 0; i < plane; i += 1) {
+    const o = i * 4;
+    data[i] = (resized.data[o] / 255 - 0.5) / 0.5;
+    data[plane + i] = (resized.data[o + 1] / 255 - 0.5) / 0.5;
+    data[2 * plane + i] = (resized.data[o + 2] / 255 - 0.5) / 0.5;
+  }
+  return { data, dims: [1, 3, height, targetW], width: targetW, height };
+}
+
+// DB 检测后处理：阈值二值化 + 4-连通域 + 轴对齐 bbox + box 分数过滤 + 缩放回原图坐标。
+export function dbPostProcess(probData, mapW, mapH, {
+  thresh = 0.3,
+  boxThresh = 0.5,
+  minSize = 3,
+  scaleW = 1,
+  scaleH = 1,
+} = {}) {
+  if (!probData || probData.length < mapW * mapH) {
+    throw new ConversionError("dbPostProcess: probability map smaller than mapW*mapH.", {
+      category: "validate",
+      code: "OCR_ENGINE_INVALID",
+      details: { reason: "prob-map-too-small" },
+    });
+  }
+  const visited = new Uint8Array(mapW * mapH);
+  const boxes = [];
+  const stack = [];
+  for (let start = 0; start < mapW * mapH; start += 1) {
+    if (visited[start]) continue;
+    if (probData[start] <= thresh) {
+      visited[start] = 1;
+      continue;
+    }
+    // BFS/DFS connected component
+    let minX = mapW;
+    let minY = mapH;
+    let maxX = 0;
+    let maxY = 0;
+    let sum = 0;
+    let count = 0;
+    stack.length = 0;
+    stack.push(start);
+    visited[start] = 1;
+    while (stack.length > 0) {
+      const idx = stack.pop();
+      const px = idx % mapW;
+      const py = (idx - px) / mapW;
+      sum += probData[idx];
+      count += 1;
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+      const neighbors = [
+        px > 0 ? idx - 1 : -1,
+        px < mapW - 1 ? idx + 1 : -1,
+        py > 0 ? idx - mapW : -1,
+        py < mapH - 1 ? idx + mapW : -1,
+      ];
+      for (const n of neighbors) {
+        if (n < 0 || visited[n]) continue;
+        if (probData[n] > thresh) {
+          visited[n] = 1;
+          stack.push(n);
+        } else {
+          visited[n] = 1;
+        }
+      }
+    }
+    const score = count > 0 ? sum / count : 0;
+    const boxW = maxX - minX + 1;
+    const boxH = maxY - minY + 1;
+    if (score < boxThresh) continue;
+    if (boxW < minSize || boxH < minSize) continue;
+    boxes.push({
+      x: Math.round(minX * scaleW),
+      y: Math.round(minY * scaleH),
+      w: Math.round(boxW * scaleW),
+      h: Math.round(boxH * scaleH),
+      score,
+    });
+  }
+  // 阅读顺序：上→下，再左→右（粗启发，多栏留后）。
+  boxes.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  return boxes;
+}
+
+// 裁剪 RGBA 区域（坐标 clamp 到图内）。
+export function cropImageData(imageData, box) {
+  const { data, width, height } = imageData;
+  const x0 = clamp(Math.floor(box.x), 0, Math.max(0, width - 1));
+  const y0 = clamp(Math.floor(box.y), 0, Math.max(0, height - 1));
+  const cw = clamp(Math.round(box.w), 1, width - x0);
+  const ch = clamp(Math.round(box.h), 1, height - y0);
+  const out = new Uint8ClampedArray(cw * ch * 4);
+  for (let y = 0; y < ch; y += 1) {
+    for (let x = 0; x < cw; x += 1) {
+      const so = ((y0 + y) * width + (x0 + x)) * 4;
+      const dstO = (y * cw + x) * 4;
+      out[dstO] = data[so];
+      out[dstO + 1] = data[so + 1];
+      out[dstO + 2] = data[so + 2];
+      out[dstO + 3] = data[so + 3];
+    }
+  }
+  return { data: out, width: cw, height: ch };
+}
+
+// CTC 贪心解码：逐时刻 argmax → 折叠连续重复 → 去 blank(0) → 映射字典。
+// logitsData 按 [T, C] 行主序；dictionary[idx] 给出字符（idx 0 为 blank）。
+export function ctcGreedyDecode(logitsData, timeSteps, numClasses, dictionary = []) {
+  let text = "";
+  let confSum = 0;
+  let confCount = 0;
+  let prevIdx = -1;
+  for (let t = 0; t < timeSteps; t += 1) {
+    const base = t * numClasses;
+    let bestIdx = 0;
+    let bestVal = -Infinity;
+    for (let c = 0; c < numClasses; c += 1) {
+      const v = logitsData[base + c];
+      if (v > bestVal) {
+        bestVal = v;
+        bestIdx = c;
+      }
+    }
+    if (bestIdx !== prevIdx && bestIdx !== 0) {
+      const ch = dictionary[bestIdx];
+      if (typeof ch === "string" && ch !== "<blank>") {
+        text += ch;
+        confSum += bestVal;
+        confCount += 1;
+      }
+    }
+    prevIdx = bestIdx;
+  }
+  const confidence = confCount > 0 ? clamp(confSum / confCount, 0, 1) : 0;
+  return { text, confidence };
+}
+
+function firstOutput(session, result) {
+  const name = Array.isArray(session.outputNames) && session.outputNames.length > 0
+    ? session.outputNames[0]
+    : Object.keys(result)[0];
+  return result[name];
+}
+
+function firstInputName(session) {
+  return Array.isArray(session.inputNames) && session.inputNames.length > 0
+    ? session.inputNames[0]
+    : "x";
+}
+
+async function runSession(ort, session, { data, dims }) {
+  const tensor = new ort.Tensor("float32", data, dims);
+  const feeds = { [firstInputName(session)]: tensor };
+  const result = await session.run(feeds);
+  return firstOutput(session, result);
+}
+
+// 编排器：imageData + 三段 session + 字典 → OCRResult。ort 仅用于构造 Tensor。
+export async function runPaddlePipeline({
+  ort,
+  detSession,
+  clsSession = null,
+  recSession,
+  imageData,
+  dictionary = [],
+  options = {},
+} = {}) {
+  if (!ort || typeof ort.Tensor !== "function") {
+    throw new ConversionError("runPaddlePipeline requires an onnxruntime namespace with Tensor.", {
+      category: "validate",
+      code: "OCR_ENGINE_INVALID",
+      details: { reason: "missing-ort" },
+    });
+  }
+  if (!detSession || !recSession) {
+    throw new ConversionError("runPaddlePipeline requires det and rec sessions.", {
+      category: "validate",
+      code: "OCR_ENGINE_INVALID",
+      details: { reason: "missing-sessions" },
+    });
+  }
+  const startedAt = Date.now();
+
+  const detInput = preprocessForDetection(imageData, options.det || {});
+  const detOut = await runSession(ort, detSession, { data: detInput.data, dims: detInput.dims });
+  const probData = detOut?.data || detOut;
+  const probDims = detOut?.dims || [1, 1, detInput.resizedHeight, detInput.resizedWidth];
+  const mapH = probDims[probDims.length - 2];
+  const mapW = probDims[probDims.length - 1];
+  const boxes = dbPostProcess(probData, mapW, mapH, {
+    ...(options.db || {}),
+    scaleW: detInput.scaleW * (detInput.resizedWidth / mapW),
+    scaleH: detInput.scaleH * (detInput.resizedHeight / mapH),
+  });
+
+  const lines = [];
+  for (const box of boxes) {
+    const crop = cropImageData(imageData, box);
+    if (clsSession) {
+      try {
+        const recInputForCls = preprocessForRecognition(crop, options.rec || {});
+        await runSession(ort, clsSession, { data: recInputForCls.data, dims: recInputForCls.dims });
+        // 角度旋转校正留给后续；本轮仅调用以验证 session 接线。
+      } catch (error) {
+        // 方向分类失败不致命，继续识别。
+      }
+    }
+    const recInput = preprocessForRecognition(crop, options.rec || {});
+    const recOut = await runSession(ort, recSession, { data: recInput.data, dims: recInput.dims });
+    const logits = recOut?.data || recOut;
+    const recDims = recOut?.dims || [1, 0, dictionary.length];
+    const timeSteps = recDims[recDims.length - 2];
+    const numClasses = recDims[recDims.length - 1];
+    const { text, confidence } = ctcGreedyDecode(logits, timeSteps, numClasses, dictionary);
+    if (text.trim().length > 0) {
+      lines.push({ text, confidence, bbox: { x: box.x, y: box.y, w: box.w, h: box.h } });
+    }
+  }
+
+  const averageConfidence = lines.length > 0
+    ? clamp(lines.reduce((sum, l) => sum + l.confidence, 0) / lines.length, 0, 1)
+    : 0;
+  return createOCRResult({
+    language: options.language || "auto",
+    pages: [
+      {
+        pageIndex: 0,
+        width: imageData.width,
+        height: imageData.height,
+        lines,
+      },
+    ],
+    fullText: lines.map((l) => l.text).join("\n"),
+    averageConfidence,
+    runtimeMs: Date.now() - startedAt,
+    engine: "paddleocr-v5",
+    modelVersion: "v5",
+    warnings: [],
+  });
+}

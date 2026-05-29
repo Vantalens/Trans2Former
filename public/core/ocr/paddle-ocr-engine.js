@@ -8,7 +8,42 @@ import {
   OCR_ENGINE_FAILED,
   OCR_UNAVAILABLE,
 } from "./ocr-warnings.js";
-import { loadOnnxRuntime, pickExecutionProviders } from "./paddle-ocr-runtime.js";
+import { loadOnnxRuntime, pickExecutionProviders, createOcrSession, disposeOcrSession } from "./paddle-ocr-runtime.js";
+import { runPaddlePipeline, parseCharDictionary } from "./paddle-ocr-pipeline.js";
+
+const DICT_KEY = "paddleocr/v5/dict.txt";
+
+// 浏览器端把 image（dataURL/同源 blob URL）解码为 RGBA ImageData。不使用 fetch（遵守
+// 本地禁联网守门）；用 Image + canvas。Node 无 document → 抛错（recognize 在 loadOnnxRuntime
+// 阶段已先行拒绝，不会走到这里）。
+async function decodeImageToImageData(image) {
+  if (typeof globalThis.document?.createElement !== "function" || typeof globalThis.Image !== "function") {
+    throw new ConversionError("当前运行时无法解码图像（缺少 document/Image）。", {
+      category: "convert",
+      code: OCR_ENGINE_FAILED,
+      details: { engineId: "paddleocr-v5", reason: "image-decode-unavailable" },
+    });
+  }
+  const img = new globalThis.Image();
+  img.src = image;
+  if (typeof img.decode === "function") {
+    await img.decode();
+  } else {
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error("image load failed"));
+    });
+  }
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
+  const canvas = globalThis.document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  return { data, width, height };
+}
 
 export const PADDLE_OCR_MANIFEST_ID = "ocr-text.paddleocr.v5";
 
@@ -82,18 +117,47 @@ export const paddleOcrEngine = Object.freeze({
         details: { engineId: "paddleocr-v5", reason: "missing-image" },
       });
     }
-    // P9-D.2：真实尝试加载 ONNX Runtime（同源 vendor）。Node/未 vendor 抛 OCR_VENDOR_LOAD_FAILED。
-    // 浏览器装好 vendor + 模型后，det/cls/rec 推理管线 + CTC 解码留给 P9-D.2.b 接管。
+    // P9-D.2.b：真实推理管线。Node/未 vendor 在 loadOnnxRuntime 抛 OCR_VENDOR_LOAD_FAILED。
+    const ort = await loadOnnxRuntime();
     const providers = pickExecutionProviders();
-    await loadOnnxRuntime();
-    throw new ConversionError(
-      `PP-OCRv5 ONNX Runtime 已加载（执行后端 ${providers.join("/")}），但 det/cls/rec 推理管线尚未接入（P9-D.2.b）。`,
-      {
+    let detSession = null;
+    let clsSession = null;
+    let recSession = null;
+    try {
+      const imageData = await decodeImageToImageData(image);
+      const [detBuf, clsBuf, recBuf] = await Promise.all([
+        this._storage.get(`${MODEL_KEY_PREFIX}det.onnx`),
+        this._storage.get(`${MODEL_KEY_PREFIX}cls.onnx`),
+        this._storage.get(`${MODEL_KEY_PREFIX}rec.onnx`),
+      ]);
+      const dictBuf = await this._storage.get(DICT_KEY);
+      const dictionary = dictBuf
+        ? parseCharDictionary(new TextDecoder().decode(dictBuf instanceof ArrayBuffer ? new Uint8Array(dictBuf) : dictBuf))
+        : [];
+      detSession = await createOcrSession({ ort, modelBuffer: detBuf, providers });
+      clsSession = clsBuf ? await createOcrSession({ ort, modelBuffer: clsBuf, providers }) : null;
+      recSession = await createOcrSession({ ort, modelBuffer: recBuf, providers });
+      return await runPaddlePipeline({
+        ort,
+        detSession,
+        clsSession,
+        recSession,
+        imageData,
+        dictionary,
+        options: options || {},
+      });
+    } catch (error) {
+      if (error instanceof ConversionError) throw error;
+      throw new ConversionError(`PP-OCRv5 推理失败：${error?.message || error}`, {
         category: "convert",
         code: OCR_ENGINE_FAILED,
-        details: { engineId: "paddleocr-v5", reason: "pipeline-not-wired", providers, options: options || null },
-      },
-    );
+        details: { engineId: "paddleocr-v5", reason: "inference-failed", providers, cause: String(error?.name || error?.message || "unknown") },
+      });
+    } finally {
+      await disposeOcrSession(detSession);
+      await disposeOcrSession(clsSession);
+      await disposeOcrSession(recSession);
+    }
   },
 });
 

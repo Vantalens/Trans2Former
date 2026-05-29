@@ -393,6 +393,18 @@ export {
   PADDLE_VENDOR_PATHS,
 } from "./core/ocr/paddle-ocr-runtime.js";
 export {
+  runPaddlePipeline,
+  parseCharDictionary,
+  preprocessForDetection,
+  preprocessForRecognition,
+  dbPostProcess,
+  ctcGreedyDecode,
+  cropImageData,
+  resizeRgba,
+  DET_LIMIT_SIDE_LEN,
+  REC_IMAGE_HEIGHT,
+} from "./core/ocr/paddle-ocr-pipeline.js";
+export {
   InMemoryStorage,
   createIndexedDBStorage,
   defaultOCRStorage,
