@@ -30,6 +30,23 @@ async function fetchText(baseUrl, pathname) {
   return response.text();
 }
 
+// 浏览器模块图守门：landing-view.js / router.js 与 browser-transformer.js 必须能
+// 完整加载。任何「import 了 browser-transformer 没有 re-export 的名字」会让浏览器在
+// 模块加载阶段抛 SyntaxError → 首页空白。Node 端 import 这些纯模块即可复现该类问题
+// （app.js 含顶层 DOM 访问，不在此 import）。
+for (const modulePath of ["../public/browser-transformer.js", "../public/router.js", "../public/landing-view.js"]) {
+  await assert.doesNotReject(
+    import(modulePath),
+    `${modulePath} must load without missing-export / eval errors (else the landing page renders blank)`,
+  );
+}
+{
+  const bt = await import("../public/browser-transformer.js");
+  for (const name of ["getKnownInputFormats", "getAllowedOutputFormats", "convertContent", "convertContentAsync"]) {
+    assert.equal(typeof bt[name], "function", `browser-transformer.js must re-export ${name} for the landing/workbench UI`);
+  }
+}
+
 const { server, port } = await startWebServer(await findFetchSafePort());
 const baseUrl = `http://127.0.0.1:${port}`;
 

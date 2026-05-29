@@ -1,4 +1,4 @@
-import { ConverterRegistry, getAllowedOutputFormats, normalizeFormat } from "./core/format-registry.js";
+import { ConverterRegistry, getAllowedOutputFormats, getKnownInputFormats, normalizeFormat } from "./core/format-registry.js";
 import { readCsv, writeCsv } from "./formats/csv.js";
 import { readDoc } from "./formats/doc.js";
 import { readDocx } from "./formats/docx.js";
@@ -249,6 +249,7 @@ export function listFormats() {
 
 export { normalizeFormat };
 export { getAllowedOutputFormats };
+export { getKnownInputFormats };
 export { expandPdfContentForTextExtraction };
 export { defaultRepairEngine, RepairEngine, MIN_CONFIDENCE } from "./core/repair-engine.js";
 export { REPAIR_ACTION_TYPES, createRepairAction, validateRepairAction } from "./core/repair-actions.js";
