@@ -58,6 +58,9 @@ Thumbs.db
 /releases/
 /artifacts/
 
+# Generated sample corpus (programmatically regenerable; `npm run samples:generate`)
+/samples/generated/
+
 # Test screenshots / debug captures
 /test-results/
 /playwright-report/
