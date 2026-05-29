@@ -70,6 +70,8 @@ export const paddleOcrEngine = Object.freeze({
   id: "paddleocr-v5",
   taskCapabilities: ["ocr-text", "ocr-layout"],
   manifestId: PADDLE_OCR_MANIFEST_ID,
+  // 高级引擎：可用时经 pickForTask 优先于 tesseract(10) / placeholder(0)。
+  priority: 20,
 
   // 与 OCREngineRegistry 一致：同步 isAvailable，由 ensureProbe() 在 recognize 前刷新缓存。
   // P9-D.1 阶段 vendor 未就位 + 模型未下载，恒为 false。

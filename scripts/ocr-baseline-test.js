@@ -996,4 +996,54 @@ function makeStubEngine(overrides = {}) {
   }
 }
 
-console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback + PP-OCRv5 advanced engine skeleton + onnxruntime-web runtime loader + model import availability flip all verified.");
+// 38. Priority-aware pickForTask (P9-D.4): higher-priority available engine wins; PP-OCRv5
+//     preferred over tesseract when both available.
+{
+  const reg = new OCREngineRegistry();
+  const stub = (id, priority, available) => ({
+    id, taskCapabilities: ["ocr-text"], priority, isAvailable: () => available, recognize: async () => ({}),
+  });
+  reg.register(stub("low-pri", 5, true));
+  reg.register(stub("high-pri", 20, true));
+  reg.register(stub("mid-pri", 10, true));
+  assert.equal(reg.pickForTask("ocr-text").id, "high-pri", "highest-priority available engine should win");
+
+  // Only a low-priority engine available => it is picked even if a higher-priority one is unavailable.
+  const reg2 = new OCREngineRegistry();
+  reg2.register(stub("hi-unavail", 20, false));
+  reg2.register(stub("lo-avail", 5, true));
+  assert.equal(reg2.pickForTask("ocr-text").id, "lo-avail", "available lower-priority engine should win over unavailable higher-priority");
+
+  // Default registry: both tesseract + paddle available => paddle (priority 20) preferred.
+  markTesseractVendorReady(true);
+  await tesseractOCREngine._storage.put("tesseract/eng.traineddata", new Uint8Array([1]).buffer, { sha256: "x" });
+  await tesseractOCREngine.ensureProbe();
+  markPaddleOcrVendorReady(true);
+  for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    await paddleOcrEngine._storage.put(`paddleocr/v5/${file}`, new Uint8Array([1]).buffer, { sha256: "x" });
+  }
+  await paddleOcrEngine.ensureProbe();
+  try {
+    assert.equal(tesseractOCREngine.isAvailable(), true);
+    assert.equal(paddleOcrEngine.isAvailable(), true);
+    assert.equal(defaultOCRRegistry.pickForTask("ocr-text").id, "paddleocr-v5", "PP-OCRv5 should be preferred over tesseract when both available");
+
+    // Remove paddle models => tesseract wins.
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+      await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
+    }
+    await paddleOcrEngine.ensureProbe();
+    assert.equal(defaultOCRRegistry.pickForTask("ocr-text").id, "tesseract-zh-en", "tesseract should win when paddle unavailable");
+  } finally {
+    await tesseractOCREngine._storage.delete("tesseract/eng.traineddata");
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+      await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
+    }
+    markTesseractVendorReady(false);
+    markPaddleOcrVendorReady(false);
+    await tesseractOCREngine.ensureProbe();
+    await paddleOcrEngine.ensureProbe();
+  }
+}
+
+console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback + PP-OCRv5 advanced engine skeleton + onnxruntime-web runtime loader + model import availability flip + priority-aware route preference all verified.");

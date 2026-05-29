@@ -37,6 +37,8 @@ export const tesseractOCREngine = Object.freeze({
   id: "tesseract-zh-en",
   taskCapabilities: ["ocr-text"],
   manifestId: TESSERACT_MANIFEST_ID,
+  // 轻量内置引擎：优先级高于 placeholder(0)，低于 PP-OCRv5 高级引擎(20)。
+  priority: 10,
 
   // OCREngineRegistry expects a synchronous isAvailable. We expose a synchronous
   // signature backed by a cached probe; the probe is updated by ensureProbe()
