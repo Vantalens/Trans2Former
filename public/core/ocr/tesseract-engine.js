@@ -16,6 +16,10 @@ export const TESSERACT_MANIFEST_ID = "ocr-text.tesseract.5.0.0";
 const TESSDATA_KEY_PREFIX = "tesseract/";
 const DEFAULT_LANGUAGES = ["chi_sim", "eng"];
 
+// 就绪状态放模块级可变变量，而非冻结对象的实例属性（冻结对象在严格模式下无法被
+// ensureProbe 赋值）。引擎对象本身仍可 Object.freeze 防外部篡改。
+let tessdataReady = false;
+
 function vendorReady() {
   return Boolean(globalThis.__t2fTesseractVendorReady);
 }
@@ -40,20 +44,19 @@ export const tesseractOCREngine = Object.freeze({
   // false.
   isAvailable() {
     if (!vendorReady()) return false;
-    return Boolean(tesseractOCREngine._tessdataReady);
+    return Boolean(tessdataReady);
   },
 
-  _tessdataReady: false,
   _storage: defaultOCRStorage,
 
   async ensureProbe() {
     if (!vendorReady()) {
-      this._tessdataReady = false;
+      tessdataReady = false;
       return false;
     }
     const language = await hasAnyTessdata(this._storage, DEFAULT_LANGUAGES);
-    this._tessdataReady = Boolean(language);
-    return this._tessdataReady;
+    tessdataReady = Boolean(language);
+    return tessdataReady;
   },
 
   async recognize({ image, options } = {}) {

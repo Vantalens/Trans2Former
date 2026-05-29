@@ -277,6 +277,13 @@ function makeStubEngine(overrides = {}) {
   const status = defaultModelCache.getStatus(TESSERACT_MANIFEST_ID);
   assert.ok(status, "tesseract manifest should be registered in defaultModelCache");
   assert.equal(status.status, STATUS_NOT_DOWNLOADED);
+
+  // ensureProbe must not throw on the frozen engine (readiness lives in module state,
+  // not a frozen instance prop) — otherwise the security-center import flow fails silently.
+  markTesseractVendorReady(true);
+  await assert.doesNotReject(() => tesseractOCREngine.ensureProbe(), "tesseract.ensureProbe must not throw on frozen engine");
+  markTesseractVendorReady(false);
+  assert.equal(await tesseractOCREngine.ensureProbe(), false);
 }
 
 // 12. tesseractOCREngine.recognize rejects with OCR_UNAVAILABLE/OCR_ENGINE_FAILED depending on stage
@@ -957,4 +964,36 @@ function makeStubEngine(overrides = {}) {
   }
 }
 
-console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback + PP-OCRv5 advanced engine skeleton + onnxruntime-web runtime loader all verified.");
+// 37. PP-OCRv5 model import availability flip (P9-D.3): all three onnx present + vendor ready
+//     => isAvailable() true; remove any one => false. Mirrors security-center import/clear.
+{
+  const keys = ["paddleocr/v5/det.onnx", "paddleocr/v5/cls.onnx", "paddleocr/v5/rec.onnx"];
+  markPaddleOcrVendorReady(true);
+  try {
+    // partial import: only det+cls => not ready
+    await paddleOcrEngine._storage.put(keys[0], new Uint8Array([1]).buffer, { sha256: "a" });
+    await paddleOcrEngine._storage.put(keys[1], new Uint8Array([2]).buffer, { sha256: "b" });
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "two of three models should not be ready");
+    assert.equal(paddleOcrEngine.isAvailable(), false);
+
+    // full import => ready
+    await paddleOcrEngine._storage.put(keys[2], new Uint8Array([3]).buffer, { sha256: "c" });
+    assert.equal(await paddleOcrEngine.ensureProbe(), true, "all three models present => ready");
+    assert.equal(paddleOcrEngine.isAvailable(), true);
+
+    // vendor flag off => unavailable even with models
+    markPaddleOcrVendorReady(false);
+    assert.equal(paddleOcrEngine.isAvailable(), false, "vendor not ready => unavailable regardless of models");
+
+    // remove one model => not ready after reprobe
+    markPaddleOcrVendorReady(true);
+    await paddleOcrEngine._storage.delete(keys[1]);
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "removing one model should drop readiness");
+  } finally {
+    for (const key of keys) await paddleOcrEngine._storage.delete(key);
+    markPaddleOcrVendorReady(false);
+    await paddleOcrEngine.ensureProbe();
+  }
+}
+
+console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback + PP-OCRv5 advanced engine skeleton + onnxruntime-web runtime loader + model import availability flip all verified.");

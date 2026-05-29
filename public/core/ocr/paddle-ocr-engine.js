@@ -16,6 +16,10 @@ export const PADDLE_OCR_MANIFEST_ID = "ocr-text.paddleocr.v5";
 const MODEL_KEY_PREFIX = "paddleocr/v5/";
 export const PADDLE_OCR_MODEL_FILES = Object.freeze(["det.onnx", "cls.onnx", "rec.onnx"]);
 
+// 就绪状态放模块级可变变量，而非冻结对象的实例属性（冻结对象在严格模式下无法被
+// ensureProbe 赋值）。引擎对象本身仍可 Object.freeze 防外部篡改。
+let modelsReady = false;
+
 function vendorReady() {
   return Boolean(globalThis.__t2fPaddleOcrVendorReady);
 }
@@ -36,19 +40,18 @@ export const paddleOcrEngine = Object.freeze({
   // P9-D.1 阶段 vendor 未就位 + 模型未下载，恒为 false。
   isAvailable() {
     if (!vendorReady()) return false;
-    return Boolean(paddleOcrEngine._modelsReady);
+    return Boolean(modelsReady);
   },
 
-  _modelsReady: false,
   _storage: defaultOCRStorage,
 
   async ensureProbe() {
     if (!vendorReady()) {
-      this._modelsReady = false;
+      modelsReady = false;
       return false;
     }
-    this._modelsReady = await hasAllModels(this._storage);
-    return this._modelsReady;
+    modelsReady = await hasAllModels(this._storage);
+    return modelsReady;
   },
 
   async recognize({ image, options } = {}) {
