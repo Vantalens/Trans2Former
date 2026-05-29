@@ -516,6 +516,7 @@ export class ConverterRegistry {
       finalDecision: cycle.autoRepair?.finalDecision || "pending",
       ruleDiff: verification.ruleDiff,
       ssim: verification.ssim ?? null,
+      ocrReadback: verification.ocrReadback ?? null,
       verification: {
         eligible: verification.eligible,
         reason: verification.reason,

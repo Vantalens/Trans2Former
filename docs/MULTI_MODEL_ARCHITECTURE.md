@@ -242,6 +242,19 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 - `format-registry.js` 抽出 `_runRepairCycle` / `_assembleQuality` 共享，`convert()`（sync）走 `_wrapWithRepairCycle`（rule-diff），`convertAsync()` 走 `_wrapWithRepairCycleAsync`（rule-diff + SSIM）。`options.repair === false` 仍短路整个验证阶段。
 - 注意：Trans2Former 的 `pdf → pdf` 走「reader 抽文本 → writer 重排版」，视觉本就不保真，SSIM 偏低是**诚实信号**，故仅发 info warning，不判失败、不阻塞。本轮渲染 stub-only（Node 无 canvas；真实 PDF/PNG 渲染 fixture + 浏览器端端到端验证留给后续）。
 
+### 转换后检验三层 · OCR 回读层（P9-C.3 落地）
+
+第三层也是收口层 OCR 回读：把转换输出（当前仅 PDF）栅格化后用 OCR 引擎读回文本，与原始 SemanticDoc 文本对照，写入 `qualityReport.ocrReadback`，回答「转成视觉格式后文字还认得回来吗」。
+
+- `compareText(original, recognized)` (`public/core/verification/ocr-readback.js`)：纯函数、零依赖、**字符级多重集** recall / precision / f1（配 `normalizeText` NFKC + 小写 + 去空白）。字符级对中英文混排与 OCR 噪声稳健，无需分词。
+- `extractModelText(model)`：拼接 block 文本（heading/paragraph/quote/list/table/code/content）。
+- `runOcrReadbackLayer({ model, output, ctx, engine?, rasterizer? })`：资格 `ctx.to === "pdf"` 且原文非空 且 OCR engine 可用；经 OCR `defaultPdfPageRasterizer` 栅格化输出 PDF → `engine.recognize` → `compareText` → `qualityReport.ocrReadback = { recall, precision, f1, threshold, passed, engineId, originalLength, recognizedLength, averageConfidence }`；低于阈值（默认 f1 ≥ 0.7）发 info `OCR_READBACK_DRIFT`；engine/rasterizer 不可用或 recognize 抛错 → eligible:false（`OCR_READBACK_FAILED` info），不抛、不阻塞。
+- `runVerificationStageAsync` 末尾 dynamic import `ocr-readback.js` 跑第三层，合并进 envelope；`qualityReport.ocrReadback` 同步路径恒 `null`。
+- 命中路径：`md/html/txt/json/xml/docx/doc/epub/csv/xlsx → pdf`（凡产出 PDF 的文本路径），engine 复用已注册的 `ocr-text`（tesseract，需用户导入 tessdata）。
+- 本轮 stub-only（Node 无 canvas/tessdata；真实 OCR 回读端到端留给浏览器手动验证）；不让 Repair Engine 消费 `ocrReadback`；高级 OCR（PaddleOCR-VL / MinerU）属 P9-D。
+
+至此 P9-C 三层检验（rule-diff + ssim + ocr-readback）齐备，统一写入 `qualityReport.{ ruleDiff, ssim, ocrReadback }` + `qualityReport.verification` envelope。
+
 ## 不做什么（明确边界）
 
 - **不引入 DOCX / HTML / PDF 文件级 pivot**：pivot 是内存对象，不是落盘文件。

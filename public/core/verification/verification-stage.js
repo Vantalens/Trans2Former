@@ -254,10 +254,18 @@ export async function runSsimLayer({ ctx, output, imageSource = defaultPageImage
   };
 }
 
-// 异步编排：同步 rule-diff 基底 + 异步 SSIM 视觉回环，合并为统一 envelope。
-export async function runVerificationStageAsync({ model, output, ctx, imageSource } = {}) {
+// 异步编排：同步 rule-diff 基底 + 异步 SSIM 视觉回环 + 异步 OCR 回读，合并为统一 envelope。
+export async function runVerificationStageAsync({ model, output, ctx, imageSource, ocrEngine, ocrRasterizer } = {}) {
   const base = runVerificationStage({ model, output, ctx });
   const ssimLayer = await runSsimLayer({ ctx, output, imageSource });
+
+  let ocrLayer = { eligible: false, reason: "ocr-readback-not-loaded", ocrReadback: null, warnings: [], runtimeMs: 0 };
+  try {
+    const mod = await import("./ocr-readback.js");
+    ocrLayer = await mod.runOcrReadbackLayer({ model, output, ctx, engine: ocrEngine, rasterizer: ocrRasterizer });
+  } catch (error) {
+    ocrLayer = { eligible: false, reason: `ocr-readback-load-failed:${error?.code || error?.message || "unknown"}`, ocrReadback: null, warnings: [], runtimeMs: 0 };
+  }
 
   const layers = [...base.layers];
   const skipped = [...base.skipped];
@@ -266,15 +274,21 @@ export async function runVerificationStageAsync({ model, output, ctx, imageSourc
   } else {
     skipped.push({ layer: "ssim", reason: ssimLayer.reason });
   }
+  if (ocrLayer.eligible) {
+    layers.push("ocr-readback");
+  } else {
+    skipped.push({ layer: "ocr-readback", reason: ocrLayer.reason });
+  }
 
   return {
-    eligible: base.eligible || ssimLayer.eligible,
+    eligible: base.eligible || ssimLayer.eligible || ocrLayer.eligible,
     reason: base.reason,
     layers,
     skipped,
     ruleDiff: base.ruleDiff,
     ssim: ssimLayer.ssim,
-    warnings: [...base.warnings, ...ssimLayer.warnings],
-    runtimeMs: base.runtimeMs + ssimLayer.runtimeMs,
+    ocrReadback: ocrLayer.ocrReadback,
+    warnings: [...base.warnings, ...ssimLayer.warnings, ...ocrLayer.warnings],
+    runtimeMs: base.runtimeMs + ssimLayer.runtimeMs + ocrLayer.runtimeMs,
   };
 }

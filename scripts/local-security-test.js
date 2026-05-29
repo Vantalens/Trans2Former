@@ -57,6 +57,9 @@ const ALLOWED_PUBLIC_FILES = new Set([
   path.normalize("public/core/verification/ssim.js"),
   path.normalize("public/core/verification/page-image-source.js"),
   path.normalize("public/core/verification/page-image-source-browser.js"),
+  // P9-C.3 转换后检验三层（OCR 回读层）：ocr-readback 复用已注册 ocr-text engine +
+  // OCR pdf-rasterizer 把输出 PDF 读回文本做字符级相似度。纯逻辑，不联网。
+  path.normalize("public/core/verification/ocr-readback.js"),
 ]);
 
 function isLocalVendorAsset(normalizedPath, content) {
@@ -129,6 +132,7 @@ const STRICT_LOCAL_ONLY_FILES = new Set([
   path.normalize("public/core/verification/ssim.js"),
   path.normalize("public/core/verification/page-image-source.js"),
   path.normalize("public/core/verification/page-image-source-browser.js"),
+  path.normalize("public/core/verification/ocr-readback.js"),
 ]);
 
 function assertNoRemoteUrlsInStrictFiles(filePath, content) {

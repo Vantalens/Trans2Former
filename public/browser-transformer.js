@@ -295,6 +295,15 @@ export {
   VERIFICATION_IMAGE_SOURCE_FAILED,
 } from "./core/verification/page-image-source.js";
 export {
+  compareText,
+  normalizeText,
+  extractModelText,
+  runOcrReadbackLayer,
+  OCR_READBACK_DRIFT,
+  OCR_READBACK_FAILED,
+  DEFAULT_OCR_READBACK_THRESHOLD,
+} from "./core/verification/ocr-readback.js";
+export {
   MODEL_MANIFEST_SCHEMA_VERSION,
   MODEL_TASKS,
   MODEL_ENGINES,
