@@ -99,6 +99,7 @@ export function dbPostProcess(probData, mapW, mapH, {
   thresh = 0.3,
   boxThresh = 0.5,
   minSize = 3,
+  unclipRatio = 1.6,
   scaleW = 1,
   scaleH = 1,
 } = {}) {
@@ -155,15 +156,26 @@ export function dbPostProcess(probData, mapW, mapH, {
       }
     }
     const score = count > 0 ? sum / count : 0;
-    const boxW = maxX - minX + 1;
-    const boxH = maxY - minY + 1;
+    let boxW = maxX - minX + 1;
+    let boxH = maxY - minY + 1;
     if (score < boxThresh) continue;
     if (boxW < minSize || boxH < minSize) continue;
+    // unclip：DB 概率图相对真实文字是收缩的，按 PP-OCR 用 area*ratio/perimeter 向外扩，
+    // 否则裁剪框过紧、切掉字符笔画导致识别错乱。
+    const distance = (boxW * boxH * unclipRatio) / Math.max(1, 2 * (boxW + boxH));
+    let ex0 = minX - distance;
+    let ey0 = minY - distance;
+    let ex1 = maxX + distance;
+    let ey1 = maxY + distance;
+    ex0 = Math.max(0, ex0);
+    ey0 = Math.max(0, ey0);
+    ex1 = Math.min(mapW - 1, ex1);
+    ey1 = Math.min(mapH - 1, ey1);
     boxes.push({
-      x: Math.round(minX * scaleW),
-      y: Math.round(minY * scaleH),
-      w: Math.round(boxW * scaleW),
-      h: Math.round(boxH * scaleH),
+      x: Math.round(ex0 * scaleW),
+      y: Math.round(ey0 * scaleH),
+      w: Math.round((ex1 - ex0 + 1) * scaleW),
+      h: Math.round((ey1 - ey0 + 1) * scaleH),
       score,
     });
   }

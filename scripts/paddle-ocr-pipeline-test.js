@@ -84,12 +84,19 @@ function mockSession(outputName, produce) {
   const prob = new Float32Array(36).fill(0); // 6x6
   // hot 3x3 block at (1,1)-(3,3)
   for (let y = 1; y <= 3; y += 1) for (let x = 1; x <= 3; x += 1) prob[y * 6 + x] = 0.9;
-  const boxes = dbPostProcess(prob, 6, 6, { thresh: 0.3, boxThresh: 0.5, minSize: 2, scaleW: 1, scaleH: 1 });
+  // unclipRatio:0 关闭外扩，校验连通域 bbox 精确坐标
+  const boxes = dbPostProcess(prob, 6, 6, { thresh: 0.3, boxThresh: 0.5, minSize: 2, unclipRatio: 0, scaleW: 1, scaleH: 1 });
   assert.equal(boxes.length, 1);
   assert.equal(boxes[0].x, 1);
   assert.equal(boxes[0].y, 1);
   assert.equal(boxes[0].w, 3);
   assert.equal(boxes[0].h, 3);
+
+  // 默认 unclip>0 时框应向外扩（覆盖原 bbox 且更大），不切字符
+  const unclipped = dbPostProcess(prob, 6, 6, { thresh: 0.3, boxThresh: 0.5, minSize: 2, scaleW: 1, scaleH: 1 });
+  assert.equal(unclipped.length, 1);
+  assert.ok(unclipped[0].w >= 3 && unclipped[0].h >= 3, "unclip should not shrink the box");
+  assert.ok(unclipped[0].x <= 1 && unclipped[0].y <= 1, "unclip should expand the box outward");
 
   const none = dbPostProcess(new Float32Array(36).fill(0.1), 6, 6, { thresh: 0.3 });
   assert.equal(none.length, 0);
