@@ -11,9 +11,10 @@ const BUDGETS = [
   { path: "public/workers", maxBytes: 128 * 1024 },
   { path: "scripts", maxBytes: 512 * 1024 },
   { path: "public", maxBytes: 2 * 1024 * 1024, exclude: ["public/vendor"] },
-  // vendored PDF.js（main + worker + cmaps + standard_fonts）属于按需的可选引擎，
-  // 不应挤占核心主预算，但本身仍要有上限避免漂移。
-  { path: "public/vendor", maxBytes: 6 * 1024 * 1024 },
+  // vendored 引擎/模型属于按需的可选资源，不挤占核心主预算，但仍设上限防漂移。
+  // 含：pdfjs(~4MB) + onnxruntime-web 最小 JSEP 构建(~25MB) + PP-OCRv5 mobile det/cls/rec ONNX
+  // + 字典(~22MB)。这些不入 git（见 .gitignore），由 vendor 脚本 + 本地下载重建，随应用打包。
+  { path: "public/vendor", maxBytes: 64 * 1024 * 1024 },
 ];
 
 const FORBIDDEN_DEPENDENCIES = [

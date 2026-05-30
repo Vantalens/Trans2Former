@@ -8,6 +8,7 @@ import {
   renderPreviewHtml,
   toConversionDocumentModel,
   toDocumentModel,
+  ensurePaddleDefaultModels,
 } from "./browser-transformer.js";
 import { normalizeConversionError } from "./core/conversion-error.js";
 import { getPlainText } from "./core/document-model.js";
@@ -1756,3 +1757,7 @@ syncPdfPaperControl();
 openPdfPreviewButton.disabled = true;
 if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = true;
 updateConversionProgress({ stage: "idle", progress: 0 });
+
+// 后台开箱即用加载随包 PP-OCRv5 模型（同源 vendor → 本地缓存），让高级 OCR 无需手动导入。
+// 失败/缺失静默（仍可经安全中心手动导入），不阻塞 UI。
+ensurePaddleDefaultModels().catch(() => {});

@@ -27,12 +27,18 @@ async function main() {
 
   await mkdir(TARGET_DIR, { recursive: true });
 
+  // 只同步运行时实际需要的最小集合：`ort.min.mjs` 入口 + 它加载的 JSEP 构建
+  // （`ort-wasm-simd-threaded.jsep.{mjs,wasm}`，同时支持 WebGPU 与 WASM 执行后端）。
+  // 其余 all/bundle/jspi/asyncify/plain 变体（~68MB 冗余）不进 vendor，避免撑大应用体积。
+  const KEEP = new Set([
+    "ort.min.mjs",
+    "ort-wasm-simd-threaded.jsep.mjs",
+    "ort-wasm-simd-threaded.jsep.wasm",
+  ]);
   const entries = await readdir(ORT_DIST);
   let copied = 0;
   for (const entry of entries) {
-    if (entry.endsWith(".d.ts")) continue;
-    // 运行时只需要 mjs 入口 + wasm 二进制（含 SIMD/threaded 变体）；跳过 cjs/min.js 以外噪声。
-    if (!/\.(mjs|wasm)$/.test(entry) && !/^ort.*\.min\.js$/.test(entry)) continue;
+    if (!KEEP.has(entry)) continue;
     const source = path.join(ORT_DIST, entry);
     const info = await stat(source);
     if (!info.isFile()) continue;

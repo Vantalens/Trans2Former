@@ -61,6 +61,11 @@ Thumbs.db
 # Generated sample corpus (programmatically regenerable; `npm run samples:generate`)
 /samples/generated/
 
+# Heavy OCR runtime + model vendors (reproducible: `npm i onnxruntime-web && npm run vendor:onnx`;
+# PP-OCRv5 ONNX models downloaded locally). Not committed; bundled into the app build from disk.
+/public/vendor/onnxruntime/
+/public/vendor/paddleocr/
+
 # Test screenshots / debug captures
 /test-results/
 /playwright-report/

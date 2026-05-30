@@ -44,11 +44,13 @@ const ALLOWED_PUBLIC_FILES = new Set([
   path.normalize("public/core/ocr/scan-pdf-stage.js"),
   // P9-D.1/D.2/D.2.b PP-OCRv5 高级 OCR：engine 实现 OCREngine 契约；bootstrap 注册 engine +
   // ONNX manifest；runtime 通过同源 vendor 加载 onnxruntime-web + WebGPU/WASM 后端；pipeline
-  // 是纯前后处理（预处理/DB 后处理/CTC 解码）+ 编排器。均不联网、不上传。
+  // 是纯前后处理（预处理/DB 后处理/CTC 解码）+ 编排器；default-models fetch 同源 vendor 随包
+  // 模型 → 本地缓存（开箱即用）。均不联网、不上传，仅访问 /vendor/ 同源资源。
   path.normalize("public/core/ocr/paddle-ocr-engine.js"),
   path.normalize("public/core/ocr/paddle-ocr-bootstrap.js"),
   path.normalize("public/core/ocr/paddle-ocr-runtime.js"),
   path.normalize("public/core/ocr/paddle-ocr-pipeline.js"),
+  path.normalize("public/core/ocr/paddle-default-models.js"),
   // P9-B FixedLayoutModel + 浏览器 rasterize：ocr-to-fixed-layout 仅做数据映射；
   // pdf-rasterizer-browser dynamic import 同源 vendor pdfjs，运行时画布在浏览器/Tauri。
   path.normalize("public/core/ocr/ocr-to-fixed-layout.js"),
@@ -70,12 +72,19 @@ const ALLOWED_PUBLIC_FILES = new Set([
 ]);
 
 function isLocalVendorAsset(normalizedPath, content) {
+  // onnxruntime-web 是第三方运行时 bundle，其 minified 代码内含 CDN/源映射等远程 URL
+  // 字符串（无法在静态扫描层面剔除）。本项目对 ORT 的"零联网"保证来自两层运行时控制：
+  //   (1) paddle-ocr-runtime.loadOnnxRuntime 把 ort.env.wasm.wasmPaths 钉到同源 vendor 目录，
+  //       wasm 不走 CDN；
+  //   (2) Tauri CSP `connect-src 'self'` 阻断任何远程连接。
+  // 因此 onnxruntime vendor 整目录视为可信，不做"无远程 URL 字符串"硬扫描。
+  if (normalizedPath.startsWith(path.normalize("public/vendor/onnxruntime/"))) {
+    return true;
+  }
   const isVendor = normalizedPath.startsWith(path.normalize("public/vendor/pdfjs/"))
-    || normalizedPath.startsWith(path.normalize("public/vendor/tesseract/"))
-    || normalizedPath.startsWith(path.normalize("public/vendor/onnxruntime/"));
+    || normalizedPath.startsWith(path.normalize("public/vendor/tesseract/"));
   if (!isVendor) return false;
-  // Vendor 资源（pdfjs / tesseract）允许内部 fetch / XHR 之类访问同源 wasm/worker；
-  // 但禁止任何远程 URL（http(s):// / ws(s)://）。
+  // pdfjs / tesseract vendor：允许内部 fetch / XHR 访问同源 wasm/worker，但禁止任何远程 URL。
   return !content.includes("http://")
     && !content.includes("https://")
     && !content.includes("ws://")
@@ -138,6 +147,7 @@ const STRICT_LOCAL_ONLY_FILES = new Set([
   path.normalize("public/core/ocr/paddle-ocr-bootstrap.js"),
   path.normalize("public/core/ocr/paddle-ocr-runtime.js"),
   path.normalize("public/core/ocr/paddle-ocr-pipeline.js"),
+  path.normalize("public/core/ocr/paddle-default-models.js"),
   path.normalize("public/core/verification/block-fingerprint.js"),
   path.normalize("public/core/verification/rule-diff.js"),
   path.normalize("public/core/verification/verification-stage.js"),

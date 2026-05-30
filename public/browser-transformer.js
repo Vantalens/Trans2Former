@@ -384,6 +384,7 @@ export {
   markPaddleOcrVendorReady,
 } from "./core/ocr/paddle-ocr-engine.js";
 export { ensurePaddleOcrBootstrap } from "./core/ocr/paddle-ocr-bootstrap.js";
+export { ensurePaddleDefaultModels } from "./core/ocr/paddle-default-models.js";
 export {
   loadOnnxRuntime,
   pickExecutionProviders,
