@@ -4,12 +4,30 @@
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-05-30
+
+### 新增
+
+- **本地 OCR（PP-OCRv5）**：图片 / 扫描 PDF 经 ONNX Runtime + WebGPU（WASM 回退）在本机识别。完整管线含图像预处理（ImageNet 归一化 + limit_side_len + 32 倍数）、DB 检测后处理（连通域 + unclip 外扩）、CTC 贪心解码 + 字典对齐、cls 方向校正（180°）、竖排/侧向 90° 试转、任意角倾斜自动纠偏（错切投影估角）、自适应中值去噪（仅噪图去噪、净图不损）、版面结构识别（按字号/间距归并为标题+段落）与识别质量评分（grade / 置信度 / 低置信行 / 纠偏 / 去噪）。应用内置一套 PP-OCRv5 mobile 模型，启动时自动载入本地缓存，开箱即用；可在安全中心导入/替换。用真实模型实测验证（rec 解词图为 "PAIN"、产品标签 0.978、倒置 0.976、+10° 倾斜 8→16 行恢复）。
+- **轻量 OCR（Tesseract.js）**：可选轻量 OCR engine，按需在安全中心导入 tessdata；与 PP-OCRv5 经优先级感知 `pickForTask` 路由（paddle 优先）。
+- **转换后检验三层**：规则 diff（字段级结构对比）+ SSIM 视觉回环 + OCR 回读，统一写入 `qualityReport.{ruleDiff,ssim,ocrReadback}` + `verification` envelope；工作台「转换检验报告」可视，含 OCR 识别质量行。SSIM 核心、文本相似度、规则 diff 均为零依赖纯函数，Node 全覆盖。
+- **LaTeX 数学渲染**：`$...$` / `$$...$$` 受保护 tokenization（反斜杠 / 下划线逐字保留，货币不误判），预览用本地 KaTeX 排版，零联网。
+- **Repair Engine 与按需模型缓存**：RepairAction 契约 + 规则驱动 validator/handler + 复核循环；model-cache manifest / SHA-256 / 状态机 / 安全中心导入 UI。
+- **优质测试样例生成器**：`npm run samples:generate` 程序化产出覆盖全格式、复杂排版、大小不一（large ≥ 3MB）的样例语料（gitignore）。
+
 ### 修复
 
-- **P7-A Windows 桌面发布基线**：统一 `package.json`、Tauri 配置与 Rust crate 版本为 `2.2.0`，声明已入库的 Windows ICO 图标；新增配置门禁并通过真实 `npm run desktop:build` 产出 MSI 与 NSIS 安装包。
-- **P8 路由损失可见性**：`RoutePlanner` 现在返回实际模型路径，跨模型转换将 `forcedWarnings` 和 `routeTemperature` 写入 QualityReport；工作台转换完成后展示带路径降级提示的转换模型。
-- **P8-B 可执行 mapper 与路径真值**：`SemanticDoc <-> WorkbookModel` 首批 mapper 已进入实际转换链并记录 `executedMappers`；`PPTX` 生成型输出和 `OFD -> PDF` 受限路径通过 `routeClass` 与 `PATH_NOT_RECOMMENDED` 明示质量边界。
-- **Markdown 导出原始 HTML 回归**：保留 task list 的 `[]` 字面语义，同时恢复文本节点 `<` / `>` 转义，避免纯文本输入导出 `.md` 时激活 HTML 标签。
+- **首页空白**：`browser-transformer.js` 漏 re-export `getKnownInputFormats` 导致 `landing-view.js` 浏览器加载失败、首页空白；补导出并加模块图加载守门。
+- **OCR 实际不触发**：转换走 Web Worker 同步路径绕过了 OCR；图片/PDF 改走主线程异步管线，OCR 真正执行。
+- **冻结引擎导入失败**：`paddleOcrEngine`/`tesseractOCREngine` 就绪状态存于冻结对象，`ensureProbe()` 赋值在严格模式抛错、令安全中心导入静默失败；改为模块级状态。
+- **OCR 质量数据被覆盖**：Repair Engine 的 `modelReview` 覆盖了 OCR stage 的，丢弃 `ocr/ocrQuality`；改为合并保留，识别质量得以在 UI 展示。
+- **P7-A Windows 桌面发布基线**：统一 `package.json`、Tauri 配置与 Rust crate 版本，声明 Windows ICO 图标；配置门禁 + 真实 `npm run desktop:build` 产出 MSI/NSIS。
+- **P8 路由损失可见性 / P8-B 可执行 mapper**：`RoutePlanner` 返回实际模型路径，`executedMappers` / `routeClass` / `PATH_NOT_RECOMMENDED` 写入 QualityReport。
+- **Markdown 导出原始 HTML 回归**：保留 task list `[]` 字面语义，恢复文本节点 `<` / `>` 转义。
+
+### 方向
+
+- **高级 OCR 目标调整**：调研确认 PaddleOCR-VL / MinerU（VLM）在浏览器/Tauri 本地 + 零云端 + 轻量默认包约束下不可内嵌，把高级 OCR 内置目标定为 **PP-OCRv5（ONNX/WebGPU）**，VLM 标注为远期/外部资源。
 
 ## [2.2.0] - 2026-05-26
 

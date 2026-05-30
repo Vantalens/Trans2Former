@@ -3625,7 +3625,7 @@ dependencies = [
 
 [[package]]
 name = "trans2former"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "tauri",
  "tauri-build",

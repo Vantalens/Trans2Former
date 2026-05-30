@@ -154,6 +154,6 @@
 - `npm test`
 - `git diff --check`
 - `npm run release:prepare`
-- `git check-ignore -v release\trans2former-2.2.0\RELEASE_MANIFEST.json`
+- `git check-ignore -v release\trans2former-2.3.0\RELEASE_MANIFEST.json`
 - `npm run samples:generate`（按需生成覆盖全格式的复杂/大样例语料到 samples/generated/，能力压力测试用）
 - `npm run desktop:build`（Windows P7-A / 发布前安装包验证）

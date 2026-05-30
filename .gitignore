@@ -61,10 +61,14 @@ Thumbs.db
 # Generated sample corpus (programmatically regenerable; `npm run samples:generate`)
 /samples/generated/
 
-# Heavy OCR runtime + model vendors (reproducible: `npm i onnxruntime-web && npm run vendor:onnx`;
-# PP-OCRv5 ONNX models downloaded locally). Not committed; bundled into the app build from disk.
+# Heavy OCR runtime + model vendors (reproducible via vendor scripts + local download;
+# bundled into the app build from disk, not committed):
+#   onnxruntime-web: `npm i onnxruntime-web && npm run vendor:onnx`
+#   tesseract.js:    `npm i tesseract.js && npm run vendor:tesseract`
+#   PP-OCRv5 ONNX models: downloaded locally into public/vendor/paddleocr/
 /public/vendor/onnxruntime/
 /public/vendor/paddleocr/
+/public/vendor/tesseract/
 
 # Test screenshots / debug captures
 /test-results/
