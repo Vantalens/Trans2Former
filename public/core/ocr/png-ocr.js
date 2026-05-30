@@ -1,7 +1,7 @@
-import { createParagraph } from "../document-model.js";
 import { withWarnings } from "../warnings.js";
 import { defaultOCRRegistry } from "./ocr-engine.js";
 import { summarizeOCRResult } from "./ocr-result.js";
+import { blocksFromOcrResult } from "./ocr-structure.js";
 import {
   createOCRUnavailableWarning,
   createOCREngineFailedWarning,
@@ -36,19 +36,6 @@ function cloneModel(model) {
   };
 }
 
-function paragraphsFromOCR(result) {
-  const pages = Array.isArray(result?.pages) ? result.pages : [];
-  const paragraphs = [];
-  for (const page of pages) {
-    const lines = Array.isArray(page.lines) ? page.lines : [];
-    const text = lines.map((line) => line.text).filter(Boolean).join("\n");
-    if (text.trim().length > 0) paragraphs.push(createParagraph(text));
-  }
-  if (paragraphs.length === 0 && typeof result?.fullText === "string" && result.fullText.trim().length > 0) {
-    paragraphs.push(createParagraph(result.fullText));
-  }
-  return paragraphs;
-}
 
 export async function enhanceWithOCR(model, { engine = null, registry = defaultOCRRegistry } = {}) {
   const resolvedEngine = engine || registry.pickForTask("ocr-text");
@@ -106,7 +93,8 @@ export async function enhanceWithOCR(model, { engine = null, registry = defaultO
     return next;
   }
 
-  const paragraphs = paragraphsFromOCR(result);
+  // 格式识别增强：按版面（bbox/行高/间距）把识别行归并成标题+段落；几何不足时回退。
+  const paragraphs = blocksFromOcrResult(result);
   const ocrWarnings = [];
   if (typeof result?.averageConfidence === "number" && result.averageConfidence < LOW_CONFIDENCE_THRESHOLD) {
     ocrWarnings.push(createOCRLowConfidenceWarning({

@@ -427,6 +427,7 @@ export {
   disposeWorker,
 } from "./core/ocr/tesseract-runtime.js";
 export { enhanceWithOCR } from "./core/ocr/png-ocr.js";
+export { deriveOcrStructure, blocksFromOcrResult } from "./core/ocr/ocr-structure.js";
 export { runOCRStage, getDefaultOCRLanguage } from "./core/ocr/ocr-stage.js";
 export { detectOCRLowConfidence } from "./core/ocr/ocr-validator.js";
 export {
