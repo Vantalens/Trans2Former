@@ -239,6 +239,73 @@ export function denoiseImageData(imageData, { window = 3 } = {}) {
   return { data: out, width, height };
 }
 
+// 按任意角度旋转 RGBA 图像（最近邻，画布扩展以容纳，背景默认白）。正角度 = 逆时针。
+export function rotateImageDataByAngle(imageData, degrees, { background = 255 } = {}) {
+  const { data, width: W, height: H } = imageData;
+  const a = (degrees * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const nw = Math.max(1, Math.ceil(Math.abs(W * c) + Math.abs(H * s)));
+  const nh = Math.max(1, Math.ceil(Math.abs(W * s) + Math.abs(H * c)));
+  const out = new Uint8ClampedArray(nw * nh * 4).fill(background);
+  // 背景 alpha 设满
+  for (let i = 3; i < out.length; i += 4) out[i] = 255;
+  const cx = W / 2;
+  const cy = H / 2;
+  const ncx = nw / 2;
+  const ncy = nh / 2;
+  for (let y = 0; y < nh; y += 1) {
+    for (let x = 0; x < nw; x += 1) {
+      const dx = x - ncx;
+      const dy = y - ncy;
+      const sx = Math.round(dx * c + dy * s + cx);
+      const sy = Math.round(-dx * s + dy * c + cy);
+      if (sx >= 0 && sx < W && sy >= 0 && sy < H) {
+        const so = (sy * W + sx) * 4;
+        const dstO = (y * nw + x) * 4;
+        out[dstO] = data[so]; out[dstO + 1] = data[so + 1]; out[dstO + 2] = data[so + 2]; out[dstO + 3] = data[so + 3];
+      }
+    }
+  }
+  return { data: out, width: nw, height: nh };
+}
+
+// 估计文档倾斜角：对 det 概率图二值化后，用「错切投影直方图方差」找让文本行最对齐水平的角度。
+// 返回应当旋转的角度（度），使图像去倾斜（正角度 = 逆时针）。范围 [-maxAngle, maxAngle]。
+export function estimateSkewAngle(probData, mapW, mapH, { maxAngle = 12, step = 1, thresh = 0.3 } = {}) {
+  // 收集文本像素坐标（下采样以提速）
+  const pts = [];
+  const sub = Math.max(1, Math.floor(Math.max(mapW, mapH) / 160));
+  for (let y = 0; y < mapH; y += sub) {
+    for (let x = 0; x < mapW; x += sub) {
+      if (probData[y * mapW + x] > thresh) pts.push([x, y]);
+    }
+  }
+  if (pts.length < 20) return 0;
+  let bestAngle = 0;
+  let bestVar = -1;
+  for (let deg = -maxAngle; deg <= maxAngle; deg += step) {
+    const a = (deg * Math.PI) / 180;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    // 旋转后行坐标的直方图（按行 bin 统计文本像素），方差越大表示文本行越对齐水平
+    const hist = new Map();
+    for (const [x, y] of pts) {
+      const ry = Math.round(-x * s + y * c);
+      hist.set(ry, (hist.get(ry) || 0) + 1);
+    }
+    let sum = 0;
+    let sumSq = 0;
+    let n = 0;
+    for (const v of hist.values()) { sum += v; sumSq += v * v; n += 1; }
+    if (n === 0) continue;
+    const mean = sum / n;
+    const variance = sumSq / n - mean * mean;
+    if (variance > bestVar) { bestVar = variance; bestAngle = deg; }
+  }
+  return bestAngle;
+}
+
 // 旋转 RGBA 图像。rotateImageData180：上下左右翻转（cls 检测到 180° 时用）。
 export function rotateImageData180(imageData) {
   const { data, width, height } = imageData;
@@ -396,16 +463,37 @@ export async function runPaddlePipeline({
     }
   }
 
-  const detInput = preprocessForDetection(workImage, options.det || {});
-  const detOut = await runSession(ort, detSession, { data: detInput.data, dims: detInput.dims });
-  const probData = detOut?.data || detOut;
-  const probDims = detOut?.dims || [1, 1, detInput.resizedHeight, detInput.resizedWidth];
-  const mapH = probDims[probDims.length - 2];
-  const mapW = probDims[probDims.length - 1];
+  // 单次检测：返回 prob 图 + 还原坐标的 scale。
+  async function detect(image) {
+    const detInput = preprocessForDetection(image, options.det || {});
+    const detOut = await runSession(ort, detSession, { data: detInput.data, dims: detInput.dims });
+    const pd = detOut?.data || detOut;
+    const dims = detOut?.dims || [1, 1, detInput.resizedHeight, detInput.resizedWidth];
+    const mh = dims[dims.length - 2];
+    const mw = dims[dims.length - 1];
+    return { pd, mw, mh, scaleW: detInput.scaleW * (detInput.resizedWidth / mw), scaleH: detInput.scaleH * (detInput.resizedHeight / mh) };
+  }
+
+  let det = await detect(workImage);
+  // 去倾斜：从 det 概率图估倾斜角，超阈值则把图旋正后重检（仅倾斜图付二次检测代价；
+  // 正立图估计≈0 不重检）。识别仍只跑一次（在最终图上）。options.deskew: true(默认)|false。
+  let skewApplied = 0;
+  const minSkew = typeof options.minSkew === "number" ? options.minSkew : 3;
+  if (options.deskew !== false) {
+    const est = estimateSkewAngle(det.pd, det.mw, det.mh, options.skew || {});
+    if (Math.abs(est) >= minSkew) {
+      workImage = rotateImageDataByAngle(workImage, -est);
+      skewApplied = est;
+      det = await detect(workImage);
+    }
+  }
+  const probData = det.pd;
+  const mapW = det.mw;
+  const mapH = det.mh;
   const boxes = dbPostProcess(probData, mapW, mapH, {
     ...(options.db || {}),
-    scaleW: detInput.scaleW * (detInput.resizedWidth / mapW),
-    scaleH: detInput.scaleH * (detInput.resizedHeight / mapH),
+    scaleW: det.scaleW,
+    scaleH: det.scaleH,
   });
 
   const verticalAspect = typeof options.verticalAspect === "number" ? options.verticalAspect : 1.5;
@@ -482,6 +570,7 @@ export async function runPaddlePipeline({
     rotatedLines: lines.filter((l) => l.orientation && l.orientation !== "0").length,
     denoised,
     noiseLevel,
+    skewApplied,
     grade: averageConfidence >= 0.9 && lowConfidenceLines === 0
       ? "high"
       : (averageConfidence >= 0.7 ? "medium" : "low"),

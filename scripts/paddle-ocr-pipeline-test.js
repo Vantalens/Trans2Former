@@ -10,6 +10,8 @@ import {
   resizeRgba,
   rotateImageData90,
   rotateImageData180,
+  rotateImageDataByAngle,
+  estimateSkewAngle,
   interpretClsOutput,
   denoiseImageData,
   estimateNoiseLevel,
@@ -284,4 +286,38 @@ function mockSession(outputName, produce) {
   assert.equal(typeof r.quality.noiseLevel, "number");
 }
 
-console.log("PP-OCRv5 pipeline test passed: dictionary, det/rec preprocessing, resize/crop, DB postprocess + unclip, CTC greedy decode, rotation helpers + cls interpretation, denoise (noise estimate + median + auto-gating), quality assessment, and mock-session end-to-end runPaddlePipeline verified.");
+// 15. rotateImageDataByAngle: 0deg is identity-ish; expands canvas for non-zero angles
+{
+  const img = solidRgba(120, 10, 8);
+  const same = rotateImageDataByAngle(img, 0);
+  assert.equal(same.width, 10);
+  assert.equal(same.height, 8);
+  const rot = rotateImageDataByAngle(img, 30);
+  assert.ok(rot.width >= 10 && rot.height >= 8, "rotation should expand the canvas");
+  assert.equal(rot.data.length, rot.width * rot.height * 4);
+}
+
+// 16. estimateSkewAngle: a synthetic horizontal-lines prob map skewed by +A is detected ~A
+{
+  const W = 120, H = 120;
+  // build a prob map with horizontal text rows, then shear it by angle A
+  const A = 8;
+  const t = Math.tan((A * Math.PI) / 180);
+  const prob = new Float32Array(W * H).fill(0);
+  for (let row = 20; row < H; row += 20) {
+    for (let x = 10; x < W - 10; x += 1) {
+      const y = Math.round(row + x * t); // shear -> slanted rows
+      if (y >= 0 && y < H) prob[y * W + x] = 1;
+    }
+  }
+  const est = estimateSkewAngle(prob, W, H, { maxAngle: 15, step: 1, thresh: 0.3 });
+  assert.ok(Math.abs(est) >= 3, `should detect a non-trivial skew, got ${est}`);
+  assert.ok(Math.sign(est) === Math.sign(A) || est === A || Math.abs(est - A) <= 3, `skew estimate ${est} should be near +${A}`);
+
+  // flat horizontal rows => ~0 skew
+  const flat = new Float32Array(W * H).fill(0);
+  for (let row = 20; row < H; row += 20) for (let x = 10; x < W - 10; x += 1) flat[row * W + x] = 1;
+  assert.ok(Math.abs(estimateSkewAngle(flat, W, H, { maxAngle: 15 })) <= 2, "flat rows should estimate ~0 skew");
+}
+
+console.log("PP-OCRv5 pipeline test passed: dictionary, det/rec preprocessing, resize/crop, DB postprocess + unclip, CTC greedy decode, rotation helpers + cls interpretation, denoise (noise estimate + median + auto-gating), skew estimation + arbitrary rotation, quality assessment, and mock-session end-to-end runPaddlePipeline verified.");

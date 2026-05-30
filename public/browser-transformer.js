@@ -404,6 +404,8 @@ export {
   resizeRgba,
   rotateImageData90,
   rotateImageData180,
+  rotateImageDataByAngle,
+  estimateSkewAngle,
   interpretClsOutput,
   denoiseImageData,
   estimateNoiseLevel,
