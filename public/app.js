@@ -1317,11 +1317,16 @@ function releaseConversionResources() {
 }
 
 function convertWithWorker(payload) {
+  const fromFmt = String(payload?.from || "").toLowerCase();
+  // OCR 适用输入（图片 / PDF）必须走主线程的异步管线：OCR 需要 canvas 解码图像 +
+  // onnxruntime 推理，这些在转换 Web Worker 里不可用。直接走 convertContentAsync——
+  // 图片与扫描 PDF 触发 OCR；文本 PDF 仍走常规文本路径。
+  if (fromFmt === "png" || fromFmt === "pdf") {
+    // 先确保随包 PP-OCRv5 模型已载入本地缓存（幂等），再跑异步转换/OCR。
+    return ensurePaddleDefaultModels().catch(() => {}).then(() => convertInBrowserAsync(payload));
+  }
   const worker = createConvertWorker();
   if (!worker) {
-    if (String(payload?.from || "").toLowerCase() === "png") {
-      return Promise.resolve(convertInBrowserAsync(payload));
-    }
     return Promise.resolve(convertInBrowser(payload));
   }
 
