@@ -184,6 +184,46 @@ export function dbPostProcess(probData, mapW, mapH, {
   return boxes;
 }
 
+// 旋转 RGBA 图像。rotateImageData180：上下左右翻转（cls 检测到 180° 时用）。
+export function rotateImageData180(imageData) {
+  const { data, width, height } = imageData;
+  const out = new Uint8ClampedArray(data.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const s = (y * width + x) * 4;
+      const d = ((height - 1 - y) * width + (width - 1 - x)) * 4;
+      out[d] = data[s]; out[d + 1] = data[s + 1]; out[d + 2] = data[s + 2]; out[d + 3] = data[s + 3];
+    }
+  }
+  return { data: out, width, height };
+}
+
+// 旋转 90°（dir: "cw" 顺时针 / "ccw" 逆时针）。输出宽高互换。用于竖排 / 侧向文本。
+export function rotateImageData90(imageData, dir = "cw") {
+  const { data, width, height } = imageData;
+  const ow = height;
+  const oh = width;
+  const out = new Uint8ClampedArray(ow * oh * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const s = (y * width + x) * 4;
+      let ox;
+      let oy;
+      if (dir === "cw") { ox = height - 1 - y; oy = x; } else { ox = y; oy = width - 1 - x; }
+      const d = (oy * ow + ox) * 4;
+      out[d] = data[s]; out[d + 1] = data[s + 1]; out[d + 2] = data[s + 2]; out[d + 3] = data[s + 3];
+    }
+  }
+  return { data: out, width: ow, height: oh };
+}
+
+// cls 输出 [c0, c1] softmax；c1 高表示需要旋转 180°。返回 { flip, confidence }。
+export function interpretClsOutput(clsData, threshold = 0.6) {
+  const c0 = clsData?.[0] ?? 1;
+  const c1 = clsData?.[1] ?? 0;
+  return { flip: c1 > c0 && c1 >= threshold, confidence: Math.max(c0, c1) };
+}
+
 // 裁剪 RGBA 区域（坐标 clamp 到图内）。
 export function cropImageData(imageData, box) {
   const { data, width, height } = imageData;
@@ -295,34 +335,84 @@ export async function runPaddlePipeline({
     scaleH: detInput.scaleH * (detInput.resizedHeight / mapH),
   });
 
+  const verticalAspect = typeof options.verticalAspect === "number" ? options.verticalAspect : 1.5;
+  const clsThreshold = typeof options.clsThreshold === "number" ? options.clsThreshold : 0.6;
+  const lowConfidence = typeof options.lowConfidence === "number" ? options.lowConfidence : 0.6;
+
+  // 对单个裁剪做：可选 cls 180° 校正 → rec → CTC，返回 { text, confidence }。
+  async function recognizeCrop(cropImg) {
+    let img = cropImg;
+    let orientation = "0";
+    if (clsSession) {
+      try {
+        const clsPre = preprocessForRecognition(img, options.cls || options.rec || {});
+        const clsOut = await runSession(ort, clsSession, { data: clsPre.data, dims: clsPre.dims });
+        const { flip } = interpretClsOutput(clsOut?.data || clsOut, clsThreshold);
+        if (flip) {
+          img = rotateImageData180(img);
+          orientation = "180";
+        }
+      } catch (error) {
+        // 方向分类失败不致命，按原图识别。
+      }
+    }
+    const recPre = preprocessForRecognition(img, options.rec || {});
+    const recOut = await runSession(ort, recSession, { data: recPre.data, dims: recPre.dims });
+    const logits = recOut?.data || recOut;
+    const recDims = recOut?.dims || [1, 0, dictionary.length];
+    const decoded = ctcGreedyDecode(logits, recDims[recDims.length - 2], recDims[recDims.length - 1], dictionary);
+    return { ...decoded, orientation };
+  }
+
   const lines = [];
   for (const box of boxes) {
     const crop = cropImageData(imageData, box);
-    if (clsSession) {
+    // 竖排 / 侧向文本：高宽比偏高的框，额外尝试旋转 90°（cw + ccw），按识别置信度取最优。
+    const candidates = [{ img: crop, rot: "0" }];
+    if (box.h > box.w * verticalAspect) {
+      candidates.push({ img: rotateImageData90(crop, "cw"), rot: "90cw" });
+      candidates.push({ img: rotateImageData90(crop, "ccw"), rot: "90ccw" });
+    }
+    let best = null;
+    for (const cand of candidates) {
+      let decoded;
       try {
-        const recInputForCls = preprocessForRecognition(crop, options.rec || {});
-        await runSession(ort, clsSession, { data: recInputForCls.data, dims: recInputForCls.dims });
-        // 角度旋转校正留给后续；本轮仅调用以验证 session 接线。
+        decoded = await recognizeCrop(cand.img);
       } catch (error) {
-        // 方向分类失败不致命，继续识别。
+        continue;
+      }
+      if (decoded.text.trim().length === 0) continue;
+      if (!best || decoded.confidence > best.confidence) {
+        best = { ...decoded, rotation: cand.rot };
       }
     }
-    const recInput = preprocessForRecognition(crop, options.rec || {});
-    const recOut = await runSession(ort, recSession, { data: recInput.data, dims: recInput.dims });
-    const logits = recOut?.data || recOut;
-    const recDims = recOut?.dims || [1, 0, dictionary.length];
-    const timeSteps = recDims[recDims.length - 2];
-    const numClasses = recDims[recDims.length - 1];
-    const { text, confidence } = ctcGreedyDecode(logits, timeSteps, numClasses, dictionary);
-    if (text.trim().length > 0) {
-      lines.push({ text, confidence, bbox: { x: box.x, y: box.y, w: box.w, h: box.h } });
+    if (best) {
+      lines.push({
+        text: best.text,
+        confidence: best.confidence,
+        bbox: { x: box.x, y: box.y, w: box.w, h: box.h },
+        orientation: best.rotation === "0" ? best.orientation : best.rotation,
+        lowConfidence: best.confidence < lowConfidence,
+      });
     }
   }
 
-  const averageConfidence = lines.length > 0
-    ? clamp(lines.reduce((sum, l) => sum + l.confidence, 0) / lines.length, 0, 1)
-    : 0;
-  return createOCRResult({
+  const confs = lines.map((l) => l.confidence);
+  const averageConfidence = confs.length > 0 ? clamp(confs.reduce((s, c) => s + c, 0) / confs.length, 0, 1) : 0;
+  const lowConfidenceLines = lines.filter((l) => l.lowConfidence).length;
+  // 质量把控摘要：整体/最低置信度、低置信行数、是否有旋转校正。
+  const quality = {
+    lineCount: lines.length,
+    averageConfidence,
+    minConfidence: confs.length > 0 ? clamp(Math.min(...confs), 0, 1) : 0,
+    lowConfidenceLines,
+    rotatedLines: lines.filter((l) => l.orientation && l.orientation !== "0").length,
+    grade: averageConfidence >= 0.9 && lowConfidenceLines === 0
+      ? "high"
+      : (averageConfidence >= 0.7 ? "medium" : "low"),
+  };
+
+  const result = createOCRResult({
     language: options.language || "auto",
     pages: [
       {
@@ -339,4 +429,5 @@ export async function runPaddlePipeline({
     modelVersion: "v5",
     warnings: [],
   });
+  return { ...result, quality };
 }

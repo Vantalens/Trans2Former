@@ -8,6 +8,9 @@ import {
   ctcGreedyDecode,
   cropImageData,
   resizeRgba,
+  rotateImageData90,
+  rotateImageData180,
+  interpretClsOutput,
   runPaddlePipeline,
   DET_LIMIT_SIDE_LEN,
   REC_IMAGE_HEIGHT,
@@ -179,4 +182,63 @@ function mockSession(outputName, produce) {
   );
 }
 
-console.log("PP-OCRv5 pipeline test passed: dictionary, det/rec preprocessing, resize/crop, DB postprocess connected-components, CTC greedy decode, and mock-session end-to-end runPaddlePipeline verified.");
+// 10. Rotation helpers: 180 is an involution; 90 swaps dims; corners map correctly
+{
+  // 2x3 image with a distinct top-left red pixel
+  const w = 2, h = 3;
+  const data = new Uint8ClampedArray(w * h * 4);
+  const setPx = (img, x, y, r) => { const o = (y * img.width + x) * 4; img.data[o] = r; img.data[o + 3] = 255; };
+  const img = { data, width: w, height: h };
+  setPx(img, 0, 0, 200); // mark top-left
+
+  const r180 = rotateImageData180(img);
+  assert.equal(r180.width, w);
+  assert.equal(r180.height, h);
+  // top-left should now be at bottom-right
+  assert.equal(r180.data[((h - 1) * w + (w - 1)) * 4], 200);
+  // 180 is its own inverse
+  const back = rotateImageData180(r180);
+  assert.deepEqual(Array.from(back.data), Array.from(img.data));
+
+  const cw = rotateImageData90(img, "cw");
+  assert.equal(cw.width, h); // dims swapped
+  assert.equal(cw.height, w);
+  // top-left (0,0) under CW goes to (height-1, 0) = (2,0)
+  assert.equal(cw.data[(0 * cw.width + (h - 1)) * 4], 200);
+  const ccw = rotateImageData90(img, "ccw");
+  assert.equal(ccw.width, h);
+  assert.equal(ccw.height, w);
+}
+
+// 11. interpretClsOutput: c1 high => flip; c0 high => no flip; below threshold => no flip
+{
+  assert.equal(interpretClsOutput([0.05, 0.95], 0.6).flip, true);
+  assert.equal(interpretClsOutput([0.95, 0.05], 0.6).flip, false);
+  assert.equal(interpretClsOutput([0.45, 0.55], 0.6).flip, false, "below threshold should not flip");
+  assert.equal(interpretClsOutput([0.1, 0.9]).confidence, 0.9);
+}
+
+// 12. runPaddlePipeline returns a quality assessment (grade + confidence stats)
+{
+  const dict = ["<blank>", "H", "I"];
+  const detSession = mockSession("det_out", (tensor) => {
+    const [, , H, W] = tensor.dims;
+    const data = new Float32Array(H * W).fill(0);
+    for (let y = Math.floor(H / 2) - 4; y < Math.floor(H / 2) + 4; y += 1)
+      for (let x = Math.floor(W / 2) - 4; x < Math.floor(W / 2) + 4; x += 1)
+        if (y >= 0 && y < H && x >= 0 && x < W) data[y * W + x] = 0.9;
+    return { data, dims: [1, 1, H, W] };
+  });
+  const recSession = mockSession("rec_out", () => ({ data: new Float32Array([0, 9, 0, 0, 0, 9, 9, 0, 0]), dims: [1, 3, 3] }));
+  const result = await runPaddlePipeline({
+    ort: mockOrt, detSession, recSession, imageData: solidRgba(200, 64, 64), dictionary: dict,
+    options: { db: { thresh: 0.3, boxThresh: 0.5, minSize: 2 } },
+  });
+  assert.ok(result.quality, "pipeline should attach a quality assessment");
+  assert.equal(typeof result.quality.averageConfidence, "number");
+  assert.equal(typeof result.quality.minConfidence, "number");
+  assert.ok(["high", "medium", "low"].includes(result.quality.grade));
+  assert.equal(result.quality.lineCount, result.pages[0].lines.length);
+}
+
+console.log("PP-OCRv5 pipeline test passed: dictionary, det/rec preprocessing, resize/crop, DB postprocess + unclip, CTC greedy decode, rotation helpers + cls interpretation, quality assessment, and mock-session end-to-end runPaddlePipeline verified.");

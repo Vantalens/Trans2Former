@@ -402,6 +402,9 @@ export {
   ctcGreedyDecode,
   cropImageData,
   resizeRgba,
+  rotateImageData90,
+  rotateImageData180,
+  interpretClsOutput,
   DET_LIMIT_SIDE_LEN,
   REC_IMAGE_HEIGHT,
 } from "./core/ocr/paddle-ocr-pipeline.js";

@@ -127,6 +127,8 @@ export async function enhanceWithOCR(model, { engine = null, registry = defaultO
     tasks: Array.from(new Set([...(enhanced.metadata.modelReview?.tasks || []), "ocr-text-recognition"])),
     inferenceMode: "local",
     ocr: summarizeOCRResult(result),
+    // 质量把控：若引擎提供了质量评估（置信度分级、低置信行、旋转校正数），一并记录。
+    ...(result?.quality ? { ocrQuality: result.quality } : {}),
   };
   enhanced.metadata.ocr = collectLineMetadata(result, enhanced.blocks, appendedStart);
   return enhanced;
