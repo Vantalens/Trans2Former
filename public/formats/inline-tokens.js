@@ -54,6 +54,35 @@ export function parseInlineMarkdown(text) {
   while (index < source.length) {
     const ch = source[index];
 
+    // LaTeX 数学：$$...$$（块级）/ $...$（行内）。内容逐字保留，不递归、不转义（须在转义
+    // 处理之前，避免 \frac 的反斜杠被吃掉）。行内启发式：定界符内侧不得为空白，避免把
+    // "$5 ... $10" 这类货币误判为数学。
+    if (ch === "$") {
+      if (source.startsWith("$$", index)) {
+        const end = source.indexOf("$$", index + 2);
+        if (end > index + 2) {
+          const inner = source.slice(index + 2, end);
+          if (inner.trim()) {
+            pushText();
+            tokens.push({ type: "math", display: true, value: inner });
+            index = end + 2;
+            continue;
+          }
+        }
+      } else {
+        const end = source.indexOf("$", index + 1);
+        if (end > index + 1) {
+          const inner = source.slice(index + 1, end);
+          if (inner && !inner.includes("\n") && !/^\s/.test(inner) && !/\s$/.test(inner)) {
+            pushText();
+            tokens.push({ type: "math", display: false, value: inner });
+            index = end + 1;
+            continue;
+          }
+        }
+      }
+    }
+
     // 转义
     if (ch === "\\" && index + 1 < source.length) {
       buffer += source[index + 1];

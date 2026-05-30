@@ -31,6 +31,7 @@ import {
 import { readBlobAsDecodedText } from "./core/text-decoding.js";
 import { expandPdfContentForTextExtraction } from "./formats/pdf.js";
 import { openPreview } from "./router.js";
+import { renderMathIn } from "./katex-render.js";
 
 const inputContent = document.getElementById("inputContent");
 const sourcePane = document.querySelector(".source-pane");
@@ -689,6 +690,7 @@ function renderOutputPreview(content = "") {
 
   try {
     textOutputPreview.innerHTML = renderPreviewHtml(content, currentOutputFormat, currentFileName);
+    renderMathIn(textOutputPreview);
     outputPreviewNotice.hidden = true;
     outputPreviewNotice.textContent = "";
   } catch (error) {
@@ -1115,6 +1117,7 @@ function renderLargeDocumentPreview(rawContent, fileName = currentFileName) {
     `<p>当前仅渲染前 ${Math.min(model.blocks.length, LARGE_PREVIEW_BLOCK_LIMIT)} 个结构块，转换仍在 Worker 中完整执行。</p>`,
   ].join("");
   htmlPreview.innerHTML = summary + renderPreviewHtml(previewContent, fromFormatSelect.value, fileName);
+  renderMathIn(htmlPreview);
   renderDocumentModelPanel({
     ...model,
     blocks: model.blocks.slice(0, LARGE_PREVIEW_BLOCK_LIMIT),
@@ -1154,6 +1157,7 @@ function renderPreview() {
   const model = toDocumentModel(content, fromFormatSelect.value, currentFileName);
   const bodyHtml = renderPreviewHtml(content, fromFormatSelect.value, currentFileName);
   htmlPreview.innerHTML = bodyHtml;
+  renderMathIn(htmlPreview);
   renderDocumentModelPanel(model);
   renderBottomReports(model);
   lastRenderedPayload = payloadKey;

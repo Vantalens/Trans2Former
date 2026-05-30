@@ -81,6 +81,11 @@ function isLocalVendorAsset(normalizedPath, content) {
   if (normalizedPath.startsWith(path.normalize("public/vendor/onnxruntime/"))) {
     return true;
   }
+  // KaTeX 是纯同步数学排版库，运行时零网络 I/O。其 min.js 内的 http(s) 字符串仅为 W3C
+  // MathML/SVG 命名空间标识（createElementNS 用），非网络请求，故整目录视为可信。
+  if (normalizedPath.startsWith(path.normalize("public/vendor/katex/"))) {
+    return true;
+  }
   const isVendor = normalizedPath.startsWith(path.normalize("public/vendor/pdfjs/"))
     || normalizedPath.startsWith(path.normalize("public/vendor/tesseract/"));
   if (!isVendor) return false;
