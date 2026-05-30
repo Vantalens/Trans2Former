@@ -475,12 +475,20 @@ export class ConverterRegistry {
       };
     }
     const effectiveTo = cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat;
+    // Repair Engine 写自己的 modelReview，但要保留上游 OCR stage 记下的 ocr / ocrQuality
+    // 子对象（否则识别质量数据会被覆盖丢失，UI 无法展示）。
+    const priorReview = cycle.model.metadata?.modelReview || {};
+    const mergedModelReview = {
+      ...cycle.modelReview,
+      ...(priorReview.ocr ? { ocr: priorReview.ocr } : {}),
+      ...(priorReview.ocrQuality ? { ocrQuality: priorReview.ocrQuality } : {}),
+    };
     const auditedModel = ensureDocumentAudit({
       ...cycle.model,
       metadata: {
         ...(cycle.model.metadata || {}),
         autoRepair: cycle.autoRepair,
-        modelReview: cycle.modelReview,
+        modelReview: mergedModelReview,
       },
     }, {
       content,

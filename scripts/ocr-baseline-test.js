@@ -523,6 +523,18 @@ function makeStubEngine(overrides = {}) {
       options: { repair: false },
     });
     assert.equal(result.data.includes("ASYNC-STUB-TEXT"), true, "convertContentAsync should append OCR text into markdown output");
+
+    // Regression: the repair cycle must not clobber the OCR modelReview (ocr/ocrQuality)
+    // — convertContentAsync without repair:false should still surface OCR recognition quality.
+    const withRepair = await convertContentAsync({
+      content: tinyPng,
+      from: "png",
+      to: "txt",
+      title: "async-stub-repair.png",
+      options: {},
+    });
+    assert.ok(withRepair.quality?.modelReview?.ocr, "result.quality.modelReview.ocr must survive the repair cycle for the UI");
+    assert.equal(withRepair.quality.modelReview.ocr.engine, "async-stub");
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
   }

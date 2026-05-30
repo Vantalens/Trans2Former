@@ -91,6 +91,8 @@ const verificationRepair = document.getElementById("verificationRepair");
 const verificationRuleDiff = document.getElementById("verificationRuleDiff");
 const verificationSsim = document.getElementById("verificationSsim");
 const verificationOcrReadback = document.getElementById("verificationOcrReadback");
+const verificationOcrRecognition = document.getElementById("verificationOcrRecognition");
+const verificationOcrRecognitionRow = document.getElementById("verificationOcrRecognitionRow");
 const verificationWarnings = document.getElementById("verificationWarnings");
 const securityCenterButton = document.getElementById("securityCenterButton");
 const workbenchTabs = document.getElementById("workbenchTabs");
@@ -616,6 +618,27 @@ function renderVerificationReport(quality = currentConversionQuality) {
   applyVerificationRow(verificationRuleDiff, describeRuleDiff(report.ruleDiff, verification));
   applyVerificationRow(verificationSsim, describeSsim(report.ssim, verification));
   applyVerificationRow(verificationOcrReadback, describeOcrReadback(report.ocrReadback, verification));
+
+  // OCR 识别质量（仅当本次转换跑了 OCR 识别才显示）
+  const modelReview = quality.modelReview || {};
+  if (verificationOcrRecognitionRow) {
+    if (modelReview.ocr) {
+      const ocr = modelReview.ocr;
+      const q = modelReview.ocrQuality || {};
+      const conf = typeof ocr.averageConfidence === "number" ? ocr.averageConfidence.toFixed(3) : "-";
+      const parts = [`引擎 ${ocr.engine || "-"}`, `${ocr.lineCount ?? 0} 行`, `置信度 ${conf}`];
+      if (q.grade) parts.push(`质量 ${q.grade}`);
+      if (q.lowConfidenceLines) parts.push(`低置信 ${q.lowConfidenceLines}`);
+      if (q.skewApplied) parts.push(`纠偏 ${q.skewApplied}°`);
+      if (q.rotatedLines) parts.push(`方向校正 ${q.rotatedLines}`);
+      if (q.denoised) parts.push("已去噪");
+      const state = q.grade === "low" ? "drift" : (q.grade === "medium" ? "skip" : "ok");
+      applyVerificationRow(verificationOcrRecognition, { state, text: parts.join(" · ") });
+      verificationOcrRecognitionRow.hidden = false;
+    } else {
+      verificationOcrRecognitionRow.hidden = true;
+    }
+  }
 
   const severity = report.warningsBySeverity || {};
   const severityText = Object.keys(severity).length > 0
