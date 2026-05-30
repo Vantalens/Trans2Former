@@ -184,6 +184,61 @@ export function dbPostProcess(probData, mapW, mapH, {
   return boxes;
 }
 
+// 噪点估计：采样像素，统计与 3×3 邻域中值相差很大（孤立跳变，椒盐特征）的灰度像素比例。
+// 文字边缘也会产生差异但占比小；椒盐噪点会显著抬高该比例。返回 [0,1] 的噪点比例。
+export function estimateNoiseLevel(imageData, { jump = 80, step = 2 } = {}) {
+  const { data, width, height } = imageData;
+  if (width < 3 || height < 3) return 0;
+  const gray = (o) => (data[o] * 299 + data[o + 1] * 587 + data[o + 2] * 114) / 1000;
+  let speckle = 0;
+  let sampled = 0;
+  const win = [];
+  for (let y = 1; y < height - 1; y += step) {
+    for (let x = 1; x < width - 1; x += step) {
+      win.length = 0;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          win.push(gray(((y + dy) * width + (x + dx)) * 4));
+        }
+      }
+      win.sort((a, b) => a - b);
+      const med = win[4];
+      if (Math.abs(gray((y * width + x) * 4) - med) > jump) speckle += 1;
+      sampled += 1;
+    }
+  }
+  return sampled > 0 ? speckle / sampled : 0;
+}
+
+// 图像去噪：3×3 中值滤波（逐通道取邻域中值）。对椒盐/背景杂点有效且保边，
+// 用于 OCR 前清理噪点，改善带噪图 / 艺术字背景的识别。alpha 透传。
+export function denoiseImageData(imageData, { window = 3 } = {}) {
+  const { data, width, height } = imageData;
+  if (width < 3 || height < 3) return imageData;
+  const radius = Math.max(1, Math.floor(window / 2));
+  const out = new Uint8ClampedArray(data.length);
+  const win = [];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const o = (y * width + x) * 4;
+      for (let c = 0; c < 3; c += 1) {
+        win.length = 0;
+        for (let dy = -radius; dy <= radius; dy += 1) {
+          const yy = Math.min(height - 1, Math.max(0, y + dy));
+          for (let dx = -radius; dx <= radius; dx += 1) {
+            const xx = Math.min(width - 1, Math.max(0, x + dx));
+            win.push(data[(yy * width + xx) * 4 + c]);
+          }
+        }
+        win.sort((a, b) => a - b);
+        out[o + c] = win[win.length >> 1];
+      }
+      out[o + 3] = data[o + 3];
+    }
+  }
+  return { data: out, width, height };
+}
+
 // 旋转 RGBA 图像。rotateImageData180：上下左右翻转（cls 检测到 180° 时用）。
 export function rotateImageData180(imageData) {
   const { data, width, height } = imageData;
@@ -323,7 +378,25 @@ export async function runPaddlePipeline({
   }
   const startedAt = Date.now();
 
-  const detInput = preprocessForDetection(imageData, options.det || {});
+  // 去噪：默认 auto——仅当估计噪点比例超过阈值时才中值滤波（中值滤波会软化干净图、
+  // 降低清晰文本置信度，所以干净图绝不去噪）。options.denoise: "auto"|true|false。
+  const denoiseMode = options.denoise ?? "auto";
+  const denoiseThreshold = typeof options.denoiseThreshold === "number" ? options.denoiseThreshold : 0.05;
+  let noiseLevel = 0;
+  let denoised = false;
+  let workImage = imageData;
+  if (denoiseMode === true) {
+    workImage = denoiseImageData(imageData, options.denoiseWindow ? { window: options.denoiseWindow } : {});
+    denoised = true;
+  } else if (denoiseMode !== false) {
+    noiseLevel = estimateNoiseLevel(imageData);
+    if (noiseLevel > denoiseThreshold) {
+      workImage = denoiseImageData(imageData, options.denoiseWindow ? { window: options.denoiseWindow } : {});
+      denoised = true;
+    }
+  }
+
+  const detInput = preprocessForDetection(workImage, options.det || {});
   const detOut = await runSession(ort, detSession, { data: detInput.data, dims: detInput.dims });
   const probData = detOut?.data || detOut;
   const probDims = detOut?.dims || [1, 1, detInput.resizedHeight, detInput.resizedWidth];
@@ -366,7 +439,7 @@ export async function runPaddlePipeline({
 
   const lines = [];
   for (const box of boxes) {
-    const crop = cropImageData(imageData, box);
+    const crop = cropImageData(workImage, box);
     // 竖排 / 侧向文本：高宽比偏高的框，额外尝试旋转 90°（cw + ccw），按识别置信度取最优。
     const candidates = [{ img: crop, rot: "0" }];
     if (box.h > box.w * verticalAspect) {
@@ -407,6 +480,8 @@ export async function runPaddlePipeline({
     minConfidence: confs.length > 0 ? clamp(Math.min(...confs), 0, 1) : 0,
     lowConfidenceLines,
     rotatedLines: lines.filter((l) => l.orientation && l.orientation !== "0").length,
+    denoised,
+    noiseLevel,
     grade: averageConfidence >= 0.9 && lowConfidenceLines === 0
       ? "high"
       : (averageConfidence >= 0.7 ? "medium" : "low"),

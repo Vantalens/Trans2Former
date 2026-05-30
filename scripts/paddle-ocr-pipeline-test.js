@@ -11,6 +11,8 @@ import {
   rotateImageData90,
   rotateImageData180,
   interpretClsOutput,
+  denoiseImageData,
+  estimateNoiseLevel,
   runPaddlePipeline,
   DET_LIMIT_SIDE_LEN,
   REC_IMAGE_HEIGHT,
@@ -241,4 +243,45 @@ function mockSession(outputName, produce) {
   assert.equal(result.quality.lineCount, result.pages[0].lines.length);
 }
 
-console.log("PP-OCRv5 pipeline test passed: dictionary, det/rec preprocessing, resize/crop, DB postprocess + unclip, CTC greedy decode, rotation helpers + cls interpretation, quality assessment, and mock-session end-to-end runPaddlePipeline verified.");
+// 13. estimateNoiseLevel: clean ~0; salt-and-pepper => high. denoiseImageData removes speckle.
+{
+  const w = 32, h = 32;
+  const clean = solidRgba(128, w, h);
+  assert.ok(estimateNoiseLevel(clean) < 0.02, "uniform image should have near-zero noise estimate");
+
+  // sprinkle salt-and-pepper
+  const noisy = { data: new Uint8ClampedArray(clean.data), width: w, height: h };
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  for (let i = 0; i < w * h; i += 1) {
+    if (rnd() < 0.15) { const v = rnd() < 0.5 ? 0 : 255; noisy.data[i * 4] = v; noisy.data[i * 4 + 1] = v; noisy.data[i * 4 + 2] = v; }
+  }
+  assert.ok(estimateNoiseLevel(noisy) > 0.05, "salt-and-pepper image should exceed denoise threshold");
+
+  // median denoise reduces the speckle measure
+  const cleaned = denoiseImageData(noisy);
+  assert.equal(cleaned.width, w);
+  assert.ok(estimateNoiseLevel(cleaned) < estimateNoiseLevel(noisy), "denoise should reduce the noise estimate");
+}
+
+// 14. auto-denoise gating: clean stays untouched; quality reports denoised flag
+{
+  const dict = ["<blank>", "H", "I"];
+  const detSession = mockSession("det_out", (tensor) => {
+    const [, , H, W] = tensor.dims;
+    const data = new Float32Array(H * W).fill(0);
+    for (let y = Math.floor(H / 2) - 4; y < Math.floor(H / 2) + 4; y += 1)
+      for (let x = Math.floor(W / 2) - 4; x < Math.floor(W / 2) + 4; x += 1)
+        if (y >= 0 && y < H && x >= 0 && x < W) data[y * W + x] = 0.9;
+    return { data, dims: [1, 1, H, W] };
+  });
+  const recSession = mockSession("rec_out", () => ({ data: new Float32Array([0, 9, 0, 0, 0, 9, 9, 0, 0]), dims: [1, 3, 3] }));
+  const r = await runPaddlePipeline({
+    ort: mockOrt, detSession, recSession, imageData: solidRgba(200, 64, 64), dictionary: dict,
+    options: { db: { thresh: 0.3, boxThresh: 0.5, minSize: 2 } },
+  });
+  assert.equal(r.quality.denoised, false, "clean uniform image should not be denoised");
+  assert.equal(typeof r.quality.noiseLevel, "number");
+}
+
+console.log("PP-OCRv5 pipeline test passed: dictionary, det/rec preprocessing, resize/crop, DB postprocess + unclip, CTC greedy decode, rotation helpers + cls interpretation, denoise (noise estimate + median + auto-gating), quality assessment, and mock-session end-to-end runPaddlePipeline verified.");
