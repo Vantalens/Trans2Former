@@ -220,6 +220,59 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 - `createTextRun` 新增 `confidence` 字段（clamp 到 [0,1]）；`createPage` 新增 `readingOrderHint` 字段。
 - 不实现高级阅读顺序（multi-column / heading detection）——留给 P9-C / P9-D。
 
+### 转换后检验三层 · 规则 diff 层（P9-C.1 落地）
+
+转换后检验是项目核心差异化能力，三层组合（规则 diff + SSIM 视觉对比 + OCR 回读）统一写入 `qualityReport`。P9-C.1 落地第一层规则 diff 与统一编排骨架：
+
+- `runVerificationStage({ model, output, ctx })` (`public/core/verification/verification-stage.js`)：在 Repair Engine `runCycle` 之后跑的独立验证阶段，只读不改 output，结果写入 `qualityReport.ruleDiff` 与 `qualityReport.verification` envelope（`eligible / reason / layers / skipped / runtimeMs`）。层名列表 `layers` 当前只含 `"rule-diff"`，P9-C.2 加 `"ssim"`、P9-C.3 加 `"ocr-readback"`。
+- `diffSemanticDocs(original, readBack)` (`public/core/verification/rule-diff.js`)：在原始 SemanticDoc 与 writer→reader 回读 model 之间做字段级 diff，输出 `{ identical, blockCounts, changedBlocks, addedBlocks, removedBlocks, fidelity, overallScore }`。`fidelity` ∈ `exact / minor-drift / major-drift / broken`；`overallScore` 由 `MAJOR_WEIGHT / MINOR_WEIGHT / STRUCTURAL_PENALTY` 加权惩罚算出。
+- 共享指纹模块 `public/core/verification/block-fingerprint.js`：`blockFingerprint` / `modelFingerprint`（从 Repair Engine 抽出，行为不变）+ `getBlockKey` / `extractBlockFields` / `BLOCK_FIELDS_BY_TYPE` 字段子集 + `ROUND_TRIP_FORMATS` 单一来源。Repair Engine 的 `reverifyRoundTrip` / `roundTripDelta` 改 import 共享 `modelFingerprint`，作为粗粒度兼容层与细粒度 `ruleDiff` 并存。
+- 资格判断：from/to 都在 text-canonical 集合（md/html/json/csv/txt/xml）且 `output.data` 为字符串才跑；同格式直接回读 diff，跨格式仅首批开放 `md ↔ html` 回环；其余 writer（PDF/DOCX/XLSX/PPTX/PNG/OFD/EPUB）记 `eligible: false, reason: "writer-not-text-canonical"`，不阻塞转换。
+- 失败兜底：回读抛错发 `RULE_DIFF_READBACK_FAILED`（info）；`fidelity !== "exact"` 发 `RULE_DIFF_DRIFT`（info），details 含 from/to/fidelity/score/added/removed/changed 摘要。
+- 本阶段不让 Repair Engine 消费 `ruleDiff`（避免循环依赖），UI 验证卡片留给 P9-C.2 落地后统一做。
+
+### 转换后检验三层 · SSIM 视觉回环层（P9-C.2 落地）
+
+第二层 SSIM 视觉对比采用**视觉回环**语义：对视觉保真型输入（PDF / PNG），把输入页与输出页各自栅格化为像素做结构相似度对比，写入 `qualityReport.ssim`，衡量「这次转换是否保住视觉外观」。
+
+- `computeSSIM(grayA, grayB, width, height, opts)` (`public/core/verification/ssim.js`)：纯函数、零依赖、非重叠窗口均值 SSIM（C1=6.5025 / C2=58.5225）；配套 `rgbaToGrayscale` / `resampleGrayscale`（box 重采样到公共网格）/ `compareImages`（两图归一后算分）。Node / 浏览器均可运行、完整可测。
+- `runVerificationStageAsync({ model, output, ctx })` (`public/core/verification/verification-stage.js`)：异步编排，先调同步 `runVerificationStage` 拿 rule-diff 基底，再跑 `runSsimLayer` 视觉回环，合并 `layers` / `skipped` / `warnings` / `runtimeMs` + `ssim` 字段。同步 `runVerificationStage` 不变，供 sync `convert()` 用（其 `qualityReport.ssim` 恒为 `null`）。
+- `runSsimLayer({ ctx, output })`：资格判断 `ctx.from ∈ {pdf,png}` 且 `ctx.to ∈ {pdf,png}`（当前实际命中 `pdf→pdf` / `png→pdf`）；经 `defaultPageImageSource` 取源图 + 输出图像素 → `compareImages` → `qualityReport.ssim = { score, threshold, passed, width, height, pageIndex, sourceFormat, outputFormat }`；低于阈值（默认 0.85）发 info 级 `SSIM_VISUAL_DRIFT`。
+- 像素源抽象 `public/core/verification/page-image-source.js`：`defaultPageImageSource`（Node 抛 `VERIFICATION_IMAGE_SOURCE_UNAVAILABLE`；浏览器首次调用 dynamic import `page-image-source-browser.js` 用 vendor pdfjs + canvas `getImageData` 取 RGBA）+ `setPageImageSource` / `resetPageImageSource` 让测试注入 stub。
+- `format-registry.js` 抽出 `_runRepairCycle` / `_assembleQuality` 共享，`convert()`（sync）走 `_wrapWithRepairCycle`（rule-diff），`convertAsync()` 走 `_wrapWithRepairCycleAsync`（rule-diff + SSIM）。`options.repair === false` 仍短路整个验证阶段。
+- 注意：Trans2Former 的 `pdf → pdf` 走「reader 抽文本 → writer 重排版」，视觉本就不保真，SSIM 偏低是**诚实信号**，故仅发 info warning，不判失败、不阻塞。本轮渲染 stub-only（Node 无 canvas；真实 PDF/PNG 渲染 fixture + 浏览器端端到端验证留给后续）。
+
+### 转换后检验三层 · OCR 回读层（P9-C.3 落地）
+
+第三层也是收口层 OCR 回读：把转换输出（当前仅 PDF）栅格化后用 OCR 引擎读回文本，与原始 SemanticDoc 文本对照，写入 `qualityReport.ocrReadback`，回答「转成视觉格式后文字还认得回来吗」。
+
+- `compareText(original, recognized)` (`public/core/verification/ocr-readback.js`)：纯函数、零依赖、**字符级多重集** recall / precision / f1（配 `normalizeText` NFKC + 小写 + 去空白）。字符级对中英文混排与 OCR 噪声稳健，无需分词。
+- `extractModelText(model)`：拼接 block 文本（heading/paragraph/quote/list/table/code/content）。
+- `runOcrReadbackLayer({ model, output, ctx, engine?, rasterizer? })`：资格 `ctx.to === "pdf"` 且原文非空 且 OCR engine 可用；经 OCR `defaultPdfPageRasterizer` 栅格化输出 PDF → `engine.recognize` → `compareText` → `qualityReport.ocrReadback = { recall, precision, f1, threshold, passed, engineId, originalLength, recognizedLength, averageConfidence }`；低于阈值（默认 f1 ≥ 0.7）发 info `OCR_READBACK_DRIFT`；engine/rasterizer 不可用或 recognize 抛错 → eligible:false（`OCR_READBACK_FAILED` info），不抛、不阻塞。
+- `runVerificationStageAsync` 末尾 dynamic import `ocr-readback.js` 跑第三层，合并进 envelope；`qualityReport.ocrReadback` 同步路径恒 `null`。
+- 命中路径：`md/html/txt/json/xml/docx/doc/epub/csv/xlsx → pdf`（凡产出 PDF 的文本路径），engine 复用已注册的 `ocr-text`（tesseract，需用户导入 tessdata）。
+- 本轮 stub-only（Node 无 canvas/tessdata；真实 OCR 回读端到端留给浏览器手动验证）；不让 Repair Engine 消费 `ocrReadback`；高级 OCR 属 P9-D。
+
+至此 P9-C 三层检验（rule-diff + ssim + ocr-readback）齐备，统一写入 `qualityReport.{ ruleDiff, ssim, ocrReadback }` + `qualityReport.verification` envelope。
+
+### 高级 OCR · PP-OCRv5 (ONNX/WebGPU)（P9-D 方向 + P9-D.1 骨架）
+
+调研结论（[2026-05-29-p9d-advanced-ocr-research.md](superpowers/specs/2026-05-29-p9d-advanced-ocr-research.md)）：**PaddleOCR-VL（0.9B VLM）/ MinerU** 在「浏览器/Tauri 本地 + 零云端 + 30–80MB 轻量默认包」约束下当前不可内嵌（VLM 无成熟 ONNX/WebGPU 路径、需 ~500MB + 1–2GB VRAM 或 vLLM 服务；MinerU 是 Python/vLLM 工具）。因此 **P9-D 高级 OCR 的内置目标改为 PP-OCRv5（ONNX Runtime + WebGPU，WASM 回退）**；PaddleOCR-VL / MinerU 标注为**远期/外部资源**，不作为内置路径。
+
+P9-D.1 骨架（同 tesseract 骨架先行）：
+
+- `paddleOcrEngine`（`public/core/ocr/paddle-ocr-engine.js`，id `paddleocr-v5`，taskCapabilities `["ocr-text","ocr-layout"]`）实现现有 `OCREngine` 契约，注册到 `defaultOCRRegistry`；`isAvailable()` 检查 vendor 就位 + det/cls/rec 模型在本地缓存，Node/未就位恒 false；`recognize()` 三阶段拒绝（vendor-not-ready / model-missing / runtime-not-wired）。
+- `paddle-ocr-bootstrap.js` 注册 PP-OCRv5 ONNX ModelManifest（`engine: "paddleocr"`，int8，det/cls/rec perFile 占位）到 `defaultModelCache`，状态 `not-downloaded`，按需下载到 `model-cache`。
+- P9-D.1 本轮不引入 onnxruntime-web、不实跑推理。
+
+P9-D.2 接入 onnxruntime-web 运行时骨架：`onnxruntime-web` 作为 optionalDependency + `scripts/sync-onnxruntime-vendor.js`（缺包 exit 0）同步到 `public/vendor/onnxruntime/`；`public/core/ocr/paddle-ocr-runtime.js` 提供 `loadOnnxRuntime`（dynamic import 同源 vendor ORT，设 `ort.env.wasm.wasmPaths` 同源、Node 抛 `OCR_VENDOR_LOAD_FAILED`）、`pickExecutionProviders`（`navigator.gpu` → `["webgpu","wasm"]`，否则 `["wasm"]`）、`createOcrSession`/`disposeOcrSession` 骨架。`paddleOcrEngine.recognize` 第三阶段经 `loadOnnxRuntime()`，浏览器装好 vendor + 模型后以 `pipeline-not-wired` 拒绝（det/cls/rec 推理管线 + CTC 解码留给 P9-D.2.b）。Tauri CSP 已含 `wasm-unsafe-eval` + `worker-src blob:` + `connect-src 'self'`，无需改动。后续：P9-D.4 接入转换链并让 paddle 在可用时优先于 tesseract。
+
+P9-D.3 模型导入与安全中心管理：复用 tesseract tessdata 的**本地导入**模式（禁联网，不做远程 fetch）。安全中心「模型缓存」对 PP-OCRv5 行渲染导入 det/cls/rec onnx + 清除按钮；导入走 file picker → `sha256Hex` → `defaultOCRStorage.put("paddleocr/v5/<file>")` → `paddleOcrEngine.ensureProbe()`，三件齐全才 `markPaddleOcrVendorReady(true)` + 状态 `available`。**同时修复一个潜伏 bug**：`paddleOcrEngine` / `tesseractOCREngine` 的就绪状态原先存在 `Object.freeze` 后的实例属性上，`ensureProbe()` 赋值在严格模式（ES module）下抛 `Cannot assign to read only property`，会让安全中心导入流程静默失败；改为模块级可变变量持有就绪状态，引擎对象仍冻结。
+
+P9-D.2.b 推理管线：`public/core/ocr/paddle-ocr-pipeline.js` 提供纯函数 `parseCharDictionary` / `preprocessForDetection`（ImageNet 归一化 + 32 倍数 + limit_side_len）/ `preprocessForRecognition`（高 48 + [-1,1] 归一化）/ `dbPostProcess`（阈值二值化 + 4-连通域 + 轴对齐 bbox + box 分数过滤 + 缩放回原图）/ `ctcGreedyDecode`（逐时刻 argmax → 折叠连续重复 → 去 blank → 映射字典）/ `cropImageData` / `resizeRgba`，以及编排器 `runPaddlePipeline({ ort, detSession, clsSession, recSession, imageData, dictionary, options })` → OCRResult。`paddleOcrEngine.recognize` 在浏览器把 image 解码为 RGBA（Image+canvas，不用 fetch）→ 从本地缓存取 det/cls/rec 模型 + 可选字典 `paddleocr/v5/dict.txt` → `createOcrSession` ×3 → `runPaddlePipeline`；Node/未就位仍在 `loadOnnxRuntime` 前置拒绝。纯函数 + 编排器（mock session）在 Node 完整单测，真实模型端到端为浏览器手动。本轮不做 cls 角度旋转校正、不做 minAreaRect+unclip 高精度框。
+
+P9-D.4 接入转换链（路由偏好）：`OCREngineRegistry.pickForTask` 改为**优先级感知**——候选按 `priority` 降序挑第一个 available（缺省 0），无可用时回退末位。引擎优先级 `placeholderOCREngine=0` / `tesseractOCREngine=10` / `paddleOcrEngine=20`，因此 PP-OCRv5 可用时优先于 tesseract。PNG / 扫描 PDF stage（`enhanceWithOCR` / `runScannedPdfOCRStage`）经 `defaultOCRRegistry.pickForTask("ocr-text")` 取引擎，自动选到可用的最高优先级引擎，无需改动。至此 P9-D PP-OCRv5 本地高级 OCR 链路（契约 → 运行时 → 模型导入 → 推理管线 → 路由偏好）齐备，剩真实模型 + 字典导入后的浏览器端端到端验证。
+
 ## 不做什么（明确边界）
 
 - **不引入 DOCX / HTML / PDF 文件级 pivot**：pivot 是内存对象，不是落盘文件。

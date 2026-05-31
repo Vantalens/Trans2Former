@@ -5,8 +5,8 @@
 Trans2Former 是一个专业级的桌面文档转换工具，支持 12 种输入格式和 11 种输出格式的相互转换。所有转换在本地完成，零上传，保护您的数据隐私。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/smoke-46%20groups%20passing-brightgreen.svg)](#)
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-28%20scripts%20passing-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](#)
 
 ---
 
@@ -16,8 +16,9 @@ Trans2Former 是一个专业级的桌面文档转换工具，支持 12 种输入
 - 🚀 **高性能** - 基于 Web Worker 的并行处理
 - 📦 **零依赖** - 不需要安装 Office、LibreOffice 或 Pandoc
 - 🎨 **实时预览** - 转换前后实时预览文档
-- 📝 **结构化编辑** - 支持编辑转换后的文档结构
-- 🧩 **核心内置增强** - OFD、OCR、版面分析等能力代码核心内置；OCR 模型资源按需本地下载到 model-cache，不进入默认安装包
+- 🔤 **本地 OCR** - 图片 / 扫描 PDF 用内置 PP-OCRv5（ONNX Runtime + WebGPU）本地识别，含方向校正、倾斜纠偏、自适应去噪、版面结构（标题/段落）与质量评分
+- 🧮 **LaTeX 渲染** - 预览中用本地 KaTeX 排版 `$...$` / `$$...$$` 数学公式
+- ✅ **转换后检验** - 规则 diff + SSIM 视觉对比 + OCR 回读三层组合统一写入 QualityReport，工作台可视
 - 🌍 **多语言** - 支持中英文、RTL 文本等
 - ⚡ **无大小限制** - 不设置人为文件大小上限
 
@@ -120,23 +121,24 @@ Trans2Former/
 - **批量转换** - 同时转换多个文件
 - **编辑输出** - 直接编辑转换后的文本
 - **版本历史** - 查看和恢复历史版本
-- **质量报告** - 查看转换质量和警告
-- **质量报告** - 查看转换质量和警告
+- **转换检验报告** - 规则 diff / SSIM / OCR 回读 + OCR 识别质量评分
 
 ---
 
 ## 🧩 核心本地增强
 
-Trans2Former 不再提供插件安装模式，增强能力代码直接并入核心本地模块；默认安装包目标 30–80 MB，不内置 GB 级模型，相关模型资源按需本地下载到 model-cache：
+Trans2Former 不再提供插件安装模式，增强能力代码直接并入核心本地模块；模型资源不进入 git 仓库，由 vendor 脚本 + 本地下载重建，随应用打包：
 
-- **OFD 支持** - 政务格式支持
-- **本地 OCR** - 扫描文档识别（首次启用时下载本地 OCR 模型到 model-cache，识别全程本机执行）
-- **版面分析** - 复杂布局识别
-- **表格恢复** - PDF 表格提取
-- **转换后检验** - 规则 diff + SSIM 视觉对比 + OCR 回读三层组合写入 QualityReport
-- **高级 OCR**（规划中）- PaddleOCR-VL / MinerU 等大模型作为独立本地资源按需获取
+- **本地 OCR（PP-OCRv5）** - 图片 / 扫描 PDF 经 ONNX Runtime + WebGPU（WASM 回退）在本机识别；含 cls 方向校正（180°，可选模型）、任意角倾斜自动纠偏、自适应中值去噪、版面结构识别（按字号/间距归并标题+段落）、识别质量评分（grade / 置信度 / 低置信行 / 纠偏 / 去噪），全程零联网、零上传
+- **轻量 OCR（Tesseract.js）** - 可选的轻量 OCR 引擎，按需在安全中心导入 tessdata
+- **转换后检验三层** - 规则 diff + SSIM 视觉对比 + OCR 回读统一写入 QualityReport，工作台「转换检验报告」可视
+- **LaTeX 数学渲染** - 本地 KaTeX，零联网
+- **OFD 支持 / 版面分析 / 表格恢复** - 核心内置，持续攻坚
+- **高级 OCR（远期）** - PaddleOCR-VL / MinerU 等 VLM 受浏览器/Tauri 本地运行时限制，作为远期/外部资源评估（详见 docs）
 
-这些能力不通过插件包分发；后续实现必须继续保持本地执行、无上传、可解释降级和资源预算约束。
+> 运行高级 OCR：`npm install onnxruntime-web && npm run vendor:onnx`。PP-OCRv5 mobile 检测/识别模型与字典由 `npm run vendor:paddle` 从钉定来源下载、SHA-256 校验（见 [scripts/paddleocr-models.manifest.json](scripts/paddleocr-models.manifest.json)）并随 `release:prepare` 打包，启动自动载入、开箱即用；方向分类（cls）为可选，可在安全中心导入/替换。详见 [docs/PP_OCRV5_BROWSER_VERIFICATION.md](docs/PP_OCRV5_BROWSER_VERIFICATION.md)。
+
+这些能力不通过插件包分发；实现继续保持本地执行、无上传、可解释降级和资源预算约束。
 
 ---
 
@@ -160,14 +162,14 @@ Trans2Former 严格遵守本地优先原则：
 npm test
 ```
 
-测试覆盖：
-- ✅ 核心转换测试（44/44 通过）
-- ✅ 快照测试
-- ✅ 格式能力审计
-- ✅ 安全测试
-- ✅ 资源预算测试
-- ✅ 本地安全测试
-- ✅ 发布就绪测试
+测试覆盖（28 个脚本全量通过）：
+- ✅ 核心转换 / 快照 / 格式能力审计
+- ✅ 转换检验三层（规则 diff / SSIM / OCR 回读）
+- ✅ OCR 管线（预处理 / DB 后处理 / CTC 解码 / 方向 / 倾斜 / 去噪 / 结构）+ 真实模型集成（onnxruntime-node，缺依赖优雅跳过）
+- ✅ LaTeX 数学 tokenization
+- ✅ 安全 / 资源预算 / 方向门禁 / 发布就绪
+
+> 复杂/大体积样例语料：`npm run samples:generate` 程序化产出覆盖全格式、大小不一（large ≥ 3MB）的测试样例到 `samples/generated/`（gitignore）。
 
 ---
 
@@ -221,7 +223,7 @@ npm test
 
 1. **复杂样式** - 部分复杂样式可能无法完全保留
 2. **图表动画** - PPTX 动画和图表需要后续核心增强
-3. **扫描 PDF** - 扫描文档需要后续核心 OCR 能力
+3. **OCR 难例** - 强斜体 / 复杂艺术字识别仍受限（常规、倾斜、倒置、带噪文档已支持）；真实 ONNX 推理在浏览器 / Tauri（WebGPU/WASM）执行
 4. **ZIP64** - 暂不支持超大 ZIP 文件
 
 这些限制将在后续版本中通过核心本地模块逐步解决。
@@ -231,20 +233,19 @@ npm test
 ## 🗺️ 路线图
 
 ### 已完成 ✅
-- [x] P0-P8 核心功能
-- [x] 12 种输入格式
-- [x] 11 种输出格式
-- [x] 核心本地能力路线
-- [x] 桌面发布准备
+- [x] P0-P8 核心功能 + 12 种输入 / 11 种输出格式
+- [x] 转换后检验三层（规则 diff + SSIM + OCR 回读）+ 工作台可视
+- [x] 本地 OCR（PP-OCRv5：识别 + 方向校正 + 倾斜纠偏 + 去噪 + 版面结构 + 质量评分）
+- [x] LaTeX 数学渲染（KaTeX）
+- [x] Windows 桌面发布（MSI / NSIS）
 
 ### 进行中 🚧
-- [ ] 平台安装包构建
-- [ ] SSIM 视觉对比
-- [ ] 性能优化
+- [ ] 跨平台安装包（macOS / Linux）+ 签名公证
+- [ ] OCR 表格结构识别 → Markdown 表格
 
 ### 计划中 📋
-- [ ] 本地 OCR 核心增强
-- [ ] 版面分析核心增强
+- [ ] 强斜体 / 艺术字识别增强
+- [ ] 高级 OCR（PaddleOCR-VL / MinerU）本地运行时评估
 - [ ] 更多格式支持
 
 ---

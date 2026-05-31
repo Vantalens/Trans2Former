@@ -64,6 +64,11 @@ export function createInlineFootnoteRef(id) {
   return { type: "footnoteRef", id: String(id ?? "") };
 }
 
+// LaTeX 数学：{ type:"math", value: 原始 tex, display: 块级? }。内容逐字保留，不转义、不递归。
+export function createInlineMath(value, display = false) {
+  return { type: "math", value: String(value ?? ""), display: Boolean(display) };
+}
+
 export function normalizeInlines(input) {
   if (input === null || input === undefined) return [];
   if (typeof input === "string") {
@@ -85,6 +90,10 @@ export function inlinesToPlainText(inlines) {
     .map((node) => {
       if (!node || typeof node !== "object") return "";
       if (node.type === "text" || node.type === "code") return String(node.value ?? "");
+      if (node.type === "math") {
+        const d = node.display ? "$$" : "$";
+        return `${d}${String(node.value ?? "")}${d}`;
+      }
       if (node.type === "linebreak") return "\n";
       if (Array.isArray(node.inlines)) return inlinesToPlainText(node.inlines);
       return "";
@@ -101,6 +110,10 @@ export function inlinesToMarkdown(inlines) {
       if (node.type === "em") return `*${inlinesToMarkdown(node.inlines)}*`;
       if (node.type === "del") return `~~${inlinesToMarkdown(node.inlines)}~~`;
       if (node.type === "code") return `\`${String(node.value ?? "").replace(/`/g, "\\`")}\``;
+      if (node.type === "math") {
+        const d = node.display ? "$$" : "$";
+        return `${d}${String(node.value ?? "")}${d}`;
+      }
       if (node.type === "link") {
         const inner = inlinesToMarkdown(node.inlines) || node.href || "";
         const title = node.title ? ` "${node.title.replace(/"/g, '\\"')}"` : "";
@@ -123,6 +136,12 @@ export function inlinesToHtml(inlines) {
       if (node.type === "em") return `<em>${inlinesToHtml(node.inlines)}</em>`;
       if (node.type === "del") return `<del>${inlinesToHtml(node.inlines)}</del>`;
       if (node.type === "code") return `<code>${escapeHtmlInline(node.value)}</code>`;
+      if (node.type === "math") {
+        // 原始 tex 存 data-tex（客户端 KaTeX 渲染）；span 文本是带定界符的 tex 作为无 JS 兜底。
+        const tex = String(node.value ?? "");
+        const d = node.display ? "$$" : "$";
+        return `<span class="t2f-math" data-display="${node.display ? "true" : "false"}" data-tex="${escapeHtmlInline(tex)}">${escapeHtmlInline(`${d}${tex}${d}`)}</span>`;
+      }
       if (node.type === "link") {
         const inner = inlinesToHtml(node.inlines);
         const titleAttr = node.title ? ` title="${escapeHtmlInline(node.title)}"` : "";

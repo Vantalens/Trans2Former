@@ -10,6 +10,10 @@ import {
   markTesseractVendorReady,
   sha256Hex,
   tesseractOCREngine,
+  paddleOcrEngine,
+  markPaddleOcrVendorReady,
+  PADDLE_OCR_MODEL_FILES,
+  PADDLE_OCR_REQUIRED_FILES,
 } from "/browser-transformer.js";
 
 const ORIGIN = location.origin;
@@ -225,7 +229,9 @@ function renderModelCache(dialog) {
       `;
       const actionsHtml = entry.manifest.task === "ocr-text" && entry.manifest.engine === "tesseract"
         ? renderTesseractActions(entry)
-        : "";
+        : (entry.manifest.task === "ocr-text" && entry.manifest.engine === "paddleocr"
+          ? renderPaddleActions(entry)
+          : "");
       li.innerHTML = headerHtml + actionsHtml;
       list.appendChild(li);
     }
@@ -245,6 +251,19 @@ function renderTesseractActions(entry) {
       <button class="mini-button model-cache-import-button" data-import-tessdata data-manifest-id="${entry.manifestId}" data-language="chi_sim" type="button">导入 chi_sim.traineddata</button>
       <button class="mini-button model-cache-import-button" data-import-tessdata data-manifest-id="${entry.manifestId}" data-language="eng" type="button">导入 eng.traineddata</button>
       <button class="mini-button model-cache-clear-button" data-clear-tessdata data-manifest-id="${entry.manifestId}" type="button" ${ready ? "" : "disabled"}>清除缓存</button>
+    </div>
+  `;
+}
+
+function renderPaddleActions(entry) {
+  const ready = entry.status === STATUS_AVAILABLE;
+  const importButtons = PADDLE_OCR_MODEL_FILES.map((file) =>
+    `<button class="mini-button model-cache-import-button" data-import-paddle data-manifest-id="${entry.manifestId}" data-file="${file}" type="button">导入 ${file}</button>`,
+  ).join("");
+  return `
+    <div class="model-cache-row-actions">
+      ${importButtons}
+      <button class="mini-button model-cache-clear-button" data-clear-paddle data-manifest-id="${entry.manifestId}" type="button" ${ready ? "" : "disabled"}>清除缓存</button>
     </div>
   `;
 }
@@ -328,6 +347,91 @@ async function clearTessdata(dialog, button) {
   }
 }
 
+async function importPaddleModel(dialog, button) {
+  const file = button.dataset.file || "det.onnx";
+  const manifestId = button.dataset.manifestId;
+  const fileInput = dialog.querySelector("#modelCacheFileInput");
+  if (!fileInput) {
+    setStatusMessage(dialog, "无法找到文件选择器", "error");
+    return;
+  }
+  await new Promise((resolve) => {
+    const handler = async () => {
+      fileInput.removeEventListener("change", handler);
+      const picked = fileInput.files?.[0];
+      fileInput.value = "";
+      if (!picked) {
+        resolve();
+        return;
+      }
+      try {
+        defaultModelCache.setStatus(manifestId, STATUS_VERIFYING, { message: `校验 ${picked.name}…` });
+        setStatusMessage(dialog, `正在校验 ${picked.name} (${(picked.size / 1024).toFixed(0)} KB)…`, "info");
+        const buffer = await picked.arrayBuffer();
+        const sha256 = await sha256Hex(buffer);
+        await defaultOCRStorage.put(`paddleocr/v5/${file}`, buffer, { sha256 });
+        // 先置位 vendor-ready（用户已选用 PP-OCRv5），再 probe；否则 ensureProbe 在 vendor
+        // 未置位时恒返回 false，状态永远翻不过去。真正的 onnxruntime 运行时加载仍在
+        // recognize() 时把关。对齐 paddle-default-models.js / tesseract 导入流程的顺序。
+        markPaddleOcrVendorReady(true);
+        const ready = typeof paddleOcrEngine.ensureProbe === "function"
+          ? await paddleOcrEngine.ensureProbe()
+          : false;
+        if (ready) {
+          defaultModelCache.setStatus(manifestId, STATUS_AVAILABLE, {
+            message: `PP-OCRv5 必选模型 (det/rec) 就位 (最近导入 ${file}, sha256=${sha256.slice(0, 12)}…)`,
+            file,
+            sha256,
+            size: buffer.byteLength,
+          });
+          setStatusMessage(dialog, `${file} 已导入，PP-OCRv5 必选模型齐全 ✅（cls 可选）`, "success");
+        } else {
+          const missing = await missingPaddleFiles();
+          defaultModelCache.setStatus(manifestId, STATUS_VERIFYING, {
+            message: `已导入 ${file}；还需导入：${missing.join(", ") || "(无)"}`,
+          });
+          setStatusMessage(dialog, `${file} 已导入；还需导入：${missing.join(", ")}`, "info");
+        }
+      } catch (error) {
+        defaultModelCache.setStatus(manifestId, STATUS_NOT_DOWNLOADED, {
+          message: `导入失败：${error?.message || error}`,
+        });
+        setStatusMessage(dialog, `导入 ${file} 失败：${error?.message || error}`, "error");
+      }
+      resolve();
+    };
+    fileInput.addEventListener("change", handler);
+    fileInput.click();
+  });
+}
+
+async function missingPaddleFiles() {
+  // 只报必选缺失（det/rec）；cls 为可选，不算缺。
+  const missing = [];
+  for (const file of PADDLE_OCR_REQUIRED_FILES) {
+    if (!(await defaultOCRStorage.has(`paddleocr/v5/${file}`))) missing.push(file);
+  }
+  return missing;
+}
+
+async function clearPaddleModels(dialog, button) {
+  const manifestId = button.dataset.manifestId;
+  try {
+    for (const file of PADDLE_OCR_MODEL_FILES) {
+      await defaultOCRStorage.delete(`paddleocr/v5/${file}`);
+    }
+    if (typeof paddleOcrEngine.ensureProbe === "function") {
+      await paddleOcrEngine.ensureProbe();
+    }
+    defaultModelCache.setStatus(manifestId, STATUS_NOT_DOWNLOADED, {
+      message: "已清除本地 PP-OCRv5 模型；下次启用需重新导入 det/rec（cls 可选）。",
+    });
+    setStatusMessage(dialog, "PP-OCRv5 模型已清除", "info");
+  } catch (error) {
+    setStatusMessage(dialog, `清除失败：${error?.message || error}`, "error");
+  }
+}
+
 function formatBundleSize(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "未声明体积";
   const units = ["B", "KB", "MB", "GB"];
@@ -383,6 +487,12 @@ function init() {
     } else if (target.matches("[data-clear-tessdata]")) {
       event.preventDefault();
       clearTessdata(dialog, target);
+    } else if (target.matches("[data-import-paddle]")) {
+      event.preventDefault();
+      importPaddleModel(dialog, target);
+    } else if (target.matches("[data-clear-paddle]")) {
+      event.preventDefault();
+      clearPaddleModels(dialog, target);
     }
   });
 }

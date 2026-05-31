@@ -1,4 +1,4 @@
-import { ConverterRegistry, getAllowedOutputFormats, normalizeFormat } from "./core/format-registry.js";
+import { ConverterRegistry, getAllowedOutputFormats, getKnownInputFormats, normalizeFormat } from "./core/format-registry.js";
 import { readCsv, writeCsv } from "./formats/csv.js";
 import { readDoc } from "./formats/doc.js";
 import { readDocx } from "./formats/docx.js";
@@ -249,9 +249,61 @@ export function listFormats() {
 
 export { normalizeFormat };
 export { getAllowedOutputFormats };
+export { getKnownInputFormats };
 export { expandPdfContentForTextExtraction };
 export { defaultRepairEngine, RepairEngine, MIN_CONFIDENCE } from "./core/repair-engine.js";
 export { REPAIR_ACTION_TYPES, createRepairAction, validateRepairAction } from "./core/repair-actions.js";
+export {
+  ROUND_TRIP_FORMATS,
+  blockFingerprint,
+  modelFingerprint,
+  getBlockKey,
+  extractBlockFields,
+  BLOCK_FIELDS_BY_TYPE,
+} from "./core/verification/block-fingerprint.js";
+export {
+  diffSemanticDocs,
+  MAJOR_WEIGHT,
+  MINOR_WEIGHT,
+  STRUCTURAL_PENALTY,
+} from "./core/verification/rule-diff.js";
+export {
+  runVerificationStage,
+  runVerificationStageAsync,
+  runSsimLayer,
+  RULE_DIFF_DRIFT,
+  RULE_DIFF_READBACK_FAILED,
+  SSIM_VISUAL_DRIFT,
+  SSIM_SOURCE_UNAVAILABLE,
+  DEFAULT_SSIM_THRESHOLD,
+} from "./core/verification/verification-stage.js";
+export {
+  computeSSIM,
+  compareImages,
+  rgbaToGrayscale,
+  resampleGrayscale,
+  SSIM_C1,
+  SSIM_C2,
+  DEFAULT_WINDOW_SIZE,
+  DEFAULT_TARGET_WIDTH,
+} from "./core/verification/ssim.js";
+export {
+  defaultPageImageSource,
+  setPageImageSource,
+  resetPageImageSource,
+  RASTERIZABLE_FORMATS,
+  VERIFICATION_IMAGE_SOURCE_UNAVAILABLE,
+  VERIFICATION_IMAGE_SOURCE_FAILED,
+} from "./core/verification/page-image-source.js";
+export {
+  compareText,
+  normalizeText,
+  extractModelText,
+  runOcrReadbackLayer,
+  OCR_READBACK_DRIFT,
+  OCR_READBACK_FAILED,
+  DEFAULT_OCR_READBACK_THRESHOLD,
+} from "./core/verification/ocr-readback.js";
 export {
   MODEL_MANIFEST_SCHEMA_VERSION,
   MODEL_TASKS,
@@ -291,6 +343,7 @@ export {
 } from "./core/model-cache/ui-text.js";
 import "./core/ocr/ocr-bootstrap.js";
 import "./core/ocr/tesseract-bootstrap.js";
+import "./core/ocr/paddle-ocr-bootstrap.js";
 export {
   OCR_RESULT_SCHEMA_VERSION,
   OCR_LANGUAGES,
@@ -325,6 +378,42 @@ export {
 } from "./core/ocr/tesseract-engine.js";
 export { ensureTesseractBootstrap } from "./core/ocr/tesseract-bootstrap.js";
 export {
+  paddleOcrEngine,
+  PADDLE_OCR_MANIFEST_ID,
+  PADDLE_OCR_MODEL_FILES,
+  PADDLE_OCR_REQUIRED_FILES,
+  markPaddleOcrVendorReady,
+} from "./core/ocr/paddle-ocr-engine.js";
+export { ensurePaddleOcrBootstrap } from "./core/ocr/paddle-ocr-bootstrap.js";
+export { ensurePaddleDefaultModels } from "./core/ocr/paddle-default-models.js";
+export {
+  loadOnnxRuntime,
+  pickExecutionProviders,
+  createOcrSession,
+  disposeOcrSession,
+  resetOnnxRuntimeCache,
+  PADDLE_VENDOR_PATHS,
+} from "./core/ocr/paddle-ocr-runtime.js";
+export {
+  runPaddlePipeline,
+  parseCharDictionary,
+  preprocessForDetection,
+  preprocessForRecognition,
+  dbPostProcess,
+  ctcGreedyDecode,
+  cropImageData,
+  resizeRgba,
+  rotateImageData90,
+  rotateImageData180,
+  rotateImageDataByAngle,
+  estimateSkewAngle,
+  interpretClsOutput,
+  denoiseImageData,
+  estimateNoiseLevel,
+  DET_LIMIT_SIDE_LEN,
+  REC_IMAGE_HEIGHT,
+} from "./core/ocr/paddle-ocr-pipeline.js";
+export {
   InMemoryStorage,
   createIndexedDBStorage,
   defaultOCRStorage,
@@ -339,6 +428,7 @@ export {
   disposeWorker,
 } from "./core/ocr/tesseract-runtime.js";
 export { enhanceWithOCR } from "./core/ocr/png-ocr.js";
+export { deriveOcrStructure, blocksFromOcrResult } from "./core/ocr/ocr-structure.js";
 export { runOCRStage, getDefaultOCRLanguage } from "./core/ocr/ocr-stage.js";
 export { detectOCRLowConfidence } from "./core/ocr/ocr-validator.js";
 export {

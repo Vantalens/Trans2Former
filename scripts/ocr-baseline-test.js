@@ -50,6 +50,13 @@ import {
   MODEL_TEXT_ORDER_HEURISTIC,
   getFixedLayoutSummary,
   fixedLayoutToSemantic,
+  paddleOcrEngine,
+  PADDLE_OCR_MANIFEST_ID,
+  markPaddleOcrVendorReady,
+  ensurePaddleOcrBootstrap,
+  loadOnnxRuntime,
+  pickExecutionProviders,
+  PADDLE_VENDOR_PATHS,
 } from "../public/browser-transformer.js";
 import { ConversionError } from "../public/core/conversion-error.js";
 
@@ -218,9 +225,9 @@ function makeStubEngine(overrides = {}) {
   // registered. With both isAvailable()=false, pickForTask falls back to the last
   // registered engine. Both ids are acceptable here.
   const picked = defaultOCRRegistry.pickForTask("ocr-text");
-  assert.ok(picked, "pickForTask should return either placeholder or tesseract");
+  assert.ok(picked, "pickForTask should return a fallback engine");
   assert.equal(
-    ["placeholder", "tesseract-zh-en"].includes(picked.id),
+    ["placeholder", "tesseract-zh-en", "paddleocr-v5"].includes(picked.id),
     true,
     `pickForTask returned unexpected engine: ${picked.id}`,
   );
@@ -236,9 +243,9 @@ function makeStubEngine(overrides = {}) {
   assert.ok(ocrWarning, "PNG reader should attach OCR_UNAVAILABLE warning");
   assert.equal(ocrWarning.severity, "info");
   assert.equal(
-    ["placeholder", "tesseract-zh-en"].includes(ocrWarning.details?.engineId),
+    ["placeholder", "tesseract-zh-en", "paddleocr-v5"].includes(ocrWarning.details?.engineId),
     true,
-    `expected engineId to be placeholder or tesseract-zh-en, got ${ocrWarning.details?.engineId}`,
+    `expected engineId to be placeholder/tesseract/paddle, got ${ocrWarning.details?.engineId}`,
   );
 }
 
@@ -270,6 +277,13 @@ function makeStubEngine(overrides = {}) {
   const status = defaultModelCache.getStatus(TESSERACT_MANIFEST_ID);
   assert.ok(status, "tesseract manifest should be registered in defaultModelCache");
   assert.equal(status.status, STATUS_NOT_DOWNLOADED);
+
+  // ensureProbe must not throw on the frozen engine (readiness lives in module state,
+  // not a frozen instance prop) — otherwise the security-center import flow fails silently.
+  markTesseractVendorReady(true);
+  await assert.doesNotReject(() => tesseractOCREngine.ensureProbe(), "tesseract.ensureProbe must not throw on frozen engine");
+  markTesseractVendorReady(false);
+  assert.equal(await tesseractOCREngine.ensureProbe(), false);
 }
 
 // 12. tesseractOCREngine.recognize rejects with OCR_UNAVAILABLE/OCR_ENGINE_FAILED depending on stage
@@ -509,6 +523,18 @@ function makeStubEngine(overrides = {}) {
       options: { repair: false },
     });
     assert.equal(result.data.includes("ASYNC-STUB-TEXT"), true, "convertContentAsync should append OCR text into markdown output");
+
+    // Regression: the repair cycle must not clobber the OCR modelReview (ocr/ocrQuality)
+    // — convertContentAsync without repair:false should still surface OCR recognition quality.
+    const withRepair = await convertContentAsync({
+      content: tinyPng,
+      from: "png",
+      to: "txt",
+      title: "async-stub-repair.png",
+      options: {},
+    });
+    assert.ok(withRepair.quality?.modelReview?.ocr, "result.quality.modelReview.ocr must survive the repair cycle for the UI");
+    assert.equal(withRepair.quality.modelReview.ocr.engine, "async-stub");
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
   }
@@ -544,6 +570,13 @@ function makeStubEngine(overrides = {}) {
     assert.equal(enhanced.metadata.ocr.lineCount, 1);
     assert.equal(enhanced.metadata.ocr.lines[0].text, "stage-line");
     assert.equal(typeof enhanced.metadata.ocr.lines[0].confidence, "number");
+    // blockId must resolve to a real appended OCR block that CONTAINS the line text,
+    // which is the precondition for low-confidence replaceTextRun repair to target it.
+    const lineBlockId = enhanced.metadata.ocr.lines[0].blockId;
+    assert.ok(lineBlockId && lineBlockId.startsWith("ocr-block-"), "ocr line should carry a stable ocr-block id");
+    const target = enhanced.blocks.find((b) => b.id === lineBlockId);
+    assert.ok(target, "blockId should resolve to a real block in enhanced.blocks");
+    assert.ok((target.text || "").includes("stage-line"), "target block text should contain the line text");
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
   }
@@ -850,6 +883,16 @@ function makeStubEngine(overrides = {}) {
       warnings.find((w) => w.code === MODEL_TEXT_ORDER_HEURISTIC),
       "stage should emit MODEL_TEXT_ORDER_HEURISTIC info warning",
     );
+    // Each ocr line must resolve to a real appended block CONTAINING its text — even though
+    // mergeOCRResultsToFixedLayout re-sorts by reading order (so lines order != block order).
+    const ocrLines = enhanced.metadata?.ocr?.lines || [];
+    assert.equal(ocrLines.length, 2, "two scanned pages => two ocr lines");
+    for (const ln of ocrLines) {
+      assert.ok(ln.blockId && ln.blockId.startsWith("ocr-block-"), "scan-pdf ocr line should carry a stable ocr-block id");
+      const target = enhanced.blocks.find((b) => b.id === ln.blockId);
+      assert.ok(target, "scan-pdf blockId should resolve to a real block");
+      assert.ok((target.text || "").includes((ln.text || "").trim()), "target block should contain the line text");
+    }
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
     resetPdfPageRasterizer();
@@ -883,4 +926,160 @@ function makeStubEngine(overrides = {}) {
   );
 }
 
-console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback all verified.");
+// 35. PP-OCRv5 advanced OCR engine skeleton (P9-D.1): registered, unavailable in Node,
+//     manifest registered, recognize three-stage rejection.
+{
+  ensurePaddleOcrBootstrap();
+  ensurePaddleOcrBootstrap();
+  assert.equal(defaultOCRRegistry.has(paddleOcrEngine.id), true, "paddle engine should be registered after bootstrap");
+  assert.equal(paddleOcrEngine.id, "paddleocr-v5");
+  assert.equal(paddleOcrEngine.taskCapabilities.includes("ocr-text"), true);
+  assert.equal(paddleOcrEngine.taskCapabilities.includes("ocr-layout"), true);
+  assert.equal(paddleOcrEngine.isAvailable(), false, "paddle engine should report unavailable until P9-D.2 wires onnxruntime");
+
+  const status = defaultModelCache.getStatus(PADDLE_OCR_MANIFEST_ID);
+  assert.ok(status, "paddle manifest should be registered in defaultModelCache");
+  assert.equal(status.status, STATUS_NOT_DOWNLOADED);
+
+  // vendor not ready => OCR_UNAVAILABLE / vendor-not-ready
+  markPaddleOcrVendorReady(false);
+  await assert.rejects(
+    () => paddleOcrEngine.recognize({ image: { width: 10, height: 10 } }),
+    (err) => err instanceof ConversionError && err.code === OCR_UNAVAILABLE && err.details?.reason === "vendor-not-ready",
+  );
+
+  // vendor ready but models missing => OCR_UNAVAILABLE / model-missing
+  markPaddleOcrVendorReady(true);
+  try {
+    await assert.rejects(
+      () => paddleOcrEngine.recognize({ image: { width: 10, height: 10 } }),
+      (err) => err instanceof ConversionError && err.code === OCR_UNAVAILABLE && err.details?.reason === "model-missing",
+    );
+  } finally {
+    markPaddleOcrVendorReady(false);
+  }
+}
+
+// 36. PP-OCRv5 onnxruntime-web runtime loader (P9-D.2): EP selection + Node vendor-load reject.
+{
+  // Node has no navigator.gpu => wasm-only execution providers.
+  assert.deepEqual(pickExecutionProviders(), ["wasm"], "Node should pick wasm-only execution provider");
+  assert.equal(PADDLE_VENDOR_PATHS.mainBundle, "/vendor/onnxruntime/ort.min.mjs");
+
+  // loadOnnxRuntime dynamic-imports a same-origin vendor path that does not resolve in Node => throws.
+  await assert.rejects(
+    () => loadOnnxRuntime(),
+    (err) => err instanceof ConversionError && err.code === OCR_VENDOR_LOAD_FAILED,
+    "loadOnnxRuntime should reject with OCR_VENDOR_LOAD_FAILED when vendor onnxruntime-web is absent (Node)",
+  );
+
+  // With vendor + models simulated ready, recognize reaches the runtime loader and surfaces
+  // the vendor-load failure (rather than the earlier vendor-not-ready / model-missing stages).
+  markPaddleOcrVendorReady(true);
+  for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    await paddleOcrEngine._storage.put(`paddleocr/v5/${file}`, new Uint8Array([1]).buffer, { sha256: "x" });
+  }
+  try {
+    await assert.rejects(
+      () => paddleOcrEngine.recognize({ image: { width: 4, height: 4 } }),
+      (err) => err instanceof ConversionError && err.code === OCR_VENDOR_LOAD_FAILED,
+      "paddle recognize should reach loadOnnxRuntime and reject with OCR_VENDOR_LOAD_FAILED in Node",
+    );
+  } finally {
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+      await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
+    }
+    markPaddleOcrVendorReady(false);
+  }
+}
+
+// 37. PP-OCRv5 model import availability flip (P9-D.3): required det+rec present + vendor ready
+//     => isAvailable() true; cls is OPTIONAL (removing it stays ready); removing a required
+//     model (rec) => false. Mirrors security-center import/clear with cls optional.
+{
+  const det = "paddleocr/v5/det.onnx";
+  const cls = "paddleocr/v5/cls.onnx";
+  const rec = "paddleocr/v5/rec.onnx";
+  markPaddleOcrVendorReady(true);
+  try {
+    // partial: det present but required rec missing => not ready (cls present but optional)
+    await paddleOcrEngine._storage.put(det, new Uint8Array([1]).buffer, { sha256: "a" });
+    await paddleOcrEngine._storage.put(cls, new Uint8Array([2]).buffer, { sha256: "b" });
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "det without required rec should not be ready");
+    assert.equal(paddleOcrEngine.isAvailable(), false);
+
+    // required det+rec present => ready
+    await paddleOcrEngine._storage.put(rec, new Uint8Array([3]).buffer, { sha256: "c" });
+    assert.equal(await paddleOcrEngine.ensureProbe(), true, "required det+rec present => ready");
+    assert.equal(paddleOcrEngine.isAvailable(), true);
+
+    // vendor flag off => unavailable even with models
+    markPaddleOcrVendorReady(false);
+    assert.equal(paddleOcrEngine.isAvailable(), false, "vendor not ready => unavailable regardless of models");
+
+    // remove OPTIONAL cls => still ready (det+rec remain)
+    markPaddleOcrVendorReady(true);
+    await paddleOcrEngine._storage.delete(cls);
+    assert.equal(await paddleOcrEngine.ensureProbe(), true, "removing optional cls keeps readiness");
+
+    // remove a REQUIRED model (rec) => not ready
+    await paddleOcrEngine._storage.delete(rec);
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "removing required rec should drop readiness");
+  } finally {
+    for (const key of [det, cls, rec]) await paddleOcrEngine._storage.delete(key);
+    markPaddleOcrVendorReady(false);
+    await paddleOcrEngine.ensureProbe();
+  }
+}
+
+// 38. Priority-aware pickForTask (P9-D.4): higher-priority available engine wins; PP-OCRv5
+//     preferred over tesseract when both available.
+{
+  const reg = new OCREngineRegistry();
+  const stub = (id, priority, available) => ({
+    id, taskCapabilities: ["ocr-text"], priority, isAvailable: () => available, recognize: async () => ({}),
+  });
+  reg.register(stub("low-pri", 5, true));
+  reg.register(stub("high-pri", 20, true));
+  reg.register(stub("mid-pri", 10, true));
+  assert.equal(reg.pickForTask("ocr-text").id, "high-pri", "highest-priority available engine should win");
+
+  // Only a low-priority engine available => it is picked even if a higher-priority one is unavailable.
+  const reg2 = new OCREngineRegistry();
+  reg2.register(stub("hi-unavail", 20, false));
+  reg2.register(stub("lo-avail", 5, true));
+  assert.equal(reg2.pickForTask("ocr-text").id, "lo-avail", "available lower-priority engine should win over unavailable higher-priority");
+
+  // Default registry: both tesseract + paddle available => paddle (priority 20) preferred.
+  markTesseractVendorReady(true);
+  await tesseractOCREngine._storage.put("tesseract/eng.traineddata", new Uint8Array([1]).buffer, { sha256: "x" });
+  await tesseractOCREngine.ensureProbe();
+  markPaddleOcrVendorReady(true);
+  for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    await paddleOcrEngine._storage.put(`paddleocr/v5/${file}`, new Uint8Array([1]).buffer, { sha256: "x" });
+  }
+  await paddleOcrEngine.ensureProbe();
+  try {
+    assert.equal(tesseractOCREngine.isAvailable(), true);
+    assert.equal(paddleOcrEngine.isAvailable(), true);
+    assert.equal(defaultOCRRegistry.pickForTask("ocr-text").id, "paddleocr-v5", "PP-OCRv5 should be preferred over tesseract when both available");
+
+    // Remove paddle models => tesseract wins.
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+      await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
+    }
+    await paddleOcrEngine.ensureProbe();
+    assert.equal(defaultOCRRegistry.pickForTask("ocr-text").id, "tesseract-zh-en", "tesseract should win when paddle unavailable");
+  } finally {
+    await tesseractOCREngine._storage.delete("tesseract/eng.traineddata");
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+      await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
+    }
+    markTesseractVendorReady(false);
+    markPaddleOcrVendorReady(false);
+    await tesseractOCREngine.ensureProbe();
+    await paddleOcrEngine.ensureProbe();
+  }
+}
+
+console.log("OCR baseline test passed: contracts, registry, bootstraps, storage, png reader/async stage, repair validator, scan PDF detection + rasterizer skeleton + multi-page OCR stage + FixedLayoutModel mapping + browser rasterizer fallback + PP-OCRv5 advanced engine skeleton + onnxruntime-web runtime loader + model import availability flip + priority-aware route preference all verified.");

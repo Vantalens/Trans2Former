@@ -133,7 +133,8 @@ Tauri + Web-GUI 是当前最合理的桌面路线。
 | 重格式 | 核心本地按需加载 |
 | 默认安装包 | 30–80 MB，不打包 GB 级模型 |
 | OCR 模型 | 不进入默认安装包；首次启用时本地下载到 model-cache，可清理、可禁用 |
-| 高级 OCR（PaddleOCR-VL / MinerU 等） | 独立本地资源，按需获取，明确体积与硬件要求 |
+| 高级 OCR（PP-OCRv5 ONNX/WebGPU） | 内置目标：比 Tesseract 更高精度的本地 OCR engine，按需下载 ONNX 模型到 model-cache |
+| VLM（PaddleOCR-VL / MinerU 等） | 远期/外部资源；浏览器/Tauri 本地暂不可内嵌，明确体积与硬件要求 |
 
 ## 当前实现
 

@@ -150,6 +150,6 @@ P8-B 的首批执行链已闭环。后续按 2026-05-28 [lightweight-default-bun
 - **P9-A OCR 基线**：PNG 与扫描 PDF 接入轻量 OCR（Tesseract.js / 轻量 PaddleOCR），OCR 模型资源按需下载到 model-cache，不进入默认安装包。
 - **P9-B OCR → FixedLayoutModel**：OCRResult → FixedLayoutModel → SemanticDoc，保留 bbox / confidence / page index / reading order，让 Repair Engine 的 `fixedLayoutToSemantic` 路径获得真实证据。
 - **P9-C 转换后检验**：规则 diff + SSIM 视觉对比 + OCR 回读三层组合统一写入 QualityReport，作为核心差异化能力提升。
-- **P9-D 高级 OCR**：PaddleOCR-VL / MinerU 等大模型作为独立本地资源按需下载，明确体积、运行内存、降级路径。
+- **P9-D 高级 OCR**：内置目标为 PP-OCRv5（ONNX Runtime + WebGPU，WASM 回退），作为比 Tesseract 更高精度的本地 OCR engine 按需下载 ONNX 模型；PaddleOCR-VL / MinerU 等 VLM 为远期/外部资源（浏览器/Tauri 本地暂不可内嵌）。
 
 在 P9-A 启动前必须先完成 **S3 按需下载与本地缓存治理**：定义 model-cache 目录结构、manifest、checksum、可清理入口、断网降级提示和首次启用下载提示流程。`slide` / `fixedLayout` 路径的 writer 能力和视觉质量证据在 P9-B/C 推进过程中补齐；在证据成立前不将规划边提升为实际 mapper 执行。

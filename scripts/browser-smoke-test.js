@@ -30,6 +30,23 @@ async function fetchText(baseUrl, pathname) {
   return response.text();
 }
 
+// 浏览器模块图守门：landing-view.js / router.js 与 browser-transformer.js 必须能
+// 完整加载。任何「import 了 browser-transformer 没有 re-export 的名字」会让浏览器在
+// 模块加载阶段抛 SyntaxError → 首页空白。Node 端 import 这些纯模块即可复现该类问题
+// （app.js 含顶层 DOM 访问，不在此 import）。
+for (const modulePath of ["../public/browser-transformer.js", "../public/router.js", "../public/landing-view.js"]) {
+  await assert.doesNotReject(
+    import(modulePath),
+    `${modulePath} must load without missing-export / eval errors (else the landing page renders blank)`,
+  );
+}
+{
+  const bt = await import("../public/browser-transformer.js");
+  for (const name of ["getKnownInputFormats", "getAllowedOutputFormats", "convertContent", "convertContentAsync"]) {
+    assert.equal(typeof bt[name], "function", `browser-transformer.js must re-export ${name} for the landing/workbench UI`);
+  }
+}
+
 const { server, port } = await startWebServer(await findFetchSafePort());
 const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -56,6 +73,9 @@ try {
   assert.equal(indexHtml.includes("id=\"inputPreviewPanel\""), true, "P0 workbench should expose input preview pane");
   assert.equal(indexHtml.includes("id=\"documentModelPanel\""), true, "P0 workbench should expose DocumentModel pane");
   assert.equal(indexHtml.includes("id=\"outputPreviewPanel\""), true, "P0 workbench should expose output preview pane");
+  assert.equal(indexHtml.includes("id=\"verificationReportPanel\""), true, "P9-C.4 workbench should expose post-conversion verification report panel");
+  assert.equal(indexHtml.includes("id=\"verificationOcrRecognition\""), true, "verification report should expose the OCR recognition quality row");
+  assert.equal(indexHtml.includes("id=\"modelCacheFileInput\""), true, "security center should expose the local model import file input (tesseract + PP-OCRv5)");
   assert.equal(indexHtml.includes("id=\"workbenchTabs\""), true, "P0 workbench should expose narrow-screen tabs");
   assert.equal(indexHtml.includes("id=\"bottomReportPanel\""), false, "bottom report panel has been removed from the primary workflow");
   assert.equal(indexHtml.includes("id=\"warningsPanel\""), false, "warnings panel has been removed with the bottom drawer");

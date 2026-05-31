@@ -1,6 +1,7 @@
 import { ConversionError } from "./conversion-error.js";
 import { ensureDocumentAudit } from "./document-audit.js";
 import { defaultRepairEngine } from "./repair-engine.js";
+import { runVerificationStage, runVerificationStageAsync } from "./verification/verification-stage.js";
 import { createWarning, withWarnings } from "./warnings.js";
 
 const FORMAT_ALIASES = {
@@ -438,7 +439,8 @@ export class ConverterRegistry {
     };
   }
 
-  _wrapWithRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options }) {
+  // 跑 Repair Engine cycle，返回 { earlyReturn } 或 { cycle, effectiveTo, auditedModel }。
+  _runRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options }) {
     let cycle;
     try {
       cycle = defaultRepairEngine.runCycle({ model, output, ctx });
@@ -461,35 +463,75 @@ export class ConverterRegistry {
         options,
       });
       return {
-        ...output,
-        quality: {
-          qualityReport: audited.metadata?.qualityReport || null,
-          modelReview: null,
-          autoRepair: { attempted: false, error: error?.code || "unknown", finalDecision: "failed-quality-gate" },
-          conversion: audited.metadata?.conversion || null,
+        earlyReturn: {
+          ...output,
+          quality: {
+            qualityReport: audited.metadata?.qualityReport || null,
+            modelReview: null,
+            autoRepair: { attempted: false, error: error?.code || "unknown", finalDecision: "failed-quality-gate" },
+            conversion: audited.metadata?.conversion || null,
+          },
         },
       };
     }
-    const finalModel = ensureDocumentAudit({
+    const effectiveTo = cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat;
+    // Repair Engine 写自己的 modelReview，但要保留上游 OCR stage 记下的 ocr / ocrQuality
+    // 子对象（否则识别质量数据会被覆盖丢失，UI 无法展示）。
+    const priorReview = cycle.model.metadata?.modelReview || {};
+    const mergedModelReview = {
+      ...cycle.modelReview,
+      ...(priorReview.ocr ? { ocr: priorReview.ocr } : {}),
+      ...(priorReview.ocrQuality ? { ocrQuality: priorReview.ocrQuality } : {}),
+    };
+    const auditedModel = ensureDocumentAudit({
       ...cycle.model,
       metadata: {
         ...(cycle.model.metadata || {}),
         autoRepair: cycle.autoRepair,
-        modelReview: cycle.modelReview,
+        modelReview: mergedModelReview,
       },
     }, {
       content,
       reader: fromFormat,
-      writer: cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat,
-      targetFormat: cycle.autoRepair?.fallbackUsed ? (cycle.autoRepair.fallbackTo || toFormat) : toFormat,
+      writer: effectiveTo,
+      targetFormat: effectiveTo,
       fileName,
       options,
     });
+    return { cycle, effectiveTo, auditedModel };
+  }
+
+  // 给定 Repair cycle 结果 + verification envelope，组装最终 quality 返回值。
+  _assembleQuality({ cycle, effectiveTo, auditedModel, verification, content, fromFormat, fileName, options }) {
+    const finalModel = verification.warnings.length > 0
+      ? ensureDocumentAudit({
+        ...auditedModel,
+        metadata: withWarnings(auditedModel.metadata || {}, verification.warnings),
+      }, {
+        content,
+        reader: fromFormat,
+        writer: effectiveTo,
+        targetFormat: effectiveTo,
+        fileName,
+        options,
+      })
+      : auditedModel;
+
     const baseQualityReport = finalModel.metadata?.qualityReport || {};
     const qualityReport = {
       ...baseQualityReport,
       repairStatus: cycle.autoRepair?.attempted ? "verified" : "not-attempted",
       finalDecision: cycle.autoRepair?.finalDecision || "pending",
+      ruleDiff: verification.ruleDiff,
+      ssim: verification.ssim ?? null,
+      ocrReadback: verification.ocrReadback ?? null,
+      verification: {
+        eligible: verification.eligible,
+        reason: verification.reason,
+        layers: verification.layers,
+        skipped: verification.skipped,
+        runtimeMs: verification.runtimeMs,
+      },
     };
     return {
       ...cycle.output,
@@ -500,6 +542,24 @@ export class ConverterRegistry {
         conversion: finalModel.metadata?.conversion || null,
       },
     };
+  }
+
+  // 同步路径：Repair cycle + 同步验证阶段（仅 rule-diff 层）。
+  _wrapWithRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options }) {
+    const cycleResult = this._runRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options });
+    if (cycleResult.earlyReturn) return cycleResult.earlyReturn;
+    const { cycle, effectiveTo, auditedModel } = cycleResult;
+    const verification = runVerificationStage({ model: auditedModel, output: cycle.output, ctx });
+    return this._assembleQuality({ cycle, effectiveTo, auditedModel, verification, content, fromFormat, fileName, options });
+  }
+
+  // 异步路径：Repair cycle + 异步验证阶段（rule-diff + SSIM 视觉回环）。
+  async _wrapWithRepairCycleAsync({ model, output, ctx, content, fromFormat, toFormat, fileName, options }) {
+    const cycleResult = this._runRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options });
+    if (cycleResult.earlyReturn) return cycleResult.earlyReturn;
+    const { cycle, effectiveTo, auditedModel } = cycleResult;
+    const verification = await runVerificationStageAsync({ model: auditedModel, output: cycle.output, ctx });
+    return this._assembleQuality({ cycle, effectiveTo, auditedModel, verification, content, fromFormat, fileName, options });
   }
 
   convert({ content, from, to, title = "document", fileName = "", options = {} }) {
@@ -545,6 +605,6 @@ export class ConverterRegistry {
       return output;
     }
     const ctx = this._buildRepairCtx({ content, fromFormat, toFormat, title, fileName, options });
-    return this._wrapWithRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options });
+    return this._wrapWithRepairCycleAsync({ model, output, ctx, content, fromFormat, toFormat, fileName, options });
   }
 }

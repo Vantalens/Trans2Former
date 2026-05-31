@@ -1,5 +1,12 @@
-import { access, copyFile, mkdir, readdir, stat } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+// 本项目 local-only 安全门禁（scripts/local-security-test.js）禁止 public/vendor/ 下任何
+// vendor .js 出现远程协议字符串。tesseract.js bundle 里只内置了 CDN 默认路径
+// （https://cdn.jsdelivr.net/...），而运行时（tesseract-runtime.js）恒以同源 /vendor/ 路径
+// 覆盖 corePath/workerPath/langPath —— 这些 CDN 默认值是死代码。复制后把它们改写成同源相对
+// 路径并去掉 sourceMappingURL 注释，让 served asset 真正 local-only。
+const REMOTE_PROTOCOL_RE = /(https?:|wss?:)\/\//;
 
 const ROOT = process.cwd();
 const TESSERACT_DIST = path.join(ROOT, "node_modules", "tesseract.js", "dist");
@@ -23,6 +30,32 @@ async function copyIfPresent(source, destination) {
   return true;
 }
 
+// 复制后清洗：把 vendor bundle 里的 CDN 默认路径改写成同源 /vendor 路径，并去掉
+// sourceMappingURL 注释（对应 .map 不再随包）。清洗后逐文件断言无残留远程协议，
+// 让未来 tesseract 版本若引入新远程 host 时本脚本先行报警而非静默漏过门禁。
+async function sanitizeVendorBundles(dir) {
+  if (!(await pathExists(dir))) return;
+  const entries = await readdir(dir);
+  for (const entry of entries) {
+    if (!/\.(js|mjs)$/.test(entry)) continue;
+    const filePath = path.join(dir, entry);
+    const info = await stat(filePath);
+    if (!info.isFile()) continue;
+    const original = await readFile(filePath, "utf8");
+    const cleaned = original
+      .replaceAll("https://cdn.jsdelivr.net", "/vendor")
+      .replace(/\n?\/\/[#@]\s*sourceMappingURL=.*$/gm, "");
+    if (cleaned !== original) await writeFile(filePath, cleaned, "utf8");
+    const leftover = cleaned.match(REMOTE_PROTOCOL_RE);
+    if (leftover) {
+      throw new Error(
+        `[sync-tesseract-vendor] ${path.relative(ROOT, filePath).replaceAll("\\", "/")} 清洗后仍含远程协议串 (${leftover[0]}...)；`
+        + `请扩展 sanitizeVendorBundles 的改写规则后再发布。`,
+      );
+    }
+  }
+}
+
 async function copyDistEntries(sourceDir, destDir) {
   if (!(await pathExists(sourceDir))) return [];
   const entries = await readdir(sourceDir);
@@ -31,7 +64,7 @@ async function copyDistEntries(sourceDir, destDir) {
     const fullSource = path.join(sourceDir, entry);
     const info = await stat(fullSource);
     if (!info.isFile()) continue;
-    if (!/\.(js|mjs|wasm|map)$/.test(entry)) continue;
+    if (!/\.(js|mjs|wasm)$/.test(entry)) continue;
     if (entry.endsWith(".d.ts")) continue;
     await copyFile(fullSource, path.join(destDir, entry));
     copied.push(entry);
@@ -53,7 +86,7 @@ async function main() {
   let mainCopied = false;
   let workerCopied = false;
   for (const entry of distEntries) {
-    if (!/\.(js|mjs|map)$/.test(entry)) continue;
+    if (!/\.(js|mjs)$/.test(entry)) continue;
     if (entry.endsWith(".d.ts")) continue;
     const source = path.join(TESSERACT_DIST, entry);
     if (entry.startsWith("worker")) {
@@ -84,7 +117,10 @@ async function main() {
     console.warn("[sync-tesseract-vendor] tesseract.js-core not found; wasm runtime missing. OCR will stay unavailable until installed.");
   }
 
-  console.log(`Tesseract.js vendor synced to public/vendor/tesseract/ (worker=${workerCopied}, core=${coreBundleCopied}).`);
+  await sanitizeVendorBundles(TARGET_CORE_DIR);
+  await sanitizeVendorBundles(TARGET_WORKER_DIR);
+
+  console.log(`Tesseract.js vendor synced to public/vendor/tesseract/ (worker=${workerCopied}, core=${coreBundleCopied}); remote URLs sanitized.`);
 }
 
 main().catch((error) => {

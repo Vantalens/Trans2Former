@@ -3,6 +3,7 @@ import {
   renderPreviewHtml,
   toDocumentModel,
 } from "./browser-transformer.js";
+import { renderMathIn } from "./katex-render.js";
 
 const TEXT_LIKE_FORMATS = new Set(["md", "html", "txt", "json", "csv", "xml"]);
 const IMAGE_FORMATS = new Set(["png"]);
@@ -99,6 +100,7 @@ function renderTextLike(content, format) {
   wrap.className = "preview-canvas preview-markdown";
   try {
     wrap.innerHTML = renderPreviewHtml(content, format, payload?.source?.fileName || "preview");
+    renderMathIn(wrap);
   } catch (error) {
     wrap.textContent = String(content || "");
   }

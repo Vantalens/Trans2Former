@@ -4,6 +4,7 @@ import { defaultOCRRegistry } from "./ocr-engine.js";
 import { createOCREngineFailedWarning, createOCRUnavailableWarning, createOCRLowConfidenceWarning } from "./ocr-warnings.js";
 import { defaultPdfPageRasterizer } from "./pdf-rasterizer.js";
 import { mergeOCRResultsToFixedLayout } from "./ocr-to-fixed-layout.js";
+import { mapLinesToBlockIds } from "./ocr-structure.js";
 import { fixedLayoutToSemantic } from "../models/mappers.js";
 import { getFixedLayoutSummary } from "../models/fixed-layout.js";
 
@@ -135,6 +136,10 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
       sourceFormat: enhanced.sourceFormat || "pdf",
     });
     enhanced.blocks.push(...(semanticFromLayout.blocks || []));
+    // 给追加块预赋稳定 id（绝对索引），供低置信修复按 block.id 命中；document-audit 保留之。
+    for (let i = appendedStart; i < enhanced.blocks.length; i += 1) {
+      if (!enhanced.blocks[i].id) enhanced.blocks[i].id = `ocr-block-${i}`;
+    }
     enhanced.metadata = withWarnings(enhanced.metadata, [
       createWarning(
         "info",
@@ -151,12 +156,11 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     ]);
   }
 
-  // Re-resolve blockId for each ocr line after blocks were appended via mapper
-  let assignedFromBlockIndex = appendedStart;
-  for (const ocrLine of lines) {
-    const blockSlot = enhanced.blocks[assignedFromBlockIndex];
-    if (blockSlot) ocrLine.blockId = blockSlot.id || "";
-  }
+  // 用文本包含把每行映射到承载它的追加块的 id。不能按 lines 顺序硬配索引：
+  // mergeOCRResultsToFixedLayout 会按阅读顺序（bbox y→x）重排，lines 顺序 ≠ 块顺序。
+  const appendedBlocks = enhanced.blocks.slice(appendedStart);
+  const blockIds = mapLinesToBlockIds(lines, appendedBlocks);
+  lines.forEach((ocrLine, i) => { ocrLine.blockId = blockIds[i] || ""; });
 
   enhanced.metadata.ocr = {
     language: language || "auto",

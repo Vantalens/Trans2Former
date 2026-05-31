@@ -8,6 +8,7 @@ import {
   renderPreviewHtml,
   toConversionDocumentModel,
   toDocumentModel,
+  ensurePaddleDefaultModels,
 } from "./browser-transformer.js";
 import { normalizeConversionError } from "./core/conversion-error.js";
 import { getPlainText } from "./core/document-model.js";
@@ -30,6 +31,7 @@ import {
 import { readBlobAsDecodedText } from "./core/text-decoding.js";
 import { expandPdfContentForTextExtraction } from "./formats/pdf.js";
 import { openPreview } from "./router.js";
+import { renderMathIn } from "./katex-render.js";
 
 const inputContent = document.getElementById("inputContent");
 const sourcePane = document.querySelector(".source-pane");
@@ -83,6 +85,15 @@ const clearResolvedWarningsButton = document.getElementById("clearResolvedWarnin
 const qualityReportList = document.getElementById("qualityReportList");
 const diffSummary = document.getElementById("diffSummary");
 const versionsList = document.getElementById("versionsList");
+const verificationReportPanel = document.getElementById("verificationReportPanel");
+const verificationReportBadge = document.getElementById("verificationReportBadge");
+const verificationRepair = document.getElementById("verificationRepair");
+const verificationRuleDiff = document.getElementById("verificationRuleDiff");
+const verificationSsim = document.getElementById("verificationSsim");
+const verificationOcrReadback = document.getElementById("verificationOcrReadback");
+const verificationOcrRecognition = document.getElementById("verificationOcrRecognition");
+const verificationOcrRecognitionRow = document.getElementById("verificationOcrRecognitionRow");
+const verificationWarnings = document.getElementById("verificationWarnings");
 const securityCenterButton = document.getElementById("securityCenterButton");
 const workbenchTabs = document.getElementById("workbenchTabs");
 const wordCountEl = document.getElementById("wordCount");
@@ -130,6 +141,7 @@ let outputDirectoryLabel = "浏览器下载目录";
 let sessionVersions = [];
 let outputVersionIndex = -1;
 let currentDocumentModel = null;
+let currentConversionQuality = null;
 let currentOutputFormat = "";
 let currentOutputMime = "";
 let currentOutputType = "none";
@@ -551,6 +563,97 @@ function renderBottomReports(model = null, output = "") {
   updateWarningsResolvedControls(model);
 }
 
+function describeRuleDiff(ruleDiff, verification) {
+  if (ruleDiff) {
+    const score = typeof ruleDiff.overallScore === "number" ? ruleDiff.overallScore.toFixed(3) : "-";
+    const struct = `+${ruleDiff.addedBlocks?.length || 0}/-${ruleDiff.removedBlocks?.length || 0}/~${ruleDiff.changedBlocks?.length || 0}`;
+    return { state: ruleDiff.identical ? "ok" : "drift", text: `${ruleDiff.fidelity} · score ${score} · 块 ${struct}` };
+  }
+  const skip = (verification?.skipped || []).find((entry) => entry.layer === "rule-diff");
+  return { state: "skip", text: `跳过：${skip?.reason || "未触发"}` };
+}
+
+function describeSsim(ssim, verification) {
+  if (ssim) {
+    const score = typeof ssim.score === "number" ? ssim.score.toFixed(3) : "-";
+    return { state: ssim.passed ? "ok" : "drift", text: `score ${score} (阈值 ${ssim.threshold}) · ${ssim.sourceFormat}→${ssim.outputFormat}` };
+  }
+  const skip = (verification?.skipped || []).find((entry) => entry.layer === "ssim");
+  return { state: "skip", text: `跳过：${skip?.reason || "未触发"}` };
+}
+
+function describeOcrReadback(ocrReadback, verification) {
+  if (ocrReadback) {
+    const f1 = typeof ocrReadback.f1 === "number" ? ocrReadback.f1.toFixed(3) : "-";
+    const recall = typeof ocrReadback.recall === "number" ? ocrReadback.recall.toFixed(3) : "-";
+    return { state: ocrReadback.passed ? "ok" : "drift", text: `f1 ${f1} · recall ${recall} (阈值 ${ocrReadback.threshold}) · ${ocrReadback.engineId}` };
+  }
+  const skip = (verification?.skipped || []).find((entry) => entry.layer === "ocr-readback");
+  return { state: "skip", text: `跳过：${skip?.reason || "未触发"}` };
+}
+
+function applyVerificationRow(node, descriptor) {
+  if (!node) return;
+  node.textContent = descriptor.text;
+  node.dataset.state = descriptor.state;
+}
+
+function renderVerificationReport(quality = currentConversionQuality) {
+  if (!verificationReportPanel) return;
+  if (!quality || !quality.qualityReport) {
+    verificationReportPanel.hidden = true;
+    return;
+  }
+  const report = quality.qualityReport;
+  const verification = report.verification || { layers: [], skipped: [] };
+  const autoRepair = quality.autoRepair || {};
+
+  const repairStatus = report.repairStatus || (autoRepair.attempted ? "verified" : "not-attempted");
+  const finalDecision = report.finalDecision || autoRepair.finalDecision || "pending";
+  applyVerificationRow(verificationRepair, {
+    state: finalDecision === "verified" ? "ok" : (finalDecision === "failed-quality-gate" ? "drift" : "skip"),
+    text: `${repairStatus} · 结论 ${finalDecision}`,
+  });
+
+  applyVerificationRow(verificationRuleDiff, describeRuleDiff(report.ruleDiff, verification));
+  applyVerificationRow(verificationSsim, describeSsim(report.ssim, verification));
+  applyVerificationRow(verificationOcrReadback, describeOcrReadback(report.ocrReadback, verification));
+
+  // OCR 识别质量（仅当本次转换跑了 OCR 识别才显示）
+  const modelReview = quality.modelReview || {};
+  if (verificationOcrRecognitionRow) {
+    if (modelReview.ocr) {
+      const ocr = modelReview.ocr;
+      const q = modelReview.ocrQuality || {};
+      const conf = typeof ocr.averageConfidence === "number" ? ocr.averageConfidence.toFixed(3) : "-";
+      const parts = [`引擎 ${ocr.engine || "-"}`, `${ocr.lineCount ?? 0} 行`, `置信度 ${conf}`];
+      if (q.grade) parts.push(`质量 ${q.grade}`);
+      if (q.lowConfidenceLines) parts.push(`低置信 ${q.lowConfidenceLines}`);
+      if (q.skewApplied) parts.push(`纠偏 ${q.skewApplied}°`);
+      if (q.rotatedLines) parts.push(`方向校正 ${q.rotatedLines}`);
+      if (q.denoised) parts.push("已去噪");
+      const state = q.grade === "low" ? "drift" : (q.grade === "medium" ? "skip" : "ok");
+      applyVerificationRow(verificationOcrRecognition, { state, text: parts.join(" · ") });
+      verificationOcrRecognitionRow.hidden = false;
+    } else {
+      verificationOcrRecognitionRow.hidden = true;
+    }
+  }
+
+  const severity = report.warningsBySeverity || {};
+  const severityText = Object.keys(severity).length > 0
+    ? Object.entries(severity).map(([level, count]) => `${level}:${count}`).join(" · ")
+    : "无";
+  applyVerificationRow(verificationWarnings, { state: (report.downgradeCount || 0) > 0 ? "drift" : "ok", text: `${report.warningCount || 0} 条（${severityText}）` });
+
+  const activeLayers = (verification.layers || []).length;
+  if (verificationReportBadge) {
+    verificationReportBadge.textContent = activeLayers > 0 ? `${activeLayers} 层已检验` : "未触发检验层";
+    verificationReportBadge.dataset.state = activeLayers > 0 ? "ok" : "skip";
+  }
+  verificationReportPanel.hidden = false;
+}
+
 function getOutputLineCount(output) {
   return String(output || "").split("\n").length;
 }
@@ -610,6 +713,7 @@ function renderOutputPreview(content = "") {
 
   try {
     textOutputPreview.innerHTML = renderPreviewHtml(content, currentOutputFormat, currentFileName);
+    renderMathIn(textOutputPreview);
     outputPreviewNotice.hidden = true;
     outputPreviewNotice.textContent = "";
   } catch (error) {
@@ -860,6 +964,10 @@ function resetGeneratedOutput(metaMessage = "尚未生成") {
   currentOutputFormat = "";
   currentOutputType = "none";
   currentResolvedWarnings = new Set();
+  currentConversionQuality = null;
+  if (verificationReportPanel) {
+    verificationReportPanel.hidden = true;
+  }
   textOutputPreview.textContent = "";
   pdfPreview.removeAttribute("src");
   downloadOutputButton.textContent = "下载输出";
@@ -1032,6 +1140,7 @@ function renderLargeDocumentPreview(rawContent, fileName = currentFileName) {
     `<p>当前仅渲染前 ${Math.min(model.blocks.length, LARGE_PREVIEW_BLOCK_LIMIT)} 个结构块，转换仍在 Worker 中完整执行。</p>`,
   ].join("");
   htmlPreview.innerHTML = summary + renderPreviewHtml(previewContent, fromFormatSelect.value, fileName);
+  renderMathIn(htmlPreview);
   renderDocumentModelPanel({
     ...model,
     blocks: model.blocks.slice(0, LARGE_PREVIEW_BLOCK_LIMIT),
@@ -1071,6 +1180,7 @@ function renderPreview() {
   const model = toDocumentModel(content, fromFormatSelect.value, currentFileName);
   const bodyHtml = renderPreviewHtml(content, fromFormatSelect.value, currentFileName);
   htmlPreview.innerHTML = bodyHtml;
+  renderMathIn(htmlPreview);
   renderDocumentModelPanel(model);
   renderBottomReports(model);
   lastRenderedPayload = payloadKey;
@@ -1230,11 +1340,16 @@ function releaseConversionResources() {
 }
 
 function convertWithWorker(payload) {
+  const fromFmt = String(payload?.from || "").toLowerCase();
+  // OCR 适用输入（图片 / PDF）必须走主线程的异步管线：OCR 需要 canvas 解码图像 +
+  // onnxruntime 推理，这些在转换 Web Worker 里不可用。直接走 convertContentAsync——
+  // 图片与扫描 PDF 触发 OCR；文本 PDF 仍走常规文本路径。
+  if (fromFmt === "png" || fromFmt === "pdf") {
+    // 先确保随包 PP-OCRv5 模型已载入本地缓存（幂等），再跑异步转换/OCR。
+    return ensurePaddleDefaultModels().catch(() => {}).then(() => convertInBrowserAsync(payload));
+  }
   const worker = createConvertWorker();
   if (!worker) {
-    if (String(payload?.from || "").toLowerCase() === "png") {
-      return Promise.resolve(convertInBrowserAsync(payload));
-    }
     return Promise.resolve(convertInBrowser(payload));
   }
 
@@ -1304,6 +1419,7 @@ async function transformContent() {
     const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName, options: { profile: markdownOutputProfile } });
     const model = toConversionDocumentModel(content, from, to, currentFileName, currentFileName);
     currentDocumentModel = model;
+    currentConversionQuality = result.quality || null;
     renderDocumentModelPanel(model);
     currentOutputType = result.type;
     currentOutputFormat = result.format;
@@ -1311,6 +1427,7 @@ async function transformContent() {
     clearOutputHistory();
     updateOutputVersionControls();
     renderBottomReports(model, result.type === "text" ? result.data : "");
+    renderVerificationReport(currentConversionQuality);
 
     if (result.type === "binary") {
       currentOutputType = "binary";
@@ -1672,3 +1789,7 @@ syncPdfPaperControl();
 openPdfPreviewButton.disabled = true;
 if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = true;
 updateConversionProgress({ stage: "idle", progress: 0 });
+
+// 后台开箱即用加载随包 PP-OCRv5 模型（同源 vendor → 本地缓存），让高级 OCR 无需手动导入。
+// 失败/缺失静默（仍可经安全中心手动导入），不阻塞 UI。
+ensurePaddleDefaultModels().catch(() => {});

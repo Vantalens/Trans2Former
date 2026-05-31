@@ -98,14 +98,20 @@ export class OCREngineRegistry {
   pickForTask(task) {
     const candidates = this.list().filter((engine) => engine.taskCapabilities.includes(task));
     if (candidates.length === 0) return null;
-    const available = candidates.find((engine) => {
+    // 优先级感知：在候选中按 priority 降序挑第一个 available（priority 缺省 0）。
+    // 这样高级引擎（如 PP-OCRv5 priority=20）可用时优先于 tesseract（10）/ placeholder（0）。
+    const isAvail = (engine) => {
       try {
         return engine.isAvailable() === true;
       } catch (error) {
         return false;
       }
-    });
+    };
+    const priorityOf = (engine) => Number(engine.priority) || 0;
+    const byPriority = [...candidates].sort((a, b) => priorityOf(b) - priorityOf(a));
+    const available = byPriority.find(isAvail);
     if (available) return available;
+    // 无可用引擎：回退到最后注册的候选（行为不变，仅作为"不可用"代表）。
     return candidates[candidates.length - 1];
   }
 

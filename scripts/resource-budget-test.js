@@ -3,14 +3,19 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 const BUDGETS = [
-  { path: "public/core", maxBytes: 256 * 1024 },
+  // public/core 是纯 JS 算法核心（转换/路由/Repair/三层检验/OCR 前后处理管线），
+  // 不含任何模型权重——模型只进 model-cache、按需导入。P9-C 三层检验 + P9-D PP-OCRv5
+  // 推理管线（DB 后处理 + CTC 解码等纯函数）合理扩容到 320KB，仍远小于任何带权重方案。
+  { path: "public/core", maxBytes: 320 * 1024 },
   { path: "public/formats", maxBytes: 512 * 1024 },
   { path: "public/workers", maxBytes: 128 * 1024 },
   { path: "scripts", maxBytes: 512 * 1024 },
   { path: "public", maxBytes: 2 * 1024 * 1024, exclude: ["public/vendor"] },
-  // vendored PDF.js（main + worker + cmaps + standard_fonts）属于按需的可选引擎，
-  // 不应挤占核心主预算，但本身仍要有上限避免漂移。
-  { path: "public/vendor", maxBytes: 6 * 1024 * 1024 },
+  // vendored 引擎/模型属于按需的可选资源，不挤占核心主预算，但仍设上限防漂移。
+  // 含：pdfjs(~4MB) + onnxruntime-web 最小 JSEP 构建(~25MB) + tesseract.js core 全 SIMD/LSTM
+  // 变体(~30MB) + PP-OCRv5 mobile det/rec + 字典(~21MB) + KaTeX(~1MB) ≈ 80MB。这些不入 git
+  // （见 .gitignore），由 vendor 脚本 + 本地下载重建，随应用打包。上限留约 20% 余量防漂移。
+  { path: "public/vendor", maxBytes: 96 * 1024 * 1024 },
 ];
 
 const FORBIDDEN_DEPENDENCIES = [
