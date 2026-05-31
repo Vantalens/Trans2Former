@@ -381,6 +381,7 @@ export {
   paddleOcrEngine,
   PADDLE_OCR_MANIFEST_ID,
   PADDLE_OCR_MODEL_FILES,
+  PADDLE_OCR_REQUIRED_FILES,
   markPaddleOcrVendorReady,
 } from "./core/ocr/paddle-ocr-engine.js";
 export { ensurePaddleOcrBootstrap } from "./core/ocr/paddle-ocr-bootstrap.js";

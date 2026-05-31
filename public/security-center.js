@@ -13,6 +13,7 @@ import {
   paddleOcrEngine,
   markPaddleOcrVendorReady,
   PADDLE_OCR_MODEL_FILES,
+  PADDLE_OCR_REQUIRED_FILES,
 } from "/browser-transformer.js";
 
 const ORIGIN = location.origin;
@@ -369,18 +370,21 @@ async function importPaddleModel(dialog, button) {
         const buffer = await picked.arrayBuffer();
         const sha256 = await sha256Hex(buffer);
         await defaultOCRStorage.put(`paddleocr/v5/${file}`, buffer, { sha256 });
+        // 先置位 vendor-ready（用户已选用 PP-OCRv5），再 probe；否则 ensureProbe 在 vendor
+        // 未置位时恒返回 false，状态永远翻不过去。真正的 onnxruntime 运行时加载仍在
+        // recognize() 时把关。对齐 paddle-default-models.js / tesseract 导入流程的顺序。
+        markPaddleOcrVendorReady(true);
         const ready = typeof paddleOcrEngine.ensureProbe === "function"
           ? await paddleOcrEngine.ensureProbe()
           : false;
         if (ready) {
-          markPaddleOcrVendorReady(true);
           defaultModelCache.setStatus(manifestId, STATUS_AVAILABLE, {
-            message: `PP-OCRv5 det/cls/rec 全部就位 (最近导入 ${file}, sha256=${sha256.slice(0, 12)}…)`,
+            message: `PP-OCRv5 必选模型 (det/rec) 就位 (最近导入 ${file}, sha256=${sha256.slice(0, 12)}…)`,
             file,
             sha256,
             size: buffer.byteLength,
           });
-          setStatusMessage(dialog, `${file} 已导入，PP-OCRv5 三件模型齐全 ✅`, "success");
+          setStatusMessage(dialog, `${file} 已导入，PP-OCRv5 必选模型齐全 ✅（cls 可选）`, "success");
         } else {
           const missing = await missingPaddleFiles();
           defaultModelCache.setStatus(manifestId, STATUS_VERIFYING, {
@@ -402,8 +406,9 @@ async function importPaddleModel(dialog, button) {
 }
 
 async function missingPaddleFiles() {
+  // 只报必选缺失（det/rec）；cls 为可选，不算缺。
   const missing = [];
-  for (const file of PADDLE_OCR_MODEL_FILES) {
+  for (const file of PADDLE_OCR_REQUIRED_FILES) {
     if (!(await defaultOCRStorage.has(`paddleocr/v5/${file}`))) missing.push(file);
   }
   return missing;
@@ -419,7 +424,7 @@ async function clearPaddleModels(dialog, button) {
       await paddleOcrEngine.ensureProbe();
     }
     defaultModelCache.setStatus(manifestId, STATUS_NOT_DOWNLOADED, {
-      message: "已清除本地 PP-OCRv5 模型；下次启用需重新导入 det/cls/rec。",
+      message: "已清除本地 PP-OCRv5 模型；下次启用需重新导入 det/rec（cls 可选）。",
     });
     setStatusMessage(dialog, "PP-OCRv5 模型已清除", "info");
   } catch (error) {

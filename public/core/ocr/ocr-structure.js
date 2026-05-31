@@ -81,6 +81,30 @@ export function deriveOcrStructure(lines, {
   return blocks;
 }
 
+// 为一批 OCR 行回填它们所属块的 id。OCR 追加块在进入 repair cycle 前不会被 document-audit
+// 赋 id，故调用方需先给这些块预赋稳定 id（如 "ocr-block-<绝对索引>"）再调用本函数。
+// 匹配用「修剪文本包含」：块文本由若干行 trim 后拼接而成，每行 trim 文本必是某块文本的子串。
+// 单调游标处理「多行→一块」（无 bbox 回退、CJK 拼接段落）；回卷一遍兼容扫描 PDF 的阅读顺序
+// 重排（lines 顺序 ≠ 块顺序）。空/空白行不产块 → 返回 ""。
+export function mapLinesToBlockIds(lines, blocks) {
+  const list = Array.isArray(lines) ? lines : [];
+  const blk = Array.isArray(blocks) ? blocks : [];
+  let cursor = 0;
+  return list.map((line) => {
+    const t = (line?.text || "").trim();
+    if (!t) return "";
+    for (let j = cursor; j < blk.length; j += 1) {
+      const bt = (blk[j]?.text || "").trim();
+      if (bt && bt.includes(t)) { cursor = j; return blk[j]?.id || ""; }
+    }
+    for (let j = 0; j < cursor; j += 1) {
+      const bt = (blk[j]?.text || "").trim();
+      if (bt && bt.includes(t)) return blk[j]?.id || "";
+    }
+    return "";
+  });
+}
+
 // 从 OCRResult 各页推断结构块（按页顺序拼接）。
 export function blocksFromOcrResult(result, options = {}) {
   const pages = Array.isArray(result?.pages) ? result.pages : [];

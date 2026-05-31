@@ -47,9 +47,12 @@ async function decodeImageToImageData(image) {
 
 export const PADDLE_OCR_MANIFEST_ID = "ocr-text.paddleocr.v5";
 
-// PP-OCRv5 三件套 ONNX 模型（检测 / 方向分类 / 识别），按需下载到 model-cache。
+// PP-OCRv5 ONNX 模型（检测 / 方向分类 / 识别）。全集供 UI 列举/清理；可用性只看必选集。
 const MODEL_KEY_PREFIX = "paddleocr/v5/";
 export const PADDLE_OCR_MODEL_FILES = Object.freeze(["det.onnx", "cls.onnx", "rec.onnx"]);
+// 必选集：det（DB 检测）+ rec（CTC 识别）。cls（方向分类）为可选——管线运行时已容忍其
+// 缺失（clsSession 为 null 时跳过 180° 校正），故不纳入可用性闸门。
+export const PADDLE_OCR_REQUIRED_FILES = Object.freeze(["det.onnx", "rec.onnx"]);
 
 // 就绪状态放模块级可变变量，而非冻结对象的实例属性（冻结对象在严格模式下无法被
 // ensureProbe 赋值）。引擎对象本身仍可 Object.freeze 防外部篡改。
@@ -60,7 +63,7 @@ function vendorReady() {
 }
 
 async function hasAllModels(storage) {
-  for (const file of PADDLE_OCR_MODEL_FILES) {
+  for (const file of PADDLE_OCR_REQUIRED_FILES) {
     if (!(await storage.has(`${MODEL_KEY_PREFIX}${file}`))) return false;
   }
   return true;
@@ -104,7 +107,7 @@ export const paddleOcrEngine = Object.freeze({
     }
     if (!(await hasAllModels(this._storage))) {
       throw new ConversionError(
-        "未在本地缓存中找到完整 PP-OCRv5 ONNX 模型（det/cls/rec）；请先在安全中心按需下载。",
+        "未在本地缓存中找到 PP-OCRv5 必选模型（det/rec）；请先在安全中心导入/下载（cls 方向分类可选）。",
         {
           category: "convert",
           code: OCR_UNAVAILABLE,

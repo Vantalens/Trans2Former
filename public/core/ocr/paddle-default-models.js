@@ -3,11 +3,13 @@
 // vendor 资源，不联网、不上传。vendor 缺失时静默跳过（仍可经安全中心手动导入）。
 
 import { defaultOCRStorage } from "./ocr-storage.js";
-import { paddleOcrEngine, markPaddleOcrVendorReady, PADDLE_OCR_MODEL_FILES } from "./paddle-ocr-engine.js";
+import { paddleOcrEngine, markPaddleOcrVendorReady, PADDLE_OCR_REQUIRED_FILES } from "./paddle-ocr-engine.js";
 
 const VENDOR_BASE = "/vendor/paddleocr/";
 const STORAGE_PREFIX = "paddleocr/v5/";
 const DICT_FILE = "dict.txt";
+// cls（方向分类）可选：vendor 缺失时静默跳过，不拖垮 det/rec 的随包载入。
+const OPTIONAL_FILE = "cls.onnx";
 
 let inflight = null;
 
@@ -24,7 +26,7 @@ async function fetchToBuffer(url) {
 }
 
 async function alreadyLoaded() {
-  for (const file of PADDLE_OCR_MODEL_FILES) {
+  for (const file of PADDLE_OCR_REQUIRED_FILES) {
     if (!(await defaultOCRStorage.has(`${STORAGE_PREFIX}${file}`))) return false;
   }
   return true;
@@ -45,9 +47,16 @@ export async function ensurePaddleDefaultModels() {
       const probe = await globalThis.fetch(`${VENDOR_BASE}det.onnx`, { method: "HEAD" });
       if (!probe.ok) return { loaded: false, reason: "vendor-absent" };
 
-      for (const file of PADDLE_OCR_MODEL_FILES) {
+      for (const file of PADDLE_OCR_REQUIRED_FILES) {
         const buffer = await fetchToBuffer(`${VENDOR_BASE}${file}`);
         await defaultOCRStorage.put(`${STORAGE_PREFIX}${file}`, buffer, { source: "vendor-bundle" });
+      }
+      // 方向分类 cls（可选）：vendor 缺失不致命；缺它管线跳过 180° 校正。
+      try {
+        const cls = await fetchToBuffer(`${VENDOR_BASE}${OPTIONAL_FILE}`);
+        await defaultOCRStorage.put(`${STORAGE_PREFIX}${OPTIONAL_FILE}`, cls, { source: "vendor-bundle" });
+      } catch (clsError) {
+        // cls 缺失不致命。
       }
       // 字典（可选）
       try {

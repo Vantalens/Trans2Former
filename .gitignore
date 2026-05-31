@@ -65,7 +65,7 @@ Thumbs.db
 # bundled into the app build from disk, not committed):
 #   onnxruntime-web: `npm i onnxruntime-web && npm run vendor:onnx`
 #   tesseract.js:    `npm i tesseract.js && npm run vendor:tesseract`
-#   PP-OCRv5 ONNX models: downloaded locally into public/vendor/paddleocr/
+#   PP-OCRv5 ONNX models: `npm run vendor:paddle` (pinned source + SHA-256, scripts/paddleocr-models.manifest.json)
 /public/vendor/onnxruntime/
 /public/vendor/paddleocr/
 /public/vendor/tesseract/

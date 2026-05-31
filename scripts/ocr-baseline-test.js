@@ -570,6 +570,13 @@ function makeStubEngine(overrides = {}) {
     assert.equal(enhanced.metadata.ocr.lineCount, 1);
     assert.equal(enhanced.metadata.ocr.lines[0].text, "stage-line");
     assert.equal(typeof enhanced.metadata.ocr.lines[0].confidence, "number");
+    // blockId must resolve to a real appended OCR block that CONTAINS the line text,
+    // which is the precondition for low-confidence replaceTextRun repair to target it.
+    const lineBlockId = enhanced.metadata.ocr.lines[0].blockId;
+    assert.ok(lineBlockId && lineBlockId.startsWith("ocr-block-"), "ocr line should carry a stable ocr-block id");
+    const target = enhanced.blocks.find((b) => b.id === lineBlockId);
+    assert.ok(target, "blockId should resolve to a real block in enhanced.blocks");
+    assert.ok((target.text || "").includes("stage-line"), "target block text should contain the line text");
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
   }
@@ -876,6 +883,16 @@ function makeStubEngine(overrides = {}) {
       warnings.find((w) => w.code === MODEL_TEXT_ORDER_HEURISTIC),
       "stage should emit MODEL_TEXT_ORDER_HEURISTIC info warning",
     );
+    // Each ocr line must resolve to a real appended block CONTAINING its text — even though
+    // mergeOCRResultsToFixedLayout re-sorts by reading order (so lines order != block order).
+    const ocrLines = enhanced.metadata?.ocr?.lines || [];
+    assert.equal(ocrLines.length, 2, "two scanned pages => two ocr lines");
+    for (const ln of ocrLines) {
+      assert.ok(ln.blockId && ln.blockId.startsWith("ocr-block-"), "scan-pdf ocr line should carry a stable ocr-block id");
+      const target = enhanced.blocks.find((b) => b.id === ln.blockId);
+      assert.ok(target, "scan-pdf blockId should resolve to a real block");
+      assert.ok((target.text || "").includes((ln.text || "").trim()), "target block should contain the line text");
+    }
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
     resetPdfPageRasterizer();
@@ -976,33 +993,40 @@ function makeStubEngine(overrides = {}) {
   }
 }
 
-// 37. PP-OCRv5 model import availability flip (P9-D.3): all three onnx present + vendor ready
-//     => isAvailable() true; remove any one => false. Mirrors security-center import/clear.
+// 37. PP-OCRv5 model import availability flip (P9-D.3): required det+rec present + vendor ready
+//     => isAvailable() true; cls is OPTIONAL (removing it stays ready); removing a required
+//     model (rec) => false. Mirrors security-center import/clear with cls optional.
 {
-  const keys = ["paddleocr/v5/det.onnx", "paddleocr/v5/cls.onnx", "paddleocr/v5/rec.onnx"];
+  const det = "paddleocr/v5/det.onnx";
+  const cls = "paddleocr/v5/cls.onnx";
+  const rec = "paddleocr/v5/rec.onnx";
   markPaddleOcrVendorReady(true);
   try {
-    // partial import: only det+cls => not ready
-    await paddleOcrEngine._storage.put(keys[0], new Uint8Array([1]).buffer, { sha256: "a" });
-    await paddleOcrEngine._storage.put(keys[1], new Uint8Array([2]).buffer, { sha256: "b" });
-    assert.equal(await paddleOcrEngine.ensureProbe(), false, "two of three models should not be ready");
+    // partial: det present but required rec missing => not ready (cls present but optional)
+    await paddleOcrEngine._storage.put(det, new Uint8Array([1]).buffer, { sha256: "a" });
+    await paddleOcrEngine._storage.put(cls, new Uint8Array([2]).buffer, { sha256: "b" });
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "det without required rec should not be ready");
     assert.equal(paddleOcrEngine.isAvailable(), false);
 
-    // full import => ready
-    await paddleOcrEngine._storage.put(keys[2], new Uint8Array([3]).buffer, { sha256: "c" });
-    assert.equal(await paddleOcrEngine.ensureProbe(), true, "all three models present => ready");
+    // required det+rec present => ready
+    await paddleOcrEngine._storage.put(rec, new Uint8Array([3]).buffer, { sha256: "c" });
+    assert.equal(await paddleOcrEngine.ensureProbe(), true, "required det+rec present => ready");
     assert.equal(paddleOcrEngine.isAvailable(), true);
 
     // vendor flag off => unavailable even with models
     markPaddleOcrVendorReady(false);
     assert.equal(paddleOcrEngine.isAvailable(), false, "vendor not ready => unavailable regardless of models");
 
-    // remove one model => not ready after reprobe
+    // remove OPTIONAL cls => still ready (det+rec remain)
     markPaddleOcrVendorReady(true);
-    await paddleOcrEngine._storage.delete(keys[1]);
-    assert.equal(await paddleOcrEngine.ensureProbe(), false, "removing one model should drop readiness");
+    await paddleOcrEngine._storage.delete(cls);
+    assert.equal(await paddleOcrEngine.ensureProbe(), true, "removing optional cls keeps readiness");
+
+    // remove a REQUIRED model (rec) => not ready
+    await paddleOcrEngine._storage.delete(rec);
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "removing required rec should drop readiness");
   } finally {
-    for (const key of keys) await paddleOcrEngine._storage.delete(key);
+    for (const key of [det, cls, rec]) await paddleOcrEngine._storage.delete(key);
     markPaddleOcrVendorReady(false);
     await paddleOcrEngine.ensureProbe();
   }

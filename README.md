@@ -129,14 +129,14 @@ Trans2Former/
 
 Trans2Former 不再提供插件安装模式，增强能力代码直接并入核心本地模块；模型资源不进入 git 仓库，由 vendor 脚本 + 本地下载重建，随应用打包：
 
-- **本地 OCR（PP-OCRv5）** - 图片 / 扫描 PDF 经 ONNX Runtime + WebGPU（WASM 回退）在本机识别；含 cls 方向校正（180°）、任意角倾斜自动纠偏、自适应中值去噪、版面结构识别（按字号/间距归并标题+段落）、识别质量评分（grade / 置信度 / 低置信行 / 纠偏 / 去噪），全程零联网、零上传
+- **本地 OCR（PP-OCRv5）** - 图片 / 扫描 PDF 经 ONNX Runtime + WebGPU（WASM 回退）在本机识别；含 cls 方向校正（180°，可选模型）、任意角倾斜自动纠偏、自适应中值去噪、版面结构识别（按字号/间距归并标题+段落）、识别质量评分（grade / 置信度 / 低置信行 / 纠偏 / 去噪），全程零联网、零上传
 - **轻量 OCR（Tesseract.js）** - 可选的轻量 OCR 引擎，按需在安全中心导入 tessdata
 - **转换后检验三层** - 规则 diff + SSIM 视觉对比 + OCR 回读统一写入 QualityReport，工作台「转换检验报告」可视
 - **LaTeX 数学渲染** - 本地 KaTeX，零联网
 - **OFD 支持 / 版面分析 / 表格恢复** - 核心内置，持续攻坚
 - **高级 OCR（远期）** - PaddleOCR-VL / MinerU 等 VLM 受浏览器/Tauri 本地运行时限制，作为远期/外部资源评估（详见 docs）
 
-> 运行高级 OCR：`npm install onnxruntime-web && npm run vendor:onnx`，并准备 PP-OCRv5 ONNX 模型（应用已内置一套 PP-OCRv5 mobile 模型，开箱即用；可在安全中心替换/导入）。详见 [docs/PP_OCRV5_BROWSER_VERIFICATION.md](docs/PP_OCRV5_BROWSER_VERIFICATION.md)。
+> 运行高级 OCR：`npm install onnxruntime-web && npm run vendor:onnx`。PP-OCRv5 mobile 检测/识别模型与字典由 `npm run vendor:paddle` 从钉定来源下载、SHA-256 校验（见 [scripts/paddleocr-models.manifest.json](scripts/paddleocr-models.manifest.json)）并随 `release:prepare` 打包，启动自动载入、开箱即用；方向分类（cls）为可选，可在安全中心导入/替换。详见 [docs/PP_OCRV5_BROWSER_VERIFICATION.md](docs/PP_OCRV5_BROWSER_VERIFICATION.md)。
 
 这些能力不通过插件包分发；实现继续保持本地执行、无上传、可解释降级和资源预算约束。
 

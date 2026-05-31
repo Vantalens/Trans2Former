@@ -47,6 +47,10 @@ function mockSession(outputName, produce) {
   const dict = parseCharDictionary("你\n好\nA");
   assert.deepEqual(dict, ["<blank>", "你", "好", "A", " "]);
   assert.deepEqual(parseCharDictionary(""), ["<blank>", " "]);
+  // 字典文件已显式以空格行结尾（如 ppu ppocrv5_dict）→ 不重复追加，避免类别数比模型多 1。
+  assert.deepEqual(parseCharDictionary("你\n好\n "), ["<blank>", "你", "好", " "]);
+  // 全角空格 U+3000 是合法 token，必须保留（不可用 trim() 误删）。
+  assert.deepEqual(parseCharDictionary("　\nA"), ["<blank>", "　", "A", " "]);
 }
 
 // 2. preprocessForDetection: NCHW float, dims multiple of 32, scale ratios

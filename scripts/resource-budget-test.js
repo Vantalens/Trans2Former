@@ -12,9 +12,10 @@ const BUDGETS = [
   { path: "scripts", maxBytes: 512 * 1024 },
   { path: "public", maxBytes: 2 * 1024 * 1024, exclude: ["public/vendor"] },
   // vendored 引擎/模型属于按需的可选资源，不挤占核心主预算，但仍设上限防漂移。
-  // 含：pdfjs(~4MB) + onnxruntime-web 最小 JSEP 构建(~25MB) + PP-OCRv5 mobile det/cls/rec ONNX
-  // + 字典(~22MB)。这些不入 git（见 .gitignore），由 vendor 脚本 + 本地下载重建，随应用打包。
-  { path: "public/vendor", maxBytes: 64 * 1024 * 1024 },
+  // 含：pdfjs(~4MB) + onnxruntime-web 最小 JSEP 构建(~25MB) + tesseract.js core 全 SIMD/LSTM
+  // 变体(~30MB) + PP-OCRv5 mobile det/rec + 字典(~21MB) + KaTeX(~1MB) ≈ 80MB。这些不入 git
+  // （见 .gitignore），由 vendor 脚本 + 本地下载重建，随应用打包。上限留约 20% 余量防漂移。
+  { path: "public/vendor", maxBytes: 96 * 1024 * 1024 },
 ];
 
 const FORBIDDEN_DEPENDENCIES = [

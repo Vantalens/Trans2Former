@@ -14,7 +14,10 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-// PP-OCR 字典：每行一个 token；CTC blank 占 index 0，末尾追加空格。
+// PP-OCR 字典：每行一个 token；CTC blank 占 index 0，末尾保证恰好一个 ASCII 空格（use_space_char）。
+// 注意：仅跳过「完全空行」（length 0），不可用 trim() —— 字典首个合法 token 常是全角空格 U+3000，
+// trim() 会误删它造成全表错位。某些字典文件（如 ppu ppocrv5_dict）已把空格作为最后一行显式列出；
+// 此时不再重复追加，否则类别数比模型多 1，CTC 解码整体错位。
 export function parseCharDictionary(text) {
   const lines = String(text ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   const chars = [];
@@ -22,7 +25,8 @@ export function parseCharDictionary(text) {
     if (line.length === 0) continue;
     chars.push(line);
   }
-  return ["<blank>", ...chars, " "];
+  if (chars[chars.length - 1] !== " ") chars.push(" ");
+  return ["<blank>", ...chars];
 }
 
 // 最近邻重采样 RGBA 到目标尺寸。imageData = { data: Uint8ClampedArray(RGBA), width, height }。
