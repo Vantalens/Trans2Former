@@ -101,7 +101,7 @@ function readSymbol(reader, huffman) {
 }
 
 function copyDistance(output, distance, length) {
-  if (distance <= 0 || distance > output.length) {
+  if (!Number.isInteger(distance) || distance <= 0 || distance > output.length) {
     throw new ConversionError("ZIP deflate distance is invalid", {
       category: "parse",
       code: "ZIP_DEFLATE_DISTANCE_ERROR",
@@ -131,6 +131,13 @@ function inflateHuffmanBlock(reader, output, literalTree, distanceTree) {
     const lengthIndex = symbol - 257;
     const length = LENGTH_BASE[lengthIndex] + reader.readBits(LENGTH_EXTRA[lengthIndex]);
     const distanceSymbol = readSymbol(reader, distanceTree);
+    if (distanceSymbol < 0 || distanceSymbol >= DIST_BASE.length || distanceSymbol >= DIST_EXTRA.length) {
+      throw new ConversionError("ZIP deflate distance symbol is invalid", {
+        category: "parse",
+        code: "ZIP_DEFLATE_DISTANCE_ERROR",
+        format: "zip",
+      });
+    }
     const distance = DIST_BASE[distanceSymbol] + reader.readBits(DIST_EXTRA[distanceSymbol]);
     copyDistance(output, distance, length);
   }
