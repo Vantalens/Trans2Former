@@ -39,7 +39,13 @@ try {
   assert.equal(health.headers.get("x-content-type-options"), "nosniff");
   assert.equal(health.headers.get("cross-origin-opener-policy"), "same-origin");
   assert.equal(health.headers.get("cross-origin-embedder-policy"), "require-corp");
-  assert.match(health.headers.get("content-security-policy") || "", /default-src 'self'/);
+  const csp = health.headers.get("content-security-policy") || "";
+  assert.match(csp, /default-src 'self'/);
+  assert.match(csp, /script-src [^;]*'wasm-unsafe-eval'/, "CSP must allow WebAssembly compilation for the local OCR pipeline");
+  assert.match(csp, /frame-src [^;]*blob:/, "CSP must allow blob: iframes for the PDF/HTML preview");
+
+  assert.equal(server.requestTimeout, 120000, "server must set an explicit request timeout");
+  assert.equal(server.headersTimeout, 30000, "server must set an explicit headers timeout");
 
   const index = await fetch(`${baseUrl}/`);
   assert.equal(index.ok, true, "root should serve the app shell");
@@ -60,7 +66,7 @@ try {
     assert.equal(response.headers.get("content-type")?.includes("text/html"), false, `${path} must not return the app shell as HTML`);
   }
 
-  console.log("Server hardening test passed: loopback binding, security headers, and static 404 behavior verified.");
+  console.log("Server hardening test passed: loopback binding, security headers, timeouts, and static 404 behavior verified.");
 } finally {
   await new Promise((resolve, reject) => {
     server.close((error) => {

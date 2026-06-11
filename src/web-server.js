@@ -12,16 +12,23 @@ const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === __file
 const DEFAULT_HOST = "127.0.0.1";
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  // 'wasm-unsafe-eval' is required for WebAssembly.instantiate (onnxruntime-web / tesseract core);
+  // without it Chromium blocks the entire local OCR pipeline.
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",
   "worker-src 'self' blob:",
   "connect-src 'self' blob:",
+  // blob: iframes power the PDF/HTML preview (public/preview.js).
+  "frame-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
 ].join("; ");
+// Generous for a local static server, but bounded so stalled connections cannot pile up.
+const SERVER_REQUEST_TIMEOUT_MS = 120000;
+const SERVER_HEADERS_TIMEOUT_MS = 30000;
 
 function hasFileExtension(pathname = "") {
   const lastSegment = String(pathname || "").split("/").pop() || "";
@@ -75,6 +82,9 @@ export async function startWebServer(port = Number(process.env.PORT || 3000), ho
       console.log(`[STARTUP] Web server listening: ${elapsed}ms`);
       resolve({ app, server, port: actualPort });
     });
+
+    server.requestTimeout = SERVER_REQUEST_TIMEOUT_MS;
+    server.headersTimeout = SERVER_HEADERS_TIMEOUT_MS;
 
     server.on("error", reject);
   });
