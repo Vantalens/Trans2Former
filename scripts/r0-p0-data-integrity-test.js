@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { deflateRawSync } from "node:zlib";
 
 import { ConversionError } from "../public/core/conversion-error.js";
 import { decodeTextBytes } from "../public/core/text-decoding.js";
@@ -128,6 +129,13 @@ assert.throws(
   () => readZipEntries(createZipWithRawDeflate("word/document.xml", createDeflateWithInvalidDistanceSymbol(), 4)),
   (error) => error instanceof ConversionError && error.code === "ZIP_DEFLATE_DISTANCE_ERROR",
   "invalid DEFLATE distance symbols 30/31 must fail closed"
+);
+
+const compressedZeros = new Uint8Array(deflateRawSync(Buffer.alloc(1024 * 1024)));
+assert.throws(
+  () => readZipEntries(createZipWithRawDeflate("word/bomb.bin", compressedZeros, 0)),
+  (error) => error instanceof ConversionError && error.code === "ZIP_COMPRESSION_RATIO_LIMIT",
+  "unknown-size deflated entries must not bypass compression-ratio limits"
 );
 
 console.log("R0 P0 data integrity test passed.");

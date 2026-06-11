@@ -361,6 +361,13 @@ export function readZipEntries(content) {
         format: "zip",
       });
     }
+    if (method === 8 && compressedSize > 0 && uncompressedSize === 0) {
+      throw new ConversionError("ZIP compression ratio cannot be verified for unknown-size deflated entries", {
+        category: "parse",
+        code: "ZIP_COMPRESSION_RATIO_LIMIT",
+        format: "zip",
+      });
+    }
     if (uncompressedSize > 0 && compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
       throw new ConversionError("ZIP compression ratio exceeds the local processing budget", {
         category: "parse",
