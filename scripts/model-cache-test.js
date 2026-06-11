@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 import {
   MODEL_MANIFEST_SCHEMA_VERSION,
@@ -29,6 +33,13 @@ import {
   getStatusLabel,
   getTaskLabel,
   listKnownTaskLabels,
+  defaultOCRStorage,
+  ensurePaddleDefaultModels,
+  getPaddleVendorFileSpec,
+  verifyPaddleVendorFile,
+  PADDLE_OCR_REQUIRED_FILES,
+  PADDLE_OCR_VENDOR_FILES,
+  PADDLE_OCR_VENDOR_DIGEST,
 } from "../public/browser-transformer.js";
 import { ConversionError } from "../public/core/conversion-error.js";
 
@@ -230,6 +241,113 @@ function baseManifestInput(overrides = {}) {
   }
   const labels = listKnownTaskLabels();
   assert.equal(labels.length, MODEL_TASKS.length);
+}
+
+// 10. PP-OCRv5 pinned model integrity rejects HTML fallback / poisoned cache bytes
+{
+  const detSpec = getPaddleVendorFileSpec("det.onnx");
+  assert.equal(detSpec.required, true, "det.onnx should be a pinned required PP-OCRv5 asset");
+
+  await assert.rejects(
+    () => verifyPaddleVendorFile("det.onnx", new TextEncoder().encode("<!doctype html><html></html>").buffer),
+    (err) =>
+      err instanceof ConversionError
+      && err.code === "MODEL_CHECKSUM_MISMATCH"
+      && ["size-mismatch", "html-fallback"].includes(err.details?.reason),
+    "HTML app-shell bytes must not pass as det.onnx",
+  );
+
+  await defaultOCRStorage.clear();
+  const originalDocument = globalThis.document;
+  const originalFetch = globalThis.fetch;
+  const htmlBytes = new TextEncoder().encode("<!doctype html><title>Trans2Former</title>").buffer;
+  globalThis.document = {};
+  globalThis.fetch = async (_url, init = {}) => ({
+    ok: true,
+    status: 200,
+    headers: {
+      get(name) {
+        return String(name).toLowerCase() === "content-type"
+          ? (init.method === "HEAD" ? "application/octet-stream" : "text/html")
+          : "";
+      },
+    },
+    async arrayBuffer() {
+      return htmlBytes;
+    },
+  });
+  try {
+    const result = await ensurePaddleDefaultModels();
+    assert.equal(result.loaded, false);
+    assert.equal(result.reason, "vendor-invalid");
+    for (const file of PADDLE_OCR_REQUIRED_FILES) {
+      assert.equal(await defaultOCRStorage.has(`paddleocr/v5/${file}`), false, `${file} should not be cached from HTML fallback bytes`);
+    }
+
+    await defaultOCRStorage.put("paddleocr/v5/det.onnx", htmlBytes, { sha256: "bad" });
+    await defaultOCRStorage.put("paddleocr/v5/rec.onnx", htmlBytes, { sha256: "bad" });
+    const poisonedResult = await ensurePaddleDefaultModels();
+    assert.equal(poisonedResult.loaded, false);
+    assert.equal(poisonedResult.reason, "checksum-mismatch");
+    for (const file of PADDLE_OCR_REQUIRED_FILES) {
+      assert.equal(await defaultOCRStorage.has(`paddleocr/v5/${file}`), false, `${file} poisoned cache should be removed`);
+    }
+  } finally {
+    await defaultOCRStorage.clear();
+    if (originalDocument === undefined) {
+      delete globalThis.document;
+    } else {
+      globalThis.document = originalDocument;
+    }
+    globalThis.fetch = originalFetch;
+  }
+}
+
+// 11. Pinned JS manifest stays in lockstep with scripts/paddleocr-models.manifest.json
+//     (single source of truth), and the bundle digest is reproducible from it.
+{
+  const manifestPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "paddleocr-models.manifest.json");
+  const buildManifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+
+  const jsonByTarget = new Map(buildManifest.files.map((file) => [file.target, file]));
+  assert.equal(
+    Object.keys(PADDLE_OCR_VENDOR_FILES).sort().join(","),
+    [...jsonByTarget.keys()].sort().join(","),
+    "JS vendor manifest and scripts/paddleocr-models.manifest.json must pin the same file set",
+  );
+  for (const [name, spec] of Object.entries(PADDLE_OCR_VENDOR_FILES)) {
+    const jsonSpec = jsonByTarget.get(name);
+    assert.equal(spec.size, jsonSpec.size, `${name}: size drifted between JS and JSON manifests`);
+    assert.equal(spec.sha256, jsonSpec.sha256, `${name}: sha256 drifted between JS and JSON manifests`);
+  }
+
+  const digestInput = buildManifest.files
+    .map((file) => `${file.target}:${file.sha256}`)
+    .sort()
+    .join("\n") + "\n";
+  const expectedDigest = createHash("sha256").update(digestInput, "utf8").digest("hex");
+  assert.equal(
+    PADDLE_OCR_VENDOR_DIGEST,
+    expectedDigest,
+    "PADDLE_OCR_VENDOR_DIGEST must equal sha256 over sorted \"name:sha256\" lines of the build manifest",
+  );
+
+  // Positive case: when the vendored models are present on disk, the pinned
+  // digests must accept the real bytes (guards against pinning stale hashes).
+  const vendorDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public", "vendor", "paddleocr");
+  for (const [name, spec] of Object.entries(PADDLE_OCR_VENDOR_FILES)) {
+    const filePath = path.join(vendorDir, name);
+    let bytes;
+    try {
+      bytes = await fs.readFile(filePath);
+    } catch {
+      console.log(`model-cache-test: vendor file ${name} not present, skipping positive checksum case`);
+      continue;
+    }
+    const verified = await verifyPaddleVendorFile(name, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    assert.equal(verified.checked, true, `${name}: pinned digest should accept the real vendored bytes`);
+    assert.equal(verified.size, spec.size);
+  }
 }
 
 console.log("Model cache test passed: manifest contract, checksum, cache paths, registry, and UI hints all verified.");

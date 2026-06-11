@@ -2,6 +2,7 @@ import {
   defaultModelCache,
   defaultOCRStorage,
   STATUS_AVAILABLE,
+  STATUS_DEGRADED,
   STATUS_NOT_DOWNLOADED,
   STATUS_VERIFYING,
   getStatusLabel,
@@ -14,6 +15,8 @@ import {
   markPaddleOcrVendorReady,
   PADDLE_OCR_MODEL_FILES,
   PADDLE_OCR_REQUIRED_FILES,
+  getPaddleVendorFileSpec,
+  verifyPaddleVendorFile,
 } from "/browser-transformer.js";
 
 const ORIGIN = location.origin;
@@ -369,6 +372,10 @@ async function importPaddleModel(dialog, button) {
         setStatusMessage(dialog, `正在校验 ${picked.name} (${(picked.size / 1024).toFixed(0)} KB)…`, "info");
         const buffer = await picked.arrayBuffer();
         const sha256 = await sha256Hex(buffer);
+        const knownSpec = getPaddleVendorFileSpec(file);
+        if (knownSpec) {
+          await verifyPaddleVendorFile(file, buffer);
+        }
         await defaultOCRStorage.put(`paddleocr/v5/${file}`, buffer, { sha256 });
         // 先置位 vendor-ready（用户已选用 PP-OCRv5），再 probe；否则 ensureProbe 在 vendor
         // 未置位时恒返回 false，状态永远翻不过去。真正的 onnxruntime 运行时加载仍在
@@ -379,7 +386,7 @@ async function importPaddleModel(dialog, button) {
           : false;
         if (ready) {
           defaultModelCache.setStatus(manifestId, STATUS_AVAILABLE, {
-            message: `PP-OCRv5 必选模型 (det/rec) 就位 (最近导入 ${file}, sha256=${sha256.slice(0, 12)}…)`,
+            message: `PP-OCRv5 必选模型 (det/rec) 就位 (最近导入 ${file}, ${knownSpec ? "SHA-256 已匹配清单" : `sha256=${sha256.slice(0, 12)}…`})`,
             file,
             sha256,
             size: buffer.byteLength,
@@ -393,7 +400,7 @@ async function importPaddleModel(dialog, button) {
           setStatusMessage(dialog, `${file} 已导入；还需导入：${missing.join(", ")}`, "info");
         }
       } catch (error) {
-        defaultModelCache.setStatus(manifestId, STATUS_NOT_DOWNLOADED, {
+        defaultModelCache.setStatus(manifestId, error?.code === "MODEL_CHECKSUM_MISMATCH" ? STATUS_DEGRADED : STATUS_NOT_DOWNLOADED, {
           message: `导入失败：${error?.message || error}`,
         });
         setStatusMessage(dialog, `导入 ${file} 失败：${error?.message || error}`, "error");

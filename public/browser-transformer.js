@@ -387,6 +387,13 @@ export {
 export { ensurePaddleOcrBootstrap } from "./core/ocr/paddle-ocr-bootstrap.js";
 export { ensurePaddleDefaultModels } from "./core/ocr/paddle-default-models.js";
 export {
+  PADDLE_OCR_VENDOR_FILES,
+  PADDLE_OCR_VENDOR_DIGEST,
+  PADDLE_OCR_VENDOR_BUNDLE_SIZE,
+  getPaddleVendorFileSpec,
+  verifyPaddleVendorFile,
+} from "./core/ocr/paddle-model-manifest.js";
+export {
   loadOnnxRuntime,
   pickExecutionProviders,
   createOcrSession,
