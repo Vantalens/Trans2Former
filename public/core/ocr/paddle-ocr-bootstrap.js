@@ -6,6 +6,11 @@ import { createModelManifest } from "../model-cache/manifest.js";
 import { defaultOCRRegistry } from "./ocr-engine.js";
 import { ensureTesseractBootstrap } from "./tesseract-bootstrap.js";
 import { paddleOcrEngine, PADDLE_OCR_MANIFEST_ID, PADDLE_OCR_MODEL_FILES } from "./paddle-ocr-engine.js";
+import {
+  PADDLE_OCR_VENDOR_BUNDLE_SIZE,
+  PADDLE_OCR_VENDOR_DIGEST,
+  PADDLE_OCR_VENDOR_FILES,
+} from "./paddle-model-manifest.js";
 
 let bootstrapped = false;
 
@@ -24,13 +29,16 @@ export function ensurePaddleOcrBootstrap() {
 
   if (!defaultModelCache.has(PADDLE_OCR_MANIFEST_ID)) {
     const perFile = {};
-    for (const file of PADDLE_OCR_MODEL_FILES) perFile[file] = "0".repeat(64);
+    for (const file of PADDLE_OCR_MODEL_FILES) {
+      perFile[file] = PADDLE_OCR_VENDOR_FILES[file]?.sha256 || "";
+    }
+    perFile["dict.txt"] = PADDLE_OCR_VENDOR_FILES["dict.txt"].sha256;
     const manifest = createModelManifest({
       manifestId: PADDLE_OCR_MANIFEST_ID,
       task: "ocr-text",
       engine: "paddleocr",
       modelVersion: "v5",
-      bundleSize: 16 * 1024 * 1024,
+      bundleSize: PADDLE_OCR_VENDOR_BUNDLE_SIZE,
       quantization: "int8",
       minMemoryMB: 512,
       sources: [
@@ -39,7 +47,7 @@ export function ensurePaddleOcrBootstrap() {
       ],
       checksums: {
         algorithm: "SHA-256",
-        digest: "0".repeat(64),
+        digest: PADDLE_OCR_VENDOR_DIGEST,
         perFile,
       },
       fallback: {

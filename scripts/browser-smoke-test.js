@@ -27,7 +27,9 @@ async function findFetchSafePort() {
 async function fetchText(baseUrl, pathname) {
   const response = await fetch(`${baseUrl}${pathname}`);
   assert.equal(response.ok, true, `${pathname} should return HTTP ${response.status}`);
-  return response.text();
+  // Multi-line literal assertions below assume LF; CRLF checkouts (git autocrlf
+  // on Windows) must not flip the verdicts.
+  return (await response.text()).replace(/\r\n/g, "\n");
 }
 
 // 浏览器模块图守门：landing-view.js / router.js 与 browser-transformer.js 必须能
