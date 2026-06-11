@@ -38,6 +38,14 @@ function safeDecode(bytes, encoding) {
   }
 }
 
+function strictDecode(bytes, encoding) {
+  try {
+    return new TextDecoder(encoding, { fatal: true }).decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
 function sniffDeclaredEncoding(bytes) {
   const ascii = Array.from(bytes.slice(0, Math.min(bytes.length, 4096)))
     .map((byte) => byte < 128 ? String.fromCharCode(byte) : " ")
@@ -129,6 +137,18 @@ export function decodeTextBytes(bytesLike, { fileName = "", mime = "", encoding 
   }
 
   const declaredEncoding = explicitEncoding || sniffDeclaredEncoding(bytes);
+  if (!declaredEncoding || declaredEncoding === "utf-8") {
+    const utf8Text = strictDecode(bytes, "utf-8");
+    if (utf8Text && countControl(utf8Text) === 0) {
+      return {
+        text: utf8Text,
+        encoding: "utf-8",
+        bom: false,
+        hadReplacement: false,
+      };
+    }
+  }
+
   const candidates = candidateEncodings({ declaredEncoding, fileName, mime });
   const decoded = candidates
     .map((candidate) => ({ encoding: candidate, text: safeDecode(bytes, candidate) }))
