@@ -1,0 +1,11 @@
+{
+  "include": ["public/**/*.js"],
+  "exclude": ["public/vendor/**"],
+  "reporter": ["text-summary"],
+  "check-coverage": true,
+  "statements": 78,
+  "lines": 78,
+  "functions": 80,
+  "branches": 64,
+  "clean": true
+}
