@@ -14,12 +14,14 @@ import {
   PLACEHOLDER_OCR_MANIFEST_ID,
   OCR_UNAVAILABLE,
   OCR_WARNING_CODES,
+  OCR_SCAN_PAGES_TRUNCATED,
   createOCRUnavailableWarning,
   createOCREngineFailedWarning,
   createOCRLowConfidenceWarning,
   createOCRDegradedRouteWarning,
   ensureOCRBootstrap,
   ensureTesseractBootstrap,
+  rehydrateTesseractAvailability,
   tesseractOCREngine,
   TESSERACT_MANIFEST_ID,
   markTesseractVendorReady,
@@ -31,10 +33,17 @@ import {
   toDocumentModel,
   enhanceWithOCR,
   loadTesseractRuntime,
+  createTesseractWorker,
+  TESSDATA_CACHE_PATH,
   OCR_VENDOR_LOAD_FAILED,
   sha256Hex,
   convertContentAsync,
   runOCRStage,
+  getDefaultOCRLanguage,
+  normalizeOCRLanguage,
+  coerceOCRLanguage,
+  toTesseractLanguage,
+  runRecognize,
   detectOCRLowConfidence,
   defaultRepairEngine,
   isScannedPdf,
@@ -100,7 +109,8 @@ function makeStubEngine(overrides = {}) {
   assert.equal(OCR_LANGUAGES.includes("zh-CN"), true);
   assert.equal(OCR_LANGUAGES.includes("auto"), true);
   assert.equal(OCR_WARNING_CODES.includes(OCR_UNAVAILABLE), true);
-  assert.equal(OCR_WARNING_CODES.length, 4);
+  assert.equal(OCR_WARNING_CODES.includes(OCR_SCAN_PAGES_TRUNCATED), true);
+  assert.equal(OCR_WARNING_CODES.length, 5);
 }
 
 // 2. createOCRResult + validate happy path
@@ -322,6 +332,69 @@ function makeStubEngine(overrides = {}) {
     }
   } finally {
     markTesseractVendorReady(false);
+  }
+}
+
+// 12b. createTesseractWorker feeds tessdata via the worker cache, not a blob langPath
+{
+  const calls = [];
+  const stubNamespace = {
+    createWorker: async (langs, oem, opts) => {
+      calls.push({ langs, opts });
+      return { terminate: async () => {} };
+    },
+  };
+  await createTesseractWorker({
+    namespace: stubNamespace,
+    language: "eng",
+    tessdataBuffer: new Uint8Array([1, 2, 3]).buffer,
+  });
+  assert.equal(typeof calls[0].langs, "string", "createWorker langs must be a plain language string, not Lang objects");
+  assert.equal(calls[0].langs, "eng");
+  assert.equal(calls[0].opts.langPath, "/vendor/tesseract/tessdata", "langPath must be a same-origin path");
+  assert.equal(calls[0].opts.langPath.startsWith("blob:"), false, "blob langPath is not joinable by the tesseract worker");
+  assert.equal(calls[0].opts.cachePath, TESSDATA_CACHE_PATH);
+  assert.equal(calls[0].opts.cacheMethod, "readOnly", "worker must read the pre-seeded tessdata cache");
+
+  const runtimeSource = await readFile(new URL("../public/core/ocr/tesseract-runtime.js", import.meta.url), "utf8");
+  assert.equal(runtimeSource.includes("createObjectURL"), false, "blob URL tessdata delivery must not return");
+  try {
+    const workerBundle = await readFile(new URL("../public/vendor/tesseract/worker/worker.min.js", import.meta.url), "utf8");
+    assert.equal(workerBundle.includes("keyval-store"), true, "tesseract.js worker cache must still use the idb-keyval default DB our seeding targets");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+}
+
+// 12c. rehydrateTesseractAvailability rebuilds engine/model-cache state from stored
+//      tessdata at startup (issue #8/#10: the vendor-ready flag is memory-only and a
+//      page refresh forgot imported tessdata even though the bytes persist in IndexedDB).
+{
+  // (a) empty storage => no-op, nothing flips
+  markTesseractVendorReady(false);
+  const empty = await rehydrateTesseractAvailability();
+  assert.deepEqual(empty, { rehydrated: false, reason: "no-tessdata" });
+  assert.equal(tesseractOCREngine.isAvailable(), false, "empty storage must not mark the engine available");
+
+  // (b) simulate refresh after import: bytes persist, flag lost => rehydrate restores
+  await tesseractOCREngine._storage.put("tesseract/eng.traineddata", new Uint8Array([1]).buffer, { sha256: "x" });
+  markTesseractVendorReady(false);
+  try {
+    const restored = await rehydrateTesseractAvailability();
+    assert.deepEqual(restored, { rehydrated: true, reason: "cached" });
+    assert.equal(tesseractOCREngine.isAvailable(), true, "cached tessdata must restore availability");
+    const status = defaultModelCache.getStatus(TESSERACT_MANIFEST_ID);
+    assert.equal(status.status, "available");
+    assert.equal(status.detail?.source, "cached");
+
+    // (c) idempotent: second call short-circuits
+    const again = await rehydrateTesseractAvailability();
+    assert.deepEqual(again, { rehydrated: true, reason: "already-ready" });
+  } finally {
+    await tesseractOCREngine._storage.delete("tesseract/eng.traineddata");
+    markTesseractVendorReady(false);
+    await tesseractOCREngine.ensureProbe();
+    defaultModelCache.setStatus(TESSERACT_MANIFEST_ID, STATUS_NOT_DOWNLOADED, { message: "test cleanup" });
   }
 }
 
@@ -582,6 +655,104 @@ function makeStubEngine(overrides = {}) {
   }
 }
 
+// 23b. OCR language normalization + wiring (issue #47): the configured language reaches
+//      the engine as a canonical code, and tesseract aliases no longer explode validation.
+{
+  // normalization table
+  assert.equal(normalizeOCRLanguage("chi_sim"), "zh-CN");
+  assert.equal(normalizeOCRLanguage("chi_tra"), "zh-TW");
+  assert.equal(normalizeOCRLanguage("eng"), "en");
+  assert.equal(normalizeOCRLanguage("jpn"), "ja");
+  assert.equal(normalizeOCRLanguage("kor"), "ko");
+  assert.equal(normalizeOCRLanguage("zh"), "zh-CN");
+  assert.equal(normalizeOCRLanguage("ZH-CN"), "zh-CN", "case-insensitive");
+  assert.equal(normalizeOCRLanguage(undefined), "auto");
+  assert.equal(normalizeOCRLanguage(""), "auto");
+  assert.equal(normalizeOCRLanguage("fr"), "fr", "unknown values pass through for validation to reject");
+  assert.equal(toTesseractLanguage("zh-CN"), "chi_sim");
+  assert.equal(toTesseractLanguage("en"), "eng");
+  assert.equal(toTesseractLanguage("auto"), null);
+
+  // createOCRResult no longer throws on tesseract codes — this was the real-browser
+  // crash: both engines passed chi_sim into a validator that only knows canonical codes.
+  const aliased = createOCRResult(baseOCRResult({ language: "chi_sim" }));
+  assert.equal(aliased.language, "zh-CN");
+  // ...while genuinely unknown languages are still rejected (guards test 3 semantics).
+  assert.throws(() => createOCRResult(baseOCRResult({ language: "fr" })));
+
+  // getDefaultOCRLanguage normalizes config and defaults to zh-CN
+  assert.equal(getDefaultOCRLanguage({}), "zh-CN");
+  assert.equal(getDefaultOCRLanguage({ options: { ocr: { language: "chi_sim" } } }), "zh-CN");
+  assert.equal(getDefaultOCRLanguage({ options: { ocr: { language: "en" } } }), "en");
+  // stage boundary coerces unknown configured languages to auto instead of letting the
+  // whole recognition fail at result validation after a successful inference
+  assert.equal(getDefaultOCRLanguage({ options: { ocr: { language: "fr" } } }), "auto");
+  assert.equal(coerceOCRLanguage("de"), "auto");
+  assert.equal(coerceOCRLanguage("chi_sim"), "zh-CN");
+
+  // runOCRStage wires ctx.options.ocr.language through to engine.recognize
+  const seen = [];
+  const wireStub = {
+    id: "lang-wire-stub",
+    taskCapabilities: ["ocr-text"],
+    manifestId: "lang-wire-stub",
+    isAvailable: () => true,
+    recognize: async ({ options }) => {
+      seen.push(options?.language);
+      return createOCRResult(baseOCRResult());
+    },
+  };
+  defaultOCRRegistry.register(wireStub);
+  try {
+    const tinyPng =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=";
+    const model = toDocumentModel(tinyPng, "png", "lang-wire.png");
+    await runOCRStage(model, { ocrEngine: wireStub, options: { ocr: { language: "chi_sim" } } });
+    await runOCRStage(model, { ocrEngine: wireStub, options: {} });
+    await runOCRStage(model, { ocrEngine: wireStub, options: { ocr: { language: "en" } } });
+    assert.deepEqual(seen, ["zh-CN", "zh-CN", "en"], "engine must receive normalized language (alias→canonical, default zh-CN)");
+  } finally {
+    defaultOCRRegistry.unregister(wireStub.id);
+  }
+
+  // runScannedPdfOCRStage wires the language too
+  const scanSeen = [];
+  setPdfPageRasterizer({
+    async countPages() { return 1; },
+    async rasterize() { return { dataUrl: "data:image/png;base64,AA==", width: 10, height: 10 }; },
+  });
+  const scanStub = {
+    id: "lang-scan-stub",
+    taskCapabilities: ["ocr-text"],
+    manifestId: "lang-scan-stub",
+    isAvailable: () => true,
+    recognize: async ({ options }) => {
+      scanSeen.push(options?.language);
+      return createOCRResult(baseOCRResult());
+    },
+  };
+  defaultOCRRegistry.register(scanStub);
+  try {
+    await runScannedPdfOCRStage({
+      schemaVersion: "trans2former.document.v1",
+      title: "lang-scan",
+      sourceFormat: "pdf",
+      blocks: [],
+      assets: [],
+      metadata: {},
+    }, { content: "%PDF-1.4\nfake\n%%EOF", ocrEngine: scanStub, options: { ocr: { language: "eng", maxScanPages: 1 } } });
+    assert.deepEqual(scanSeen, ["en"], "scan stage must pass the normalized requested language");
+  } finally {
+    defaultOCRRegistry.unregister(scanStub.id);
+    resetPdfPageRasterizer();
+  }
+
+  // tesseract runtime result mapping survives alias input
+  const fakeWorker = { recognize: async () => ({ data: { text: "hi", lines: [], confidence: 90 } }) };
+  const mapped = await runRecognize(fakeWorker, "img", { language: "chi_sim" });
+  assert.equal(mapped.language, "zh-CN", "tesseract result mapping must normalize the alias");
+}
+
 // 24. detectOCRLowConfidence emits replaceTextRun candidates for low-confidence lines
 {
   const model = {
@@ -720,6 +891,89 @@ function makeStubEngine(overrides = {}) {
     assert.equal(enhanced.metadata?.modelReview?.engine, "scan-stub-engine");
     assert.equal(enhanced.metadata?.modelReview?.ocr?.pageCount, 2);
     assert.equal(enhanced.metadata?.ocr?.lineCount, 2);
+    // No truncation when all pages fit within maxScanPages.
+    assert.equal(enhanced.metadata?.ocr?.truncated, false);
+    assert.equal(enhanced.metadata?.ocr?.totalPageCount, 2);
+    assert.equal(
+      (enhanced.metadata?.warnings || []).some((w) => w.code === OCR_SCAN_PAGES_TRUNCATED),
+      false,
+      "no truncation warning when every page is processed",
+    );
+  } finally {
+    defaultOCRRegistry.unregister(stubEngine.id);
+    resetPdfPageRasterizer();
+  }
+}
+
+// 29b. runScannedPdfOCRStage surfaces page truncation: pages beyond maxScanPages emit a
+//      lossy OCR_SCAN_PAGES_TRUNCATED warning and metadata records the total page count.
+{
+  const stubRasterizer = {
+    async countPages() { return 8; },
+    async rasterize({ pageIndex }) {
+      return { dataUrl: `data:image/png;base64,PAGE${pageIndex}==`, width: 100, height: 100 };
+    },
+  };
+  setPdfPageRasterizer(stubRasterizer);
+  const stubEngine = {
+    id: "scan-trunc-engine",
+    taskCapabilities: ["ocr-text"],
+    manifestId: "scan-trunc",
+    isAvailable: () => true,
+    recognize: async ({ image }) => createOCRResult({
+      language: "zh-CN",
+      pages: [{ pageIndex: 0, width: 100, height: 100, lines: [{ text: `T-${String(image).slice(-8)}`, confidence: 0.9, bbox: null }] }],
+      fullText: "t",
+      averageConfidence: 0.9,
+      runtimeMs: 1,
+      engine: "scan-trunc-engine",
+      modelVersion: "0.0.1",
+    }),
+  };
+  defaultOCRRegistry.register(stubEngine);
+  try {
+    const enhanced = await runScannedPdfOCRStage({
+      schemaVersion: "trans2former.document.v1",
+      title: "scan-trunc",
+      sourceFormat: "pdf",
+      blocks: [],
+      assets: [],
+      metadata: {},
+    }, {
+      content: "%PDF-1.4\nfake\n%%EOF",
+      options: { ocr: { maxScanPages: 2 } },
+    });
+    const warning = (enhanced.metadata?.warnings || []).find((w) => w.code === OCR_SCAN_PAGES_TRUNCATED);
+    assert.ok(warning, "truncation warning must be emitted when pageCount exceeds maxScanPages");
+    assert.equal(warning.severity, "lossy", "unprocessed pages are real content loss");
+    assert.equal(warning.details.totalPages, 8);
+    assert.equal(warning.details.processedPages, 2);
+    assert.equal(warning.details.maxScanPages, 2);
+    assert.equal(enhanced.metadata?.ocr?.pageCount, 2, "pageCount keeps meaning processed pages");
+    assert.equal(enhanced.metadata?.ocr?.totalPageCount, 8);
+    assert.equal(enhanced.metadata?.ocr?.truncated, true);
+    assert.equal(enhanced.metadata?.modelReview?.ocr?.totalPageCount, 8);
+    assert.equal(enhanced.metadata?.modelReview?.ocr?.pageCount, 2);
+
+    // maxScanPages 0 / negative / NaN must clamp to the default instead of silently
+    // dropping the whole document or emitting negative page math
+    for (const bogus of [0, -3, Number.NaN]) {
+      const clamped = await runScannedPdfOCRStage({
+        schemaVersion: "trans2former.document.v1",
+        title: "scan-clamp",
+        sourceFormat: "pdf",
+        blocks: [],
+        assets: [],
+        metadata: {},
+      }, {
+        content: "%PDF-1.4\nfake\n%%EOF",
+        options: { ocr: { maxScanPages: bogus } },
+      });
+      assert.equal(clamped.metadata?.ocr?.pageCount, 5, `maxScanPages=${bogus} must clamp to the default of 5`);
+      const clampWarning = (clamped.metadata?.warnings || []).find((w) => w.code === OCR_SCAN_PAGES_TRUNCATED);
+      assert.ok(clampWarning, `maxScanPages=${bogus}: truncation past the clamped default must still warn`);
+      assert.equal(clampWarning.details.processedPages, 5);
+    }
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
     resetPdfPageRasterizer();
@@ -976,7 +1230,7 @@ function makeStubEngine(overrides = {}) {
   // With vendor + models simulated ready, recognize reaches the runtime loader and surfaces
   // the vendor-load failure (rather than the earlier vendor-not-ready / model-missing stages).
   markPaddleOcrVendorReady(true);
-  for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+  for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
     await paddleOcrEngine._storage.put(`paddleocr/v5/${file}`, new Uint8Array([1]).buffer, { sha256: "x" });
   }
   try {
@@ -986,47 +1240,59 @@ function makeStubEngine(overrides = {}) {
       "paddle recognize should reach loadOnnxRuntime and reject with OCR_VENDOR_LOAD_FAILED in Node",
     );
   } finally {
-    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
       await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
     }
     markPaddleOcrVendorReady(false);
   }
 }
 
-// 37. PP-OCRv5 model import availability flip (P9-D.3): required det+rec present + vendor ready
-//     => isAvailable() true; cls is OPTIONAL (removing it stays ready); removing a required
-//     model (rec) => false. Mirrors security-center import/clear with cls optional.
+// 37. PP-OCRv5 asset import availability flip (P9-D.3): required det+rec+dict present + vendor
+//     ready => isAvailable() true; cls is OPTIONAL (removing it stays ready); removing a
+//     required asset (rec / dict) => false. Mirrors security-center import/clear with cls optional.
 {
   const det = "paddleocr/v5/det.onnx";
   const cls = "paddleocr/v5/cls.onnx";
   const rec = "paddleocr/v5/rec.onnx";
+  const dict = "paddleocr/v5/dict.txt";
   markPaddleOcrVendorReady(true);
   try {
-    // partial: det present but required rec missing => not ready (cls present but optional)
+    // partial: det present but required rec/dict missing => not ready (cls present but optional)
     await paddleOcrEngine._storage.put(det, new Uint8Array([1]).buffer, { sha256: "a" });
     await paddleOcrEngine._storage.put(cls, new Uint8Array([2]).buffer, { sha256: "b" });
-    assert.equal(await paddleOcrEngine.ensureProbe(), false, "det without required rec should not be ready");
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "det without required rec/dict should not be ready");
     assert.equal(paddleOcrEngine.isAvailable(), false);
 
-    // required det+rec present => ready
+    // det+rec without dict => still not ready (issue #7: engine used to report available
+    // without the CTC dictionary and produced empty text)
     await paddleOcrEngine._storage.put(rec, new Uint8Array([3]).buffer, { sha256: "c" });
-    assert.equal(await paddleOcrEngine.ensureProbe(), true, "required det+rec present => ready");
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "det+rec without dict must not be ready");
+    assert.equal(paddleOcrEngine.isAvailable(), false);
+
+    // required det+rec+dict present => ready
+    await paddleOcrEngine._storage.put(dict, new Uint8Array([4]).buffer, { sha256: "d" });
+    assert.equal(await paddleOcrEngine.ensureProbe(), true, "required det+rec+dict present => ready");
     assert.equal(paddleOcrEngine.isAvailable(), true);
 
     // vendor flag off => unavailable even with models
     markPaddleOcrVendorReady(false);
     assert.equal(paddleOcrEngine.isAvailable(), false, "vendor not ready => unavailable regardless of models");
 
-    // remove OPTIONAL cls => still ready (det+rec remain)
+    // remove OPTIONAL cls => still ready (det+rec+dict remain)
     markPaddleOcrVendorReady(true);
     await paddleOcrEngine._storage.delete(cls);
     assert.equal(await paddleOcrEngine.ensureProbe(), true, "removing optional cls keeps readiness");
 
+    // remove REQUIRED dict => not ready
+    await paddleOcrEngine._storage.delete(dict);
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "removing required dict should drop readiness");
+
     // remove a REQUIRED model (rec) => not ready
+    await paddleOcrEngine._storage.put(dict, new Uint8Array([4]).buffer, { sha256: "d" });
     await paddleOcrEngine._storage.delete(rec);
     assert.equal(await paddleOcrEngine.ensureProbe(), false, "removing required rec should drop readiness");
   } finally {
-    for (const key of [det, cls, rec]) await paddleOcrEngine._storage.delete(key);
+    for (const key of [det, cls, rec, dict]) await paddleOcrEngine._storage.delete(key);
     markPaddleOcrVendorReady(false);
     await paddleOcrEngine.ensureProbe();
   }
@@ -1055,7 +1321,7 @@ function makeStubEngine(overrides = {}) {
   await tesseractOCREngine._storage.put("tesseract/eng.traineddata", new Uint8Array([1]).buffer, { sha256: "x" });
   await tesseractOCREngine.ensureProbe();
   markPaddleOcrVendorReady(true);
-  for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+  for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
     await paddleOcrEngine._storage.put(`paddleocr/v5/${file}`, new Uint8Array([1]).buffer, { sha256: "x" });
   }
   await paddleOcrEngine.ensureProbe();
@@ -1065,14 +1331,14 @@ function makeStubEngine(overrides = {}) {
     assert.equal(defaultOCRRegistry.pickForTask("ocr-text").id, "paddleocr-v5", "PP-OCRv5 should be preferred over tesseract when both available");
 
     // Remove paddle models => tesseract wins.
-    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
       await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
     }
     await paddleOcrEngine.ensureProbe();
     assert.equal(defaultOCRRegistry.pickForTask("ocr-text").id, "tesseract-zh-en", "tesseract should win when paddle unavailable");
   } finally {
     await tesseractOCREngine._storage.delete("tesseract/eng.traineddata");
-    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
       await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
     }
     markTesseractVendorReady(false);

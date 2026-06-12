@@ -1,7 +1,8 @@
 import { createParagraph } from "../document-model.js";
 import { createWarning, withWarnings } from "../warnings.js";
 import { defaultOCRRegistry } from "./ocr-engine.js";
-import { createOCREngineFailedWarning, createOCRUnavailableWarning, createOCRLowConfidenceWarning } from "./ocr-warnings.js";
+import { createOCREngineFailedWarning, createOCRUnavailableWarning, createOCRLowConfidenceWarning, createOCRScanPagesTruncatedWarning } from "./ocr-warnings.js";
+import { DEFAULT_OCR_LANGUAGE, coerceOCRLanguage } from "./ocr-language.js";
 import { defaultPdfPageRasterizer } from "./pdf-rasterizer.js";
 import { mergeOCRResultsToFixedLayout } from "./ocr-to-fixed-layout.js";
 import { mapLinesToBlockIds } from "./ocr-structure.js";
@@ -56,10 +57,18 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     };
   }
   const rasterizer = ctx.rasterizer || defaultPdfPageRasterizer;
-  const maxPages = typeof ctx?.options?.ocr?.maxScanPages === "number"
-    ? ctx.options.ocr.maxScanPages
+  // 钳位到 ≥1 的整数：0/负数/NaN 一律回落默认值，杜绝「maxScanPages=0 静默丢弃全文」
+  // 与负页码乱码 warning 两类边界（issue #5 复核发现）。
+  const rawMaxPages = ctx?.options?.ocr?.maxScanPages;
+  const maxPages = typeof rawMaxPages === "number" && Number.isFinite(rawMaxPages) && rawMaxPages >= 1
+    ? Math.floor(rawMaxPages)
     : DEFAULT_MAX_SCAN_PAGES;
   const dpi = typeof ctx?.options?.ocr?.dpi === "number" ? ctx.options.ocr.dpi : DEFAULT_DPI;
+  // 用户语言偏好（options.ocr.language）归一化后传引擎；注意下方已有 `let language`
+  // 累积变量（记录引擎返回的语言），此处必须用独立名字避免遮蔽。
+  const requestedLanguage = ctx?.options?.ocr?.language
+    ? coerceOCRLanguage(ctx.options.ocr.language)
+    : DEFAULT_OCR_LANGUAGE;
 
   let pageCount;
   try {
@@ -81,6 +90,18 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
   if (effectivePages === 0) return model;
 
   const enhanced = cloneModel(model);
+  const truncated = typeof pageCount === "number" && pageCount > effectivePages;
+  if (truncated) {
+    // 在循环前注入：即使后续每页 OCR 都失败，截断事实也不丢。
+    enhanced.metadata = withWarnings(enhanced.metadata, [
+      createOCRScanPagesTruncatedWarning({
+        totalPages: pageCount,
+        processedPages: effectivePages,
+        maxScanPages: maxPages,
+        engineId: engine.id,
+      }),
+    ]);
+  }
   const lines = [];
   const aggregateConfidences = [];
   const pageResults = [];
@@ -92,7 +113,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     let pageResult;
     try {
       const rendered = await rasterizer.rasterize({ content: ctx.content, pageIndex, dpi });
-      pageResult = await engine.recognize({ image: rendered.dataUrl, options: { language: "chi_sim" } });
+      pageResult = await engine.recognize({ image: rendered.dataUrl, options: { language: requestedLanguage } });
     } catch (error) {
       enhanced.metadata = withWarnings(enhanced.metadata, [
         createOCREngineFailedWarning({
@@ -165,6 +186,9 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
   enhanced.metadata.ocr = {
     language: language || "auto",
     pageCount: effectivePages,
+    // 空 PDF 时 effectivePages 被既有 Math.max(1,…) 钳到 1，取 max 保证 total ≥ processed。
+    totalPageCount: typeof pageCount === "number" ? Math.max(pageCount, effectivePages) : effectivePages,
+    truncated,
     lineCount: lines.length,
     lines,
   };
@@ -176,6 +200,8 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     inferenceMode: "local",
     ocr: {
       pageCount: effectivePages,
+      totalPageCount: typeof pageCount === "number" ? Math.max(pageCount, effectivePages) : effectivePages,
+      truncated,
       lineCount: lines.length,
       averageConfidence,
       runtimeMs: runtimeMsTotal,

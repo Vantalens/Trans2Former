@@ -4,6 +4,7 @@
 
 import { createWarning } from "../warnings.js";
 import { defaultOCRRegistry } from "../ocr/ocr-engine.js";
+import { normalizeOCRLanguage } from "../ocr/ocr-language.js";
 import { defaultPdfPageRasterizer } from "../ocr/pdf-rasterizer.js";
 
 export const OCR_READBACK_DRIFT = "OCR_READBACK_DRIFT";
@@ -126,7 +127,7 @@ export async function runOcrReadbackLayer({
   const threshold = typeof ctx?.options?.verification?.ocrReadbackThreshold === "number"
     ? ctx.options.verification.ocrReadbackThreshold
     : DEFAULT_OCR_READBACK_THRESHOLD;
-  const language = ctx?.options?.ocr?.language || "auto";
+  const language = normalizeOCRLanguage(ctx?.options?.ocr?.language);
 
   let recognized;
   try {

@@ -81,3 +81,7 @@ Thumbs.db
 *_debug*.png
 /.chrome-debug-profile*/
 /.edge-debug-profile*/
+
+# Coverage output (regenerable via npm run coverage)
+/.coverage-tmp/
+/coverage/

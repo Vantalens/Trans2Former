@@ -581,6 +581,9 @@ export async function runPaddlePipeline({
   };
 
   const result = createOCRResult({
+    // PP-OCRv5 是中英混合单模型：language 不选择模型、不影响推理，仅作为结果元数据
+    // 标签（createOCRResult 内部把 chi_sim 等别名归一化为 canonical 码）。真正按
+    // 语言切换数据的只有 tesseract（按语言选 traineddata）。
     language: options.language || "auto",
     pages: [
       {

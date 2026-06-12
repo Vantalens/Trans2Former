@@ -364,19 +364,22 @@ export {
   OCR_LOW_CONFIDENCE,
   OCR_ENGINE_FAILED,
   OCR_DEGRADED_ROUTE,
+  OCR_SCAN_PAGES_TRUNCATED,
   OCR_WARNING_CODES,
   createOCRUnavailableWarning,
   createOCREngineFailedWarning,
   createOCRLowConfidenceWarning,
   createOCRDegradedRouteWarning,
+  createOCRScanPagesTruncatedWarning,
 } from "./core/ocr/ocr-warnings.js";
 export { ensureOCRBootstrap } from "./core/ocr/ocr-bootstrap.js";
 export {
   tesseractOCREngine,
   TESSERACT_MANIFEST_ID,
+  TESSERACT_DEFAULT_LANGUAGES,
   markTesseractVendorReady,
 } from "./core/ocr/tesseract-engine.js";
-export { ensureTesseractBootstrap } from "./core/ocr/tesseract-bootstrap.js";
+export { ensureTesseractBootstrap, rehydrateTesseractAvailability } from "./core/ocr/tesseract-bootstrap.js";
 export {
   paddleOcrEngine,
   PADDLE_OCR_MANIFEST_ID,
@@ -429,14 +432,17 @@ export { IndexedDBStorage } from "./core/ocr/indexeddb-storage.js";
 export {
   OCR_VENDOR_LOAD_FAILED,
   TESSERACT_VENDOR_PATHS,
+  TESSDATA_CACHE_PATH,
   loadTesseractRuntime,
   createTesseractWorker,
+  clearSeededTessdata,
   runRecognize,
   disposeWorker,
 } from "./core/ocr/tesseract-runtime.js";
 export { enhanceWithOCR } from "./core/ocr/png-ocr.js";
 export { deriveOcrStructure, blocksFromOcrResult } from "./core/ocr/ocr-structure.js";
 export { runOCRStage, getDefaultOCRLanguage } from "./core/ocr/ocr-stage.js";
+export { normalizeOCRLanguage, coerceOCRLanguage, toTesseractLanguage, DEFAULT_OCR_LANGUAGE } from "./core/ocr/ocr-language.js";
 export { detectOCRLowConfidence } from "./core/ocr/ocr-validator.js";
 export {
   isScannedPdf,

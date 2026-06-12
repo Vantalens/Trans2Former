@@ -1,12 +1,26 @@
 import { ConversionError } from "../conversion-error.js";
 import { createOCRResult } from "./ocr-result.js";
+import { normalizeOCRLanguage } from "./ocr-language.js";
 
 export const OCR_VENDOR_LOAD_FAILED = "OCR_VENDOR_LOAD_FAILED";
 export const TESSERACT_VENDOR_PATHS = Object.freeze({
   corePath: "/vendor/tesseract/core/",
   workerPath: "/vendor/tesseract/worker/worker.min.js",
   mainBundle: "/vendor/tesseract/core/tesseract.min.js",
+  // 仅作 cache miss 时的同源 fallback；正常路径 worker 从预写缓存取 tessdata，
+  // 永远不会向 langPath 发起 fetch。
+  langPath: "/vendor/tesseract/tessdata",
 });
+
+// tesseract.js 5.x browser worker 用 idb-keyval 默认库读取 tessdata 缓存
+// （库名 keyval-store / 表名 keyval，key = `${cachePath}/${lang}.traineddata`）。
+// 主线程把导入的 tessdata 字节预写进该缓存 + cacheMethod "readOnly"，worker
+// loadLanguage 命中缓存直接 FS.writeFile，绕开 langPath fetch——blob URL 方案
+// （langPath 不可拼接 `/<lang>.traineddata.gz`）在真实浏览器从未工作过。
+const TESSDATA_CACHE_DB = "keyval-store";
+const TESSDATA_CACHE_STORE = "keyval";
+export const TESSDATA_CACHE_PATH = "trans2former/tessdata";
+const WORKER_INIT_TIMEOUT_MS = 60000;
 
 let cachedNamespace = null;
 
@@ -56,9 +70,72 @@ export async function loadTesseractRuntime() {
   );
 }
 
-function bufferToBlobUrl(buffer) {
-  const blob = new Blob([buffer], { type: "application/octet-stream" });
-  return URL.createObjectURL(blob);
+function openTessdataCacheDB() {
+  return new Promise((resolve, reject) => {
+    // 与 idb-keyval v6 对齐：不指定版本号打开（keyval-store 是共享默认库名，钉死
+    // version 会在第三方升过版本时抛 VersionError）。store 缺失时再用 version+1 重开补建。
+    const request = globalThis.indexedDB.open(TESSDATA_CACHE_DB);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(TESSDATA_CACHE_STORE)) {
+        db.createObjectStore(TESSDATA_CACHE_STORE);
+      }
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      if (db.objectStoreNames.contains(TESSDATA_CACHE_STORE)) {
+        resolve(db);
+        return;
+      }
+      const version = db.version + 1;
+      db.close();
+      const retry = globalThis.indexedDB.open(TESSDATA_CACHE_DB, version);
+      retry.onupgradeneeded = () => {
+        retry.result.createObjectStore(TESSDATA_CACHE_STORE);
+      };
+      retry.onsuccess = () => resolve(retry.result);
+      retry.onerror = () => reject(retry.error);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function seedTessdataCache(language, buffer) {
+  if (!globalThis.indexedDB) return false;
+  const db = await openTessdataCacheDB();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(TESSDATA_CACHE_STORE, "readwrite");
+      tx.objectStore(TESSDATA_CACHE_STORE).put(
+        new Uint8Array(buffer),
+        `${TESSDATA_CACHE_PATH}/${language}.traineddata`,
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    return true;
+  } finally {
+    db.close();
+  }
+}
+
+export async function clearSeededTessdata(language) {
+  if (!globalThis.indexedDB) return;
+  try {
+    const db = await openTessdataCacheDB();
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(TESSDATA_CACHE_STORE, "readwrite");
+        tx.objectStore(TESSDATA_CACHE_STORE).delete(`${TESSDATA_CACHE_PATH}/${language}.traineddata`);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+    } finally {
+      db.close();
+    }
+  } catch (error) { /* best-effort cleanup */ }
 }
 
 export async function createTesseractWorker({
@@ -88,24 +165,47 @@ export async function createTesseractWorker({
       details: { reason: "missing-tessdata" },
     });
   }
-  const tessdataUrl = bufferToBlobUrl(tessdataBuffer);
   try {
-    const worker = await namespace.createWorker(language, undefined, {
-      corePath: vendorPaths.corePath,
-      workerPath: vendorPaths.workerPath,
-      langPath: tessdataUrl.replace(/\/[^/]+$/, "/"),
-      cacheMethod: "none",
-      logger: () => {},
+    await seedTessdataCache(language, tessdataBuffer);
+  } catch (error) {
+    throw new ConversionError(`tessdata 预写浏览器缓存失败：${error?.message || error}`, {
+      category: "convert",
+      code: "OCR_ENGINE_FAILED",
+      details: { reason: "tessdata-seed-failed", cause: String(error?.name || error?.message || "unknown") },
     });
-    worker.__t2fTessdataUrl = tessdataUrl;
+  }
+  // tesseract.js 5.x 的 loadLanguage/initialize 失败在某些路径上不会让 createWorker
+  // reject（内部 .catch 吞掉），表现为永不 settle 的 promise——超时背板把静默挂死
+  // 转成可见、可清理的错误。
+  let timeoutId = null;
+  try {
+    const worker = await Promise.race([
+      namespace.createWorker(language, undefined, {
+        corePath: vendorPaths.corePath,
+        workerPath: vendorPaths.workerPath,
+        langPath: vendorPaths.langPath || TESSERACT_VENDOR_PATHS.langPath,
+        cachePath: TESSDATA_CACHE_PATH,
+        cacheMethod: "readOnly",
+        logger: () => {},
+      }),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Tesseract worker 初始化超过 ${WORKER_INIT_TIMEOUT_MS / 1000}s 未完成（多为 tessdata 缓存未命中且 langPath 兜底不可用）`)),
+          WORKER_INIT_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    worker.__t2fTessdataLanguage = language;
     return worker;
   } catch (error) {
-    URL.revokeObjectURL(tessdataUrl);
+    await clearSeededTessdata(language);
     throw new ConversionError(`Tesseract worker 初始化失败：${error?.message || error}`, {
       category: "convert",
       code: "OCR_ENGINE_FAILED",
       details: { reason: "worker-init-failed", cause: String(error?.name || error?.message || "unknown") },
     });
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
   }
 }
 
@@ -128,11 +228,6 @@ export async function runRecognize(worker, image, options = {}) {
       code: "OCR_ENGINE_FAILED",
       details: { reason: "recognize-failed", cause: String(error?.name || error?.message || "unknown") },
     });
-  } finally {
-    if (worker.__t2fTessdataUrl) {
-      try { URL.revokeObjectURL(worker.__t2fTessdataUrl); } catch (revokeError) { /* ignore */ }
-      worker.__t2fTessdataUrl = "";
-    }
   }
 }
 
@@ -157,7 +252,7 @@ function mapTesseractResultToOCR(response, runtimeMs, options) {
     ? Math.max(0, Math.min(1, data.confidence / 100))
     : 0;
   return createOCRResult({
-    language: options?.language || "auto",
+    language: normalizeOCRLanguage(options?.language),
     pages: [
       {
         pageIndex: 0,
@@ -178,5 +273,9 @@ function mapTesseractResultToOCR(response, runtimeMs, options) {
 export async function disposeWorker(worker) {
   if (worker && typeof worker.terminate === "function") {
     try { await worker.terminate(); } catch (error) { /* ignore */ }
+  }
+  if (worker && worker.__t2fTessdataLanguage) {
+    await clearSeededTessdata(worker.__t2fTessdataLanguage);
+    worker.__t2fTessdataLanguage = "";
   }
 }

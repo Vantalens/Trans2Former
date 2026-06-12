@@ -4,12 +4,14 @@ export const OCR_UNAVAILABLE = "OCR_UNAVAILABLE";
 export const OCR_LOW_CONFIDENCE = "OCR_LOW_CONFIDENCE";
 export const OCR_ENGINE_FAILED = "OCR_ENGINE_FAILED";
 export const OCR_DEGRADED_ROUTE = "OCR_DEGRADED_ROUTE";
+export const OCR_SCAN_PAGES_TRUNCATED = "OCR_SCAN_PAGES_TRUNCATED";
 
 export const OCR_WARNING_CODES = Object.freeze([
   OCR_UNAVAILABLE,
   OCR_LOW_CONFIDENCE,
   OCR_ENGINE_FAILED,
   OCR_DEGRADED_ROUTE,
+  OCR_SCAN_PAGES_TRUNCATED,
 ]);
 
 export function createOCRUnavailableWarning(details = {}) {
@@ -61,6 +63,24 @@ export function createOCRDegradedRouteWarning(details = {}) {
       task: details.task || "ocr-text",
       manifestId: details.manifestId || "",
       reason: details.reason || "engine-not-enabled",
+    },
+  );
+}
+
+export function createOCRScanPagesTruncatedWarning(details = {}) {
+  const totalPages = details.totalPages ?? 0;
+  const processedPages = details.processedPages ?? 0;
+  const maxScanPages = details.maxScanPages ?? processedPages;
+  // severity "lossy"：未处理页是真实内容丢失，需计入 downgradeCount 并在报告中可见。
+  return createWarning(
+    "lossy",
+    OCR_SCAN_PAGES_TRUNCATED,
+    `扫描 PDF 共 ${totalPages} 页，仅对前 ${processedPages} 页执行 OCR（上限 maxScanPages=${maxScanPages}）；第 ${processedPages + 1}–${totalPages} 页未转换。如需完整转换，请调高 options.ocr.maxScanPages。`,
+    {
+      totalPages,
+      processedPages,
+      maxScanPages,
+      engineId: details.engineId || "",
     },
   );
 }

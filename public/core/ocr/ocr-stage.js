@@ -1,9 +1,8 @@
 import { defaultOCRRegistry } from "./ocr-engine.js";
 import { enhanceWithOCR } from "./png-ocr.js";
 import { createOCREngineFailedWarning } from "./ocr-warnings.js";
+import { DEFAULT_OCR_LANGUAGE, coerceOCRLanguage } from "./ocr-language.js";
 import { withWarnings } from "../warnings.js";
-
-const DEFAULT_LANGUAGE = "chi_sim";
 
 function shouldSkip(ctx) {
   return Boolean(ctx?.options?.ocr?.enabled === false);
@@ -15,7 +14,7 @@ export async function runOCRStage(model, ctx = {}) {
   const engine = ctx.ocrEngine || registry.pickForTask("ocr-text");
   if (!engine) return model;
   try {
-    const enhanced = await enhanceWithOCR(model, { engine, registry });
+    const enhanced = await enhanceWithOCR(model, { engine, registry, language: getDefaultOCRLanguage(ctx) });
     return enhanced;
   } catch (error) {
     return {
@@ -33,5 +32,6 @@ export async function runOCRStage(model, ctx = {}) {
 }
 
 export function getDefaultOCRLanguage(ctx = {}) {
-  return ctx?.options?.ocr?.language || DEFAULT_LANGUAGE;
+  const raw = ctx?.options?.ocr?.language;
+  return raw ? coerceOCRLanguage(raw) : DEFAULT_OCR_LANGUAGE;
 }

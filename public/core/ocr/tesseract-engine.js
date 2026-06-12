@@ -1,5 +1,6 @@
 import { ConversionError } from "../conversion-error.js";
 import { defaultOCRStorage } from "./ocr-storage.js";
+import { toTesseractLanguage } from "./ocr-language.js";
 import {
   OCR_ENGINE_FAILED,
   OCR_UNAVAILABLE,
@@ -14,7 +15,8 @@ import {
 export const TESSERACT_MANIFEST_ID = "ocr-text.tesseract.5.0.0";
 
 const TESSDATA_KEY_PREFIX = "tesseract/";
-const DEFAULT_LANGUAGES = ["chi_sim", "eng"];
+export const TESSERACT_DEFAULT_LANGUAGES = Object.freeze(["chi_sim", "eng"]);
+const DEFAULT_LANGUAGES = TESSERACT_DEFAULT_LANGUAGES;
 
 // 就绪状态放模块级可变变量，而非冻结对象的实例属性（冻结对象在严格模式下无法被
 // ensureProbe 赋值）。引擎对象本身仍可 Object.freeze 防外部篡改。
@@ -72,7 +74,13 @@ export const tesseractOCREngine = Object.freeze({
         },
       );
     }
-    const language = await hasAnyTessdata(this._storage, options?.languages || DEFAULT_LANGUAGES);
+    // 语言偏好接线：canonical 码（zh-CN/en）映射到 tessdata 语言码（chi_sim/eng），
+    // 请求的语言优先、其余默认语言垫底；显式 options.languages（复数）覆盖一切。
+    const requested = toTesseractLanguage(options?.language);
+    const candidates = Array.isArray(options?.languages) && options.languages.length > 0
+      ? options.languages
+      : (requested ? [requested, ...DEFAULT_LANGUAGES.filter((l) => l !== requested)] : DEFAULT_LANGUAGES);
+    const language = await hasAnyTessdata(this._storage, candidates);
     if (!language) {
       throw new ConversionError(
         "未在本地缓存中找到 tessdata；请先在安全中心导入 .traineddata 文件。",

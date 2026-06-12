@@ -1,15 +1,9 @@
 import { ConversionError } from "../conversion-error.js";
+import { normalizeOCRLanguage, OCR_LANGUAGES } from "./ocr-language.js";
 
 export const OCR_RESULT_SCHEMA_VERSION = "trans2former.ocr-result.v1";
 
-export const OCR_LANGUAGES = Object.freeze([
-  "zh-CN",
-  "zh-TW",
-  "en",
-  "ja",
-  "ko",
-  "auto",
-]);
+export { OCR_LANGUAGES };
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -47,7 +41,9 @@ export function createOCRResult({
 } = {}) {
   const result = {
     schemaVersion: OCR_RESULT_SCHEMA_VERSION,
-    language,
+    // 引擎边界传入的 tesseract 码（chi_sim/eng）在此归一化为 canonical 码；
+    // validateOCRResult 本身不放松，未知值原样进入校验并被拒绝。
+    language: normalizeOCRLanguage(language),
     pages: Array.isArray(pages) ? pages.map((page) => ({
       pageIndex: page?.pageIndex ?? 0,
       width: page?.width ?? 0,

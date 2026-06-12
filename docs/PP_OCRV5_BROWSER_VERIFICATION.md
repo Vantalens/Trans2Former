@@ -27,8 +27,8 @@
 1. 启动：`npm start`（浏览器）或 `npm run desktop:dev`（Tauri）。
 2. 打开**安全中心** → 「模型缓存」card，找到 **PP-OCRv5 高级 OCR (ONNX/WebGPU)** 行：
    - 若已跑过 `npm run vendor:paddle`，det/rec/dict 随包，启动即自动载入、状态直接 **可用**，无需手动导入。
-   - 手动覆盖/替换：点「导入 det.onnx / rec.onnx」选择对应文件；**必选 det+rec 齐全**后状态即变 **可用**（SHA-256 校验通过）。cls.onnx 为可选导入（方向校正）。
-   - （字典：默认 `dict.txt` 已随包，无需手动导入。自定义字典暂无专用按钮——可临时在 console 调 `defaultOCRStorage.put("paddleocr/v5/dict.txt", buf, {sha256})`；专用按钮列为已知后续。）
+   - 手动覆盖/替换：点「导入 det.onnx / rec.onnx / dict.txt」选择对应文件；**必选 det+rec+dict 齐全**后状态即变 **可用**（SHA-256 校验通过）。cls.onnx 为可选导入（方向校正）。
+   - （字典：默认 `dict.txt` 已随包，无需手动导入。「导入 dict.txt」按钮仅接受与钉定清单 SHA-256 一致的官方字典；自定义字典暂不支持——任何非钉定字节会被校验拒绝，且 console 直写的副本会在下次启动复验时被清除还原。）
 3. 验证**引擎优先级**：在 console 执行
    ```js
    const m = await import("/browser-transformer.js");
@@ -43,7 +43,7 @@
 
 ## 通过标准
 
-- 必选 det+rec（+随包 dict）就位后 PP-OCRv5 行为「可用」，`pickForTask` 选中 `paddleocr-v5`；cls 为可选（仅影响 180° 方向校正）。
+- 必选 det+rec+dict 就位后 PP-OCRv5 行为「可用」，`pickForTask` 选中 `paddleocr-v5`；cls 为可选（仅影响 180° 方向校正）。
 - 含文字 PNG / 扫描 PDF 经高级 OCR 得到合理识别文本（精度取决于所用模型）。
 - 三层检验报告出现，rule-diff 恒在文本路径触发，ocrReadback 在 OCR 可用时触发。
 - 全程无远程网络请求。

@@ -10,15 +10,19 @@ import {
 } from "../model-cache/availability.js";
 import { ConversionError } from "../conversion-error.js";
 import { defaultOCRStorage } from "./ocr-storage.js";
-import { paddleOcrEngine, markPaddleOcrVendorReady, PADDLE_OCR_REQUIRED_FILES } from "./paddle-ocr-engine.js";
+import {
+  paddleOcrEngine,
+  markPaddleOcrVendorReady,
+  PADDLE_OCR_MODEL_FILES,
+  PADDLE_OCR_REQUIRED_FILES,
+} from "./paddle-ocr-engine.js";
 import { PADDLE_OCR_MANIFEST_ID } from "./paddle-ocr-engine.js";
 import { verifyPaddleVendorFile } from "./paddle-model-manifest.js";
 
 const VENDOR_BASE = "/vendor/paddleocr/";
 const STORAGE_PREFIX = "paddleocr/v5/";
-const DICT_FILE = "dict.txt";
-// cls（方向分类）可选：vendor 缺失时静默跳过，不拖垮 det/rec 的随包载入。
-const OPTIONAL_FILE = "cls.onnx";
+// cls（方向分类）不随包自动载入：manifest 声明 intentionally NOT bundled、无钉定
+// digest，自动载入等于给任意字节开后门。需要 cls 的用户走安全中心手动导入。
 
 let inflight = null;
 
@@ -43,7 +47,7 @@ async function fetchToBuffer(url) {
   return buffer;
 }
 
-async function clearPaddleCache(files = PADDLE_OCR_REQUIRED_FILES) {
+async function clearPaddleCache(files = PADDLE_OCR_MODEL_FILES) {
   for (const file of files) {
     await defaultOCRStorage.delete(`${STORAGE_PREFIX}${file}`);
   }
@@ -57,7 +61,8 @@ async function alreadyLoadedAndVerified() {
     try {
       await verifyPaddleVendorFile(file, buffer);
     } catch (error) {
-      await clearPaddleCache(PADDLE_OCR_REQUIRED_FILES);
+      // 连同历史遗留的未校验可选条目（cls）一起清，缓存中毒不留死角。
+      await clearPaddleCache();
       throw error;
     }
   }
@@ -90,30 +95,23 @@ export async function ensurePaddleDefaultModels() {
       if (!probe.ok) return { loaded: false, reason: "vendor-absent" };
 
       for (const file of PADDLE_OCR_REQUIRED_FILES) {
+        const key = `${STORAGE_PREFIX}${file}`;
+        // 逐文件增量：已缓存且校验通过的不重取（老部署缺 dict 时避免每次转换
+        // 重拉 det+rec ~21MB 才在 dict 处失败）。校验失败的照常重新 fetch 覆盖。
+        if (await defaultOCRStorage.has(key)) {
+          try {
+            await verifyPaddleVendorFile(file, await defaultOCRStorage.get(key));
+            continue;
+          } catch (staleError) {
+            await defaultOCRStorage.delete(key);
+          }
+        }
         const buffer = await fetchToBuffer(`${VENDOR_BASE}${file}`);
         const checksum = await verifyPaddleVendorFile(file, buffer);
-        await defaultOCRStorage.put(`${STORAGE_PREFIX}${file}`, buffer, {
+        await defaultOCRStorage.put(key, buffer, {
           source: "vendor-bundle",
           sha256: checksum.actual,
         });
-      }
-      // 方向分类 cls（可选）：vendor 缺失不致命；缺它管线跳过 180° 校正。
-      try {
-        const cls = await fetchToBuffer(`${VENDOR_BASE}${OPTIONAL_FILE}`);
-        await defaultOCRStorage.put(`${STORAGE_PREFIX}${OPTIONAL_FILE}`, cls, { source: "vendor-bundle" });
-      } catch (clsError) {
-        // cls 缺失不致命。
-      }
-      // 字典（可选）
-      try {
-        const dict = await fetchToBuffer(`${VENDOR_BASE}${DICT_FILE}`);
-        const checksum = await verifyPaddleVendorFile(DICT_FILE, dict);
-        await defaultOCRStorage.put(`${STORAGE_PREFIX}${DICT_FILE}`, dict, {
-          source: "vendor-bundle",
-          sha256: checksum.actual,
-        });
-      } catch (dictError) {
-        // 字典缺失不致命；识别可降级。
       }
 
       markPaddleOcrVendorReady(true);

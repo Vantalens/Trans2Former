@@ -332,6 +332,18 @@ function baseManifestInput(overrides = {}) {
     "PADDLE_OCR_VENDOR_DIGEST must equal sha256 over sorted \"name:sha256\" lines of the build manifest",
   );
 
+  // Required-set lockstep: every pinned required asset must gate engine availability,
+  // and every availability-gating asset must have a pinned digest (issue #7 guard).
+  const pinnedRequired = Object.entries(PADDLE_OCR_VENDOR_FILES)
+    .filter(([, spec]) => spec.required)
+    .map(([name]) => name)
+    .sort();
+  assert.deepEqual(
+    [...PADDLE_OCR_REQUIRED_FILES].sort(),
+    pinnedRequired,
+    "PADDLE_OCR_REQUIRED_FILES must match the required:true set of the pinned manifest",
+  );
+
   // Positive case: when the vendored models are present on disk, the pinned
   // digests must accept the real bytes (guards against pinning stale hashes).
   const vendorDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public", "vendor", "paddleocr");
