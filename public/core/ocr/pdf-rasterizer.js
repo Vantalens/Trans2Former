@@ -45,6 +45,16 @@ export async function isScannedPdf(content, options = {}) {
       };
     }
     const model = readPdf({ content: expanded, title: "isScannedPdf-probe", fileName: "" });
+    // 加密 PDF 不是扫描件：走 OCR 链路只会逐页 open 失败产出误导 warning（issue #104）
+    if (model?.metadata?.pdf?.encrypted) {
+      return {
+        scanned: false,
+        extractedChars: 0,
+        pageCount: 0,
+        threshold,
+        reason: "encrypted",
+      };
+    }
     const extractedChars = countModelText(model);
     const pageCount = Array.isArray(model?.metadata?.pages) ? model.metadata.pages.length : 0;
     return {

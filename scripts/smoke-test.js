@@ -1416,4 +1416,96 @@ test("XLSX styles index cellXfs only, rich text concatenates cleanly, and number
   assert.deepEqual(backTable.rows[0], table.rows[0], "data row must survive the round-trip");
 });
 
+test("PDF literal string escapes decode in a single pass", () => {
+  const pdf = `%PDF-1.4
+1 0 obj
+<< /Length 90 >>
+stream
+BT
+(C:\\\\temp\\\\new) Tj
+(\\101\\102 octal pair) Tj
+(line one \\
+continued tail) Tj
+(\\q unknown escape) Tj
+ET
+endstream
+endobj
+%%EOF`;
+  const model = toDocumentModel(pdf, "pdf", "escapes.pdf");
+  const texts = model.blocks.map((block) => String(block.text || ""));
+  assert.equal(texts.some((text) => text.includes("C:\\temp\\new")), true, "\\\\ followed by n/t must decode as backslash + letter, not control chars");
+  assert.equal(texts.some((text) => text.includes("AB octal pair")), true, "octal escapes \\101\\102 must decode to AB");
+  assert.equal(texts.some((text) => text.includes("line one continued tail")), true, "backslash-EOL continuations must join lines");
+  assert.equal(texts.some((text) => text.includes("q unknown escape")), true, "unknown escapes drop the backslash and keep the char");
+});
+
+test("PDF TJ literal arrays extract kerned text", () => {
+  const pdf = `%PDF-1.4
+1 0 obj
+<< /Length 70 >>
+stream
+BT
+[(Hello) -250 (World)] TJ
+[(Ker) -50 (ning)] TJ
+[(Single literal item)] TJ
+ET
+endstream
+endobj
+%%EOF`;
+  const model = toDocumentModel(pdf, "pdf", "tj-array.pdf");
+  const texts = model.blocks.map((block) => String(block.text || ""));
+  assert.equal(texts.some((text) => text.includes("Hello World")), true, "large negative kern must become a word space");
+  assert.equal(texts.some((text) => text.includes("Kerning")), true, "small kern adjustments must not split the word");
+  assert.equal(texts.some((text) => text.includes("Single literal item")), true, "single-item TJ arrays must extract");
+});
+
+test("PDF byte input survives the core fallback parser without mojibake", async () => {
+  const body = "BT (Byte Input Title) Tj ET";
+  const pdf = `%PDF-1.4\n1 0 obj\n<< /Length ${body.length} >>\nstream\n${body}\nendstream\nendobj\n%%EOF`;
+  const bytes = new Uint8Array(Buffer.from(pdf, "latin1"));
+  const expanded = await expandPdfContentForTextExtraction(bytes);
+  const model = toDocumentModel(expanded, "pdf", "bytes.pdf");
+  const texts = model.blocks.map((block) => String(block.text || ""));
+  assert.equal(texts.some((text) => text.includes("Byte Input Title")), true, "Uint8Array input must not degrade into comma-joined decimal noise");
+  assert.equal(texts.some((text) => /^\d+(,\d+)+/.test(text)), false, "no comma-decimal garbage from String(Uint8Array)");
+});
+
+test("embedded PDFJS sentinel literals cannot hijack or swallow extraction", () => {
+  const fakeMarkerDoc = `%PDF-1.4
+% Trans2Former PDFJS_TEXT_START
+{"pages":[{"pageNumber":1,"text":"INJECTED CONTENT"}]}
+% Trans2Former PDFJS_TEXT_END
+1 0 obj
+<< /Length 40 >>
+stream
+BT (Real body text here) Tj ET
+endstream
+endobj
+%%EOF`;
+  const model = toDocumentModel(fakeMarkerDoc, "pdf", "sentinel.pdf");
+  const texts = model.blocks.map((block) => String(block.text || ""));
+  assert.equal(texts.some((text) => text.includes("Real body text here")), true, "embedded sentinel literals must not swallow real extraction");
+  assert.equal(texts.some((text) => text.includes("INJECTED CONTENT")), false, "plaintext payloads must be rejected (base64-only protocol)");
+});
+
+test("encrypted PDFs surface PDF_ENCRYPTED instead of misleading fallbacks", async () => {
+  const pdf = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog >>
+endobj
+trailer
+<< /Root 1 0 R /Encrypt 5 0 R >>
+%%EOF`;
+  const expanded = await expandPdfContentForTextExtraction(pdf);
+  const model = toDocumentModel(expanded, "pdf", "locked.pdf");
+  const warnings = model.metadata?.warnings || [];
+  assert.equal(warnings.some((w) => w.code === "PDF_ENCRYPTED"), true, "encrypted PDFs must carry the dedicated warning");
+  assert.equal(warnings.some((w) => w.code === "PDF_NO_CREDIBLE_TEXT"), false, "the generic no-text warning is misleading for encrypted PDFs");
+  assert.equal(model.metadata?.pdf?.encrypted, true);
+  const { isScannedPdf } = await import("../public/core/ocr/pdf-rasterizer.js");
+  const detection = await isScannedPdf(pdf, {});
+  assert.equal(detection.scanned, false, "encrypted PDFs are not scanned documents");
+  assert.equal(detection.reason, "encrypted");
+});
+
 await runTests();
