@@ -272,6 +272,19 @@ function createAdvancedXlsxFixture() {
   });
 }
 
+function createStyledXlsxFixture() {
+  return createStoredZip({
+    "[Content_Types].xml": "<Types></Types>",
+    "xl/workbook.xml": `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Styled" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    // 真实结构：cellStyleXfs 在 cellXfs 之前——c@s 只索引 cellXfs（issue #90 的错位源）
+    "xl/styles.xml": `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy&quot;年&quot;m月"/></numFmts><cellStyleXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" xfId="0"/><xf numFmtId="14" xfId="0"/><xf numFmtId="164" xfId="0"/></cellXfs></styleSheet>`,
+    // 富文本 run / 注音 rPh / preserve 空格 三种 sharedStrings 形态（issue #91）
+    "xl/sharedStrings.xml": `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><r><rPr><b/></rPr><t>Tran</t></r><r><t>s2Former</t></r></si><si><t>東京</t><rPh sb="0" eb="2"><t>トウキョウ</t></rPh><phoneticPr fontId="1"/></si><si><t xml:space="preserve">  lead  ing</t></si><si><t>Head</t></si></sst>`,
+    "xl/worksheets/sheet1.xml": `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>3</v></c><c r="B1" t="s"><v>0</v></c><c r="C1" t="s"><v>1</v></c><c r="D1" t="s"><v>2</v></c></row><row r="2"><c r="A2" s="1"><v>45123</v></c><c r="B2"><v>12345</v></c><c r="C2" s="2"><v>45123</v></c><c r="D2" t="inlineStr"><is><r><t>in</t></r><r><t>line</t></r></is></c></row><row r="3"><c r="A3" t="str"><f>A1&amp;" x"</f><v>Head x</v></c><c r="B3"><f>SUM(1,2)</f><v>3</v></c></row></sheetData></worksheet>`,
+  });
+}
+
 function createEpubFixture() {
   return createStoredZip({
     "mimetype": "application/epub+zip",
@@ -1367,6 +1380,40 @@ test("Markdown round-trips escaped pipes, wide fences, hyphen languages, and lin
   const linkBackNode = parseInlineMarkdown(linkOut.data.trim()).find((node) => node.type === "link");
   assert.equal(linkBackNode.title, link.title, "link title must survive a full round-trip");
   assert.equal(linkBackNode.href, "https://example.com");
+});
+
+test("XLSX styles index cellXfs only, rich text concatenates cleanly, and numbers round-trip typed", () => {
+  const bytes = createStyledXlsxFixture();
+  const model = toDocumentModel(bytes, "xlsx", "styled.xlsx");
+  const table = model.blocks.find((block) => block.type === "table");
+  const cellAt = (rowIdx, colIdx) => table.rows[rowIdx][colIdx];
+
+  // #90: c@s indexes cellXfs — cellStyleXfs entries must not shift the mapping
+  assert.equal(cellAt(0, 0), "2023-07-16", "builtin date style via cellXfs must survive a preceding cellStyleXfs section");
+  assert.equal(cellAt(0, 1), "12345", "unstyled numbers must not be converted to dates");
+  assert.equal(cellAt(0, 2), "2023-07-16", "custom numFmt (yyyy年m月) must be detected as a date format");
+
+  // #91: rich-text runs concatenate without injected spaces; rPh phonetics are dropped
+  assert.equal(table.headers[1], "Trans2Former", "rich text runs must concatenate without injected spaces");
+  assert.equal(table.headers[2], "東京", "rPh phonetic runs must not leak into the cell text");
+  assert.equal(table.headers[3], "  lead  ing", "xml:space=preserve whitespace must survive");
+  assert.equal(cellAt(0, 3), "inline", "inlineStr rich text must concatenate cleanly");
+
+  // #94: writer types cells — numbers bare <v>, string formula caches t="str"
+  const out = convertContent({ content: bytes, from: "xlsx", to: "xlsx", title: "styled.xlsx" });
+  const zip = readZipEntries(out.data);
+  const sheetOut = zip.getText("xl/worksheets/sheet1.xml");
+  assert.match(sheetOut, /<c r="B2"><v>12345<\/v><\/c>/, "numeric cells must be bare t=n values");
+  assert.match(sheetOut, /<c r="A3" t="str"><f>[^<]*<\/f><v>Head x<\/v><\/c>/, "string formula caches must carry t=\"str\"");
+  assert.match(sheetOut, /<c r="B3"><f>SUM\(1,2\)<\/f><v>3<\/v><\/c>/, "numeric formula caches stay untyped");
+  const sstOut = zip.getText("xl/sharedStrings.xml");
+  assert.doesNotMatch(sstOut, /<t[^>]*>12345<\/t>/, "numbers must not be registered in the shared string table");
+
+  // reader→writer→reader closure: cell content stable across a full round-trip
+  const back = toDocumentModel(out.data, "xlsx", "styled.xlsx");
+  const backTable = back.blocks.find((block) => block.type === "table");
+  assert.deepEqual(backTable.headers, table.headers, "headers must survive the round-trip");
+  assert.deepEqual(backTable.rows[0], table.rows[0], "data row must survive the round-trip");
 });
 
 await runTests();
