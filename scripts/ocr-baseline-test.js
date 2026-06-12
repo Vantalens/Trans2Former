@@ -39,6 +39,10 @@ import {
   sha256Hex,
   convertContentAsync,
   runOCRStage,
+  getDefaultOCRLanguage,
+  normalizeOCRLanguage,
+  toTesseractLanguage,
+  runRecognize,
   detectOCRLowConfidence,
   defaultRepairEngine,
   isScannedPdf,
@@ -648,6 +652,99 @@ function makeStubEngine(overrides = {}) {
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
   }
+}
+
+// 23b. OCR language normalization + wiring (issue #47): the configured language reaches
+//      the engine as a canonical code, and tesseract aliases no longer explode validation.
+{
+  // normalization table
+  assert.equal(normalizeOCRLanguage("chi_sim"), "zh-CN");
+  assert.equal(normalizeOCRLanguage("chi_tra"), "zh-TW");
+  assert.equal(normalizeOCRLanguage("eng"), "en");
+  assert.equal(normalizeOCRLanguage("jpn"), "ja");
+  assert.equal(normalizeOCRLanguage("kor"), "ko");
+  assert.equal(normalizeOCRLanguage("zh"), "zh-CN");
+  assert.equal(normalizeOCRLanguage("ZH-CN"), "zh-CN", "case-insensitive");
+  assert.equal(normalizeOCRLanguage(undefined), "auto");
+  assert.equal(normalizeOCRLanguage(""), "auto");
+  assert.equal(normalizeOCRLanguage("fr"), "fr", "unknown values pass through for validation to reject");
+  assert.equal(toTesseractLanguage("zh-CN"), "chi_sim");
+  assert.equal(toTesseractLanguage("en"), "eng");
+  assert.equal(toTesseractLanguage("auto"), null);
+
+  // createOCRResult no longer throws on tesseract codes — this was the real-browser
+  // crash: both engines passed chi_sim into a validator that only knows canonical codes.
+  const aliased = createOCRResult(baseOCRResult({ language: "chi_sim" }));
+  assert.equal(aliased.language, "zh-CN");
+  // ...while genuinely unknown languages are still rejected (guards test 3 semantics).
+  assert.throws(() => createOCRResult(baseOCRResult({ language: "fr" })));
+
+  // getDefaultOCRLanguage normalizes config and defaults to zh-CN
+  assert.equal(getDefaultOCRLanguage({}), "zh-CN");
+  assert.equal(getDefaultOCRLanguage({ options: { ocr: { language: "chi_sim" } } }), "zh-CN");
+  assert.equal(getDefaultOCRLanguage({ options: { ocr: { language: "en" } } }), "en");
+
+  // runOCRStage wires ctx.options.ocr.language through to engine.recognize
+  const seen = [];
+  const wireStub = {
+    id: "lang-wire-stub",
+    taskCapabilities: ["ocr-text"],
+    manifestId: "lang-wire-stub",
+    isAvailable: () => true,
+    recognize: async ({ options }) => {
+      seen.push(options?.language);
+      return createOCRResult(baseOCRResult());
+    },
+  };
+  defaultOCRRegistry.register(wireStub);
+  try {
+    const tinyPng =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=";
+    const model = toDocumentModel(tinyPng, "png", "lang-wire.png");
+    await runOCRStage(model, { ocrEngine: wireStub, options: { ocr: { language: "chi_sim" } } });
+    await runOCRStage(model, { ocrEngine: wireStub, options: {} });
+    await runOCRStage(model, { ocrEngine: wireStub, options: { ocr: { language: "en" } } });
+    assert.deepEqual(seen, ["zh-CN", "zh-CN", "en"], "engine must receive normalized language (alias→canonical, default zh-CN)");
+  } finally {
+    defaultOCRRegistry.unregister(wireStub.id);
+  }
+
+  // runScannedPdfOCRStage wires the language too
+  const scanSeen = [];
+  setPdfPageRasterizer({
+    async countPages() { return 1; },
+    async rasterize() { return { dataUrl: "data:image/png;base64,AA==", width: 10, height: 10 }; },
+  });
+  const scanStub = {
+    id: "lang-scan-stub",
+    taskCapabilities: ["ocr-text"],
+    manifestId: "lang-scan-stub",
+    isAvailable: () => true,
+    recognize: async ({ options }) => {
+      scanSeen.push(options?.language);
+      return createOCRResult(baseOCRResult());
+    },
+  };
+  defaultOCRRegistry.register(scanStub);
+  try {
+    await runScannedPdfOCRStage({
+      schemaVersion: "trans2former.document.v1",
+      title: "lang-scan",
+      sourceFormat: "pdf",
+      blocks: [],
+      assets: [],
+      metadata: {},
+    }, { content: "%PDF-1.4\nfake\n%%EOF", ocrEngine: scanStub, options: { ocr: { language: "eng", maxScanPages: 1 } } });
+    assert.deepEqual(scanSeen, ["en"], "scan stage must pass the normalized requested language");
+  } finally {
+    defaultOCRRegistry.unregister(scanStub.id);
+    resetPdfPageRasterizer();
+  }
+
+  // tesseract runtime result mapping survives alias input
+  const fakeWorker = { recognize: async () => ({ data: { text: "hi", lines: [], confidence: 90 } }) };
+  const mapped = await runRecognize(fakeWorker, "img", { language: "chi_sim" });
+  assert.equal(mapped.language, "zh-CN", "tesseract result mapping must normalize the alias");
 }
 
 // 24. detectOCRLowConfidence emits replaceTextRun candidates for low-confidence lines

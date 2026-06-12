@@ -2,6 +2,7 @@ import { createParagraph } from "../document-model.js";
 import { createWarning, withWarnings } from "../warnings.js";
 import { defaultOCRRegistry } from "./ocr-engine.js";
 import { createOCREngineFailedWarning, createOCRUnavailableWarning, createOCRLowConfidenceWarning, createOCRScanPagesTruncatedWarning } from "./ocr-warnings.js";
+import { DEFAULT_OCR_LANGUAGE, normalizeOCRLanguage } from "./ocr-language.js";
 import { defaultPdfPageRasterizer } from "./pdf-rasterizer.js";
 import { mergeOCRResultsToFixedLayout } from "./ocr-to-fixed-layout.js";
 import { mapLinesToBlockIds } from "./ocr-structure.js";
@@ -60,6 +61,11 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     ? ctx.options.ocr.maxScanPages
     : DEFAULT_MAX_SCAN_PAGES;
   const dpi = typeof ctx?.options?.ocr?.dpi === "number" ? ctx.options.ocr.dpi : DEFAULT_DPI;
+  // 用户语言偏好（options.ocr.language）归一化后传引擎；注意下方已有 `let language`
+  // 累积变量（记录引擎返回的语言），此处必须用独立名字避免遮蔽。
+  const requestedLanguage = ctx?.options?.ocr?.language
+    ? normalizeOCRLanguage(ctx.options.ocr.language)
+    : DEFAULT_OCR_LANGUAGE;
 
   let pageCount;
   try {
@@ -104,7 +110,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     let pageResult;
     try {
       const rendered = await rasterizer.rasterize({ content: ctx.content, pageIndex, dpi });
-      pageResult = await engine.recognize({ image: rendered.dataUrl, options: { language: "chi_sim" } });
+      pageResult = await engine.recognize({ image: rendered.dataUrl, options: { language: requestedLanguage } });
     } catch (error) {
       enhanced.metadata = withWarnings(enhanced.metadata, [
         createOCREngineFailedWarning({

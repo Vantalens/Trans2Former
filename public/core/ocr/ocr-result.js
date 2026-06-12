@@ -1,4 +1,5 @@
 import { ConversionError } from "../conversion-error.js";
+import { normalizeOCRLanguage } from "./ocr-language.js";
 
 export const OCR_RESULT_SCHEMA_VERSION = "trans2former.ocr-result.v1";
 
@@ -47,7 +48,9 @@ export function createOCRResult({
 } = {}) {
   const result = {
     schemaVersion: OCR_RESULT_SCHEMA_VERSION,
-    language,
+    // 引擎边界传入的 tesseract 码（chi_sim/eng）在此归一化为 canonical 码；
+    // validateOCRResult 本身不放松，未知值原样进入校验并被拒绝。
+    language: normalizeOCRLanguage(language),
     pages: Array.isArray(pages) ? pages.map((page) => ({
       pageIndex: page?.pageIndex ?? 0,
       width: page?.width ?? 0,

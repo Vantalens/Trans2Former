@@ -1,5 +1,6 @@
 import { ConversionError } from "../conversion-error.js";
 import { createOCRResult } from "./ocr-result.js";
+import { normalizeOCRLanguage } from "./ocr-language.js";
 
 export const OCR_VENDOR_LOAD_FAILED = "OCR_VENDOR_LOAD_FAILED";
 export const TESSERACT_VENDOR_PATHS = Object.freeze({
@@ -220,7 +221,7 @@ function mapTesseractResultToOCR(response, runtimeMs, options) {
     ? Math.max(0, Math.min(1, data.confidence / 100))
     : 0;
   return createOCRResult({
-    language: options?.language || "auto",
+    language: normalizeOCRLanguage(options?.language),
     pages: [
       {
         pageIndex: 0,
