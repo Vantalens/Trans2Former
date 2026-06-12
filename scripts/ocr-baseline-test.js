@@ -21,6 +21,7 @@ import {
   createOCRDegradedRouteWarning,
   ensureOCRBootstrap,
   ensureTesseractBootstrap,
+  rehydrateTesseractAvailability,
   tesseractOCREngine,
   TESSERACT_MANIFEST_ID,
   markTesseractVendorReady,
@@ -357,6 +358,38 @@ function makeStubEngine(overrides = {}) {
     assert.equal(workerBundle.includes("keyval-store"), true, "tesseract.js worker cache must still use the idb-keyval default DB our seeding targets");
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
+  }
+}
+
+// 12c. rehydrateTesseractAvailability rebuilds engine/model-cache state from stored
+//      tessdata at startup (issue #8/#10: the vendor-ready flag is memory-only and a
+//      page refresh forgot imported tessdata even though the bytes persist in IndexedDB).
+{
+  // (a) empty storage => no-op, nothing flips
+  markTesseractVendorReady(false);
+  const empty = await rehydrateTesseractAvailability();
+  assert.deepEqual(empty, { rehydrated: false, reason: "no-tessdata" });
+  assert.equal(tesseractOCREngine.isAvailable(), false, "empty storage must not mark the engine available");
+
+  // (b) simulate refresh after import: bytes persist, flag lost => rehydrate restores
+  await tesseractOCREngine._storage.put("tesseract/eng.traineddata", new Uint8Array([1]).buffer, { sha256: "x" });
+  markTesseractVendorReady(false);
+  try {
+    const restored = await rehydrateTesseractAvailability();
+    assert.deepEqual(restored, { rehydrated: true, reason: "cached" });
+    assert.equal(tesseractOCREngine.isAvailable(), true, "cached tessdata must restore availability");
+    const status = defaultModelCache.getStatus(TESSERACT_MANIFEST_ID);
+    assert.equal(status.status, "available");
+    assert.equal(status.detail?.source, "cached");
+
+    // (c) idempotent: second call short-circuits
+    const again = await rehydrateTesseractAvailability();
+    assert.deepEqual(again, { rehydrated: true, reason: "already-ready" });
+  } finally {
+    await tesseractOCREngine._storage.delete("tesseract/eng.traineddata");
+    markTesseractVendorReady(false);
+    await tesseractOCREngine.ensureProbe();
+    defaultModelCache.setStatus(TESSERACT_MANIFEST_ID, STATUS_NOT_DOWNLOADED, { message: "test cleanup" });
   }
 }
 

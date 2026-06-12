@@ -9,6 +9,7 @@ import {
   toConversionDocumentModel,
   toDocumentModel,
   ensurePaddleDefaultModels,
+  rehydrateTesseractAvailability,
 } from "./browser-transformer.js";
 import { normalizeConversionError } from "./core/conversion-error.js";
 import { getPlainText } from "./core/document-model.js";
@@ -1347,8 +1348,12 @@ function convertWithWorker(payload) {
   // onnxruntime 推理，这些在转换 Web Worker 里不可用。直接走 convertContentAsync——
   // 图片与扫描 PDF 触发 OCR；文本 PDF 仍走常规文本路径。
   if (fromFmt === "png" || fromFmt === "pdf") {
-    // 先确保随包 PP-OCRv5 模型已载入本地缓存（幂等），再跑异步转换/OCR。
-    return ensurePaddleDefaultModels().catch(() => {}).then(() => convertInBrowserAsync(payload));
+    // 先确保两个 OCR 引擎的状态就位（随包 PP-OCRv5 载入 + tesseract 缓存重建，均幂等），
+    // 再跑异步转换/OCR——刷新后立刻转换也能命中重建。两者失败都不得阻塞转换。
+    return Promise.allSettled([
+      ensurePaddleDefaultModels(),
+      rehydrateTesseractAvailability(),
+    ]).then(() => convertInBrowserAsync(payload));
   }
   const worker = createConvertWorker();
   if (!worker) {
@@ -1793,5 +1798,7 @@ if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = true;
 updateConversionProgress({ stage: "idle", progress: 0 });
 
 // 后台开箱即用加载随包 PP-OCRv5 模型（同源 vendor → 本地缓存），让高级 OCR 无需手动导入。
+// tesseract 则从历史导入的 tessdata（IndexedDB）重建可用性——刷新不再丢状态。
 // 失败/缺失静默（仍可经安全中心手动导入），不阻塞 UI。
 ensurePaddleDefaultModels().catch(() => {});
+rehydrateTesseractAvailability().catch(() => {});

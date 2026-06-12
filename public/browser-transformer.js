@@ -376,9 +376,10 @@ export { ensureOCRBootstrap } from "./core/ocr/ocr-bootstrap.js";
 export {
   tesseractOCREngine,
   TESSERACT_MANIFEST_ID,
+  TESSERACT_DEFAULT_LANGUAGES,
   markTesseractVendorReady,
 } from "./core/ocr/tesseract-engine.js";
-export { ensureTesseractBootstrap } from "./core/ocr/tesseract-bootstrap.js";
+export { ensureTesseractBootstrap, rehydrateTesseractAvailability } from "./core/ocr/tesseract-bootstrap.js";
 export {
   paddleOcrEngine,
   PADDLE_OCR_MANIFEST_ID,

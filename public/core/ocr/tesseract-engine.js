@@ -14,7 +14,8 @@ import {
 export const TESSERACT_MANIFEST_ID = "ocr-text.tesseract.5.0.0";
 
 const TESSDATA_KEY_PREFIX = "tesseract/";
-const DEFAULT_LANGUAGES = ["chi_sim", "eng"];
+export const TESSERACT_DEFAULT_LANGUAGES = Object.freeze(["chi_sim", "eng"]);
+const DEFAULT_LANGUAGES = TESSERACT_DEFAULT_LANGUAGES;
 
 // 就绪状态放模块级可变变量，而非冻结对象的实例属性（冻结对象在严格模式下无法被
 // ensureProbe 赋值）。引擎对象本身仍可 Object.freeze 防外部篡改。

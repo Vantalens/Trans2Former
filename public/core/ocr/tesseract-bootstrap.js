@@ -1,11 +1,18 @@
 import {
   defaultModelCache,
+  STATUS_AVAILABLE,
   STATUS_NOT_DOWNLOADED,
 } from "../model-cache/availability.js";
 import { createModelManifest } from "../model-cache/manifest.js";
 import { defaultOCRRegistry } from "./ocr-engine.js";
 import { ensureOCRBootstrap } from "./ocr-bootstrap.js";
-import { tesseractOCREngine, TESSERACT_MANIFEST_ID } from "./tesseract-engine.js";
+import { defaultOCRStorage } from "./ocr-storage.js";
+import {
+  tesseractOCREngine,
+  TESSERACT_MANIFEST_ID,
+  TESSERACT_DEFAULT_LANGUAGES,
+  markTesseractVendorReady,
+} from "./tesseract-engine.js";
 
 let bootstrapped = false;
 
@@ -58,3 +65,34 @@ export function ensureTesseractBootstrap() {
 }
 
 ensureTesseractBootstrap();
+
+// 启动时从 OCR storage（IndexedDB）的实际内容重建可用性：vendor-ready 标志是内存
+// 全局，刷新即忘——用户导入过 tessdata 后每次都要重新走导入对话框（issue #8/#10）。
+// 持久化的是 tessdata 字节本身；状态从字节重新推导，不持久化注册表（避免状态与
+// 缓存内容漂移）。Node 测试环境 storage 为空的 InMemoryStorage，走 no-tessdata
+// no-op 分支，不触碰任何全局标志。
+export async function rehydrateTesseractAvailability({ storage = defaultOCRStorage } = {}) {
+  ensureTesseractBootstrap();
+  if (tesseractOCREngine.isAvailable()) {
+    return { rehydrated: true, reason: "already-ready" };
+  }
+  const cached = [];
+  for (const language of TESSERACT_DEFAULT_LANGUAGES) {
+    if (await storage.has(`tesseract/${language}.traineddata`)) cached.push(language);
+  }
+  if (cached.length === 0) {
+    return { rehydrated: false, reason: "no-tessdata" };
+  }
+  // 与安全中心导入路径对齐：标志以 tessdata 在库为据；真正的 vendor wasm 加载仍在
+  // recognize() 时把关（loadTesseractRuntime）。
+  markTesseractVendorReady(true);
+  const ready = await tesseractOCREngine.ensureProbe();
+  if (ready && defaultModelCache.has(TESSERACT_MANIFEST_ID)) {
+    defaultModelCache.setStatus(TESSERACT_MANIFEST_ID, STATUS_AVAILABLE, {
+      message: `本地缓存 tessdata (${cached.join(", ")}) 已在启动时恢复。`,
+      source: "cached",
+      languages: cached,
+    });
+  }
+  return { rehydrated: ready, reason: ready ? "cached" : "probe-failed" };
+}
