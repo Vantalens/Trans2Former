@@ -19,6 +19,7 @@ import {
 import { ConversionError, normalizeConversionError } from "../public/core/conversion-error.js";
 import { assertValidDocumentModel, validateDocumentModel } from "../public/core/document-schema.js";
 import { readZipEntries } from "../public/core/zip-container.js";
+import { parseInlineMarkdown } from "../public/formats/inline-tokens.js";
 
 const SAMPLE_ROOT = path.resolve("samples");
 const INPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "png", "docx", "doc", "xlsx", "epub", "pptx", "pdf", "ofd"];
@@ -1315,6 +1316,57 @@ test("machine-readable DocumentModel schema mirrors the runtime block and asset 
   assert.equal(schema.properties.schemaVersion.const, "trans2former.document.v1");
   assert.deepEqual(schema.properties.blocks.items.oneOf.map((entry) => entry.properties.type.const), EXPECTED_BLOCK_TYPES);
   assert.deepEqual(Object.keys(schema.properties.assets.items.properties), ["id", "name", "mime", "data", "size", "role", "provenance"]);
+});
+
+test("Markdown round-trips escaped pipes, wide fences, hyphen languages, and link punctuation", () => {
+  // #83: pipes inside table cells survive md → model → md → model
+  const tableMd = "| Name | Expr |\n| --- | --- |\n| a | x \\| y |\n";
+  const tableModel = toDocumentModel(tableMd, "md", "pipes.md");
+  const table = tableModel.blocks.find((block) => block.type === "table");
+  assert.equal(table.rows[0][1], "x | y", "escaped pipe must parse as a literal pipe inside the cell");
+  const tableOut = convertContent({ content: tableMd, from: "md", to: "md", title: "pipes.md" });
+  const tableBack = toDocumentModel(tableOut.data, "md", "pipes.md").blocks.find((block) => block.type === "table");
+  assert.deepEqual(tableBack.rows, table.rows, "table cells with pipes must round-trip");
+
+  // #52: code containing ``` fences round-trips via a wider fence
+  const fenceMd = "````md\nUse a fence:\n```js\ncode\n```\n````\n";
+  const fenceModel = toDocumentModel(fenceMd, "md", "fence.md");
+  const code = fenceModel.blocks.find((block) => block.type === "code");
+  assert.equal(code.code.includes("```js"), true, "inner fence lines are content, not fence closers");
+  const fenceOut = convertContent({ content: fenceMd, from: "md", to: "md", title: "fence.md" });
+  const fenceBack = toDocumentModel(fenceOut.data, "md", "fence.md").blocks.find((block) => block.type === "code");
+  assert.equal(fenceBack.code, code.code, "fenced code containing fences must round-trip");
+
+  // #57: hyphen/plus language identifiers parse as fences, not paragraphs
+  const langMd = "```objective-c\nNSLog(@\"hi\");\n```\n\nAfter paragraph.\n";
+  const langModel = toDocumentModel(langMd, "md", "lang.md");
+  const langCode = langModel.blocks.find((block) => block.type === "code");
+  assert.equal(langCode.language, "objective-c");
+  assert.equal(
+    langModel.blocks.some((block) => block.type === "paragraph" && block.text === "After paragraph."),
+    true,
+    "fence state must not invert and swallow the rest of the document",
+  );
+
+  // #53: image alt/src with brackets/parens round-trip
+  const imageMd = "![shot \\[v2\\]](dir/a\\(1\\).png)\n";
+  const imageModel = toDocumentModel(imageMd, "md", "img.md");
+  const image = imageModel.blocks.find((block) => block.type === "image");
+  assert.equal(image.alt, "shot [v2]");
+  assert.equal(image.src, "dir/a(1).png");
+  const imageOut = convertContent({ content: imageMd, from: "md", to: "md", title: "img.md" });
+  const imageBack = toDocumentModel(imageOut.data, "md", "img.md").blocks.find((block) => block.type === "image");
+  assert.equal(imageBack.alt, image.alt);
+  assert.equal(imageBack.src, image.src);
+
+  // #55: link title with escaped quotes round-trips through writer and reader
+  const linkMd = '[doc](https://example.com "say \\"hi\\" loud")';
+  const link = parseInlineMarkdown(linkMd).find((node) => node.type === "link");
+  assert.equal(link.title, 'say "hi" loud', "escaped quotes inside the title must parse");
+  const linkOut = convertContent({ content: linkMd, from: "md", to: "md", title: "link.md" });
+  const linkBackNode = parseInlineMarkdown(linkOut.data.trim()).find((node) => node.type === "link");
+  assert.equal(linkBackNode.title, link.title, "link title must survive a full round-trip");
+  assert.equal(linkBackNode.href, "https://example.com");
 });
 
 await runTests();

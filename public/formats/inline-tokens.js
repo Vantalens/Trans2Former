@@ -11,7 +11,19 @@
 //   { type: "link",      href, title, inlines: [...] }
 //   { type: "linebreak" }
 
-import { normalizeInlines } from "../core/models/semantic-inlines.js";
+import { normalizeInlines, unescapeMarkdownPunctuation } from "../core/models/semantic-inlines.js";
+
+// 转义感知的字符定位：跳过 `\x` 转义对，返回首个未转义的 char 位置（issue #53/#55）。
+function indexOfUnescaped(source, char, from) {
+  for (let i = from; i < source.length; i += 1) {
+    if (source[i] === "\\") {
+      i += 1;
+      continue;
+    }
+    if (source[i] === char) return i;
+  }
+  return -1;
+}
 
 // 递归解析支持嵌套，例如 "**bold _italic_**" 会得到
 // strong(em(italic)) 而不是扁平的整段加粗。
@@ -115,14 +127,14 @@ export function parseInlineMarkdown(text) {
       }
     }
 
-    // 图片 ![alt](src) —— 在 inline 上下文里仅保留 alt
+    // 图片 ![alt](src) —— 在 inline 上下文里仅保留 alt；转义感知扫描（issue #53）
     if (ch === "!" && source[index + 1] === "[") {
-      const altClose = source.indexOf("]", index + 2);
+      const altClose = indexOfUnescaped(source, "]", index + 2);
       if (altClose !== -1 && source[altClose + 1] === "(") {
-        const hrefClose = source.indexOf(")", altClose + 2);
+        const hrefClose = indexOfUnescaped(source, ")", altClose + 2);
         if (hrefClose !== -1) {
           pushText();
-          const alt = source.slice(index + 2, altClose);
+          const alt = unescapeMarkdownPunctuation(source.slice(index + 2, altClose));
           if (alt) tokens.push({ type: "text", value: alt });
           index = hrefClose + 1;
           continue;
@@ -130,25 +142,26 @@ export function parseInlineMarkdown(text) {
       }
     }
 
-    // 链接 [text](href "title")
+    // 链接 [text](href "title")；title 支持 \" 转义引号（issue #55），
+    // href/title 经统一反转义还原 writer 侧的受限标点转义（issue #53）
     if (ch === "[") {
-      const textClose = source.indexOf("]", index + 1);
+      const textClose = indexOfUnescaped(source, "]", index + 1);
       if (textClose !== -1 && source[textClose + 1] === "(") {
-        const hrefClose = source.indexOf(")", textClose + 2);
+        const hrefClose = indexOfUnescaped(source, ")", textClose + 2);
         if (hrefClose !== -1) {
           pushText();
           const linkText = source.slice(index + 1, textClose);
           const hrefRaw = source.slice(textClose + 2, hrefClose).trim();
           let href = hrefRaw;
           let title = "";
-          const titleMatch = hrefRaw.match(/^(\S+)\s+"([^"]*)"$/);
+          const titleMatch = hrefRaw.match(/^(\S+)\s+"((?:\\.|[^"\\])*)"$/);
           if (titleMatch) {
             href = titleMatch[1];
-            title = titleMatch[2];
+            title = unescapeMarkdownPunctuation(titleMatch[2]);
           }
           tokens.push({
             type: "link",
-            href,
+            href: unescapeMarkdownPunctuation(href),
             title,
             inlines: parseInlineMarkdown(linkText),
           });

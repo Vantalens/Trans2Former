@@ -18,6 +18,31 @@ function escapeMarkdownInlineText(value) {
   return String(value ?? "").replace(/([\\`*_~<>])/g, "\\$1");
 }
 
+// —— markdown 链接/图片专用转义（writer 与 reader 严格对称）——
+// reader 侧用 unescapeMarkdownPunctuation 反转义同一受限标点集 `\ [ ] ( ) "`，
+// 避免把手写文本里的 `C:\path` 这类反斜杠误反转义。
+
+// 链接/图片目标（href/src）：转义反斜杠与圆括号，防止含 ) 的 URL 提前闭合。
+export function escapeLinkDestination(value) {
+  return String(value ?? "").replace(/([\\()])/g, "\\$1");
+}
+
+// 链接 title：转义反斜杠、双引号与圆括号——括号也必须转义，
+// 否则 reader 的右括号扫描会在 title 内提前截断（issue #55）。
+export function escapeLinkTitle(value) {
+  return String(value ?? "").replace(/([\\"()])/g, "\\$1");
+}
+
+// 「原始文本 → markdown 方括号上下文」一次性转义（图片 alt 等）。
+export function escapeBracketText(value) {
+  return String(value ?? "").replace(/([\\[\]])/g, "\\$1");
+}
+
+// reader 侧统一反转义：仅处理上面三个 escape 助手会产生的受限标点集。
+export function unescapeMarkdownPunctuation(value) {
+  return String(value ?? "").replace(/\\([\\[\]()"])/g, "$1");
+}
+
 function escapeHtmlInline(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -101,27 +126,32 @@ export function inlinesToPlainText(inlines) {
     .join("");
 }
 
-export function inlinesToMarkdown(inlines) {
+export function inlinesToMarkdown(inlines, context = {}) {
   return (inlines || [])
     .map((node) => {
       if (!node || typeof node !== "object") return "";
-      if (node.type === "text") return escapeMarkdownInlineText(node.value);
-      if (node.type === "strong") return `**${inlinesToMarkdown(node.inlines)}**`;
-      if (node.type === "em") return `*${inlinesToMarkdown(node.inlines)}*`;
-      if (node.type === "del") return `~~${inlinesToMarkdown(node.inlines)}~~`;
+      if (node.type === "text") {
+        const text = escapeMarkdownInlineText(node.value);
+        // 链接文字上下文里方括号会提前闭合 [text]，追加转义（在标准转义之后，
+        // 避免反斜杠双重转义）；非链接上下文不动，保住 task list "[x]" 语义。
+        return context.inLink ? text.replace(/([[\]])/g, "\\$1") : text;
+      }
+      if (node.type === "strong") return `**${inlinesToMarkdown(node.inlines, context)}**`;
+      if (node.type === "em") return `*${inlinesToMarkdown(node.inlines, context)}*`;
+      if (node.type === "del") return `~~${inlinesToMarkdown(node.inlines, context)}~~`;
       if (node.type === "code") return `\`${String(node.value ?? "").replace(/`/g, "\\`")}\``;
       if (node.type === "math") {
         const d = node.display ? "$$" : "$";
         return `${d}${String(node.value ?? "")}${d}`;
       }
       if (node.type === "link") {
-        const inner = inlinesToMarkdown(node.inlines) || node.href || "";
-        const title = node.title ? ` "${node.title.replace(/"/g, '\\"')}"` : "";
-        return `[${inner}](${node.href}${title})`;
+        const inner = inlinesToMarkdown(node.inlines, { ...context, inLink: true }) || node.href || "";
+        const title = node.title ? ` "${escapeLinkTitle(node.title)}"` : "";
+        return `[${inner}](${escapeLinkDestination(node.href)}${title})`;
       }
       if (node.type === "linebreak") return "  \n";
       if (node.type === "footnoteRef") return `[^${String(node.id ?? "")}]`;
-      if (Array.isArray(node.inlines)) return inlinesToMarkdown(node.inlines);
+      if (Array.isArray(node.inlines)) return inlinesToMarkdown(node.inlines, context);
       return "";
     })
     .join("");
