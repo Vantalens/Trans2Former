@@ -95,9 +95,20 @@ export async function ensurePaddleDefaultModels() {
       if (!probe.ok) return { loaded: false, reason: "vendor-absent" };
 
       for (const file of PADDLE_OCR_REQUIRED_FILES) {
+        const key = `${STORAGE_PREFIX}${file}`;
+        // 逐文件增量：已缓存且校验通过的不重取（老部署缺 dict 时避免每次转换
+        // 重拉 det+rec ~21MB 才在 dict 处失败）。校验失败的照常重新 fetch 覆盖。
+        if (await defaultOCRStorage.has(key)) {
+          try {
+            await verifyPaddleVendorFile(file, await defaultOCRStorage.get(key));
+            continue;
+          } catch (staleError) {
+            await defaultOCRStorage.delete(key);
+          }
+        }
         const buffer = await fetchToBuffer(`${VENDOR_BASE}${file}`);
         const checksum = await verifyPaddleVendorFile(file, buffer);
-        await defaultOCRStorage.put(`${STORAGE_PREFIX}${file}`, buffer, {
+        await defaultOCRStorage.put(key, buffer, {
           source: "vendor-bundle",
           sha256: checksum.actual,
         });

@@ -1,7 +1,7 @@
 import { withWarnings } from "../warnings.js";
 import { defaultOCRRegistry } from "./ocr-engine.js";
 import { summarizeOCRResult } from "./ocr-result.js";
-import { DEFAULT_OCR_LANGUAGE, normalizeOCRLanguage } from "./ocr-language.js";
+import { DEFAULT_OCR_LANGUAGE, coerceOCRLanguage } from "./ocr-language.js";
 import { blocksFromOcrResult, mapLinesToBlockIds } from "./ocr-structure.js";
 import {
   createOCRUnavailableWarning,
@@ -80,7 +80,7 @@ export async function enhanceWithOCR(model, { engine = null, registry = defaultO
 
   let result;
   try {
-    result = await resolvedEngine.recognize({ image, options: { language: normalizeOCRLanguage(language) } });
+    result = await resolvedEngine.recognize({ image, options: { language: coerceOCRLanguage(language) } });
   } catch (error) {
     const next = cloneModel(model);
     next.metadata = withWarnings(next.metadata, [

@@ -20,6 +20,7 @@ export const TESSERACT_VENDOR_PATHS = Object.freeze({
 const TESSDATA_CACHE_DB = "keyval-store";
 const TESSDATA_CACHE_STORE = "keyval";
 export const TESSDATA_CACHE_PATH = "trans2former/tessdata";
+const WORKER_INIT_TIMEOUT_MS = 60000;
 
 let cachedNamespace = null;
 
@@ -71,14 +72,30 @@ export async function loadTesseractRuntime() {
 
 function openTessdataCacheDB() {
   return new Promise((resolve, reject) => {
-    const request = globalThis.indexedDB.open(TESSDATA_CACHE_DB, 1);
+    // 与 idb-keyval v6 对齐：不指定版本号打开（keyval-store 是共享默认库名，钉死
+    // version 会在第三方升过版本时抛 VersionError）。store 缺失时再用 version+1 重开补建。
+    const request = globalThis.indexedDB.open(TESSDATA_CACHE_DB);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(TESSDATA_CACHE_STORE)) {
         db.createObjectStore(TESSDATA_CACHE_STORE);
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      if (db.objectStoreNames.contains(TESSDATA_CACHE_STORE)) {
+        resolve(db);
+        return;
+      }
+      const version = db.version + 1;
+      db.close();
+      const retry = globalThis.indexedDB.open(TESSDATA_CACHE_DB, version);
+      retry.onupgradeneeded = () => {
+        retry.result.createObjectStore(TESSDATA_CACHE_STORE);
+      };
+      retry.onsuccess = () => resolve(retry.result);
+      retry.onerror = () => reject(retry.error);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -157,15 +174,27 @@ export async function createTesseractWorker({
       details: { reason: "tessdata-seed-failed", cause: String(error?.name || error?.message || "unknown") },
     });
   }
+  // tesseract.js 5.x 的 loadLanguage/initialize 失败在某些路径上不会让 createWorker
+  // reject（内部 .catch 吞掉），表现为永不 settle 的 promise——超时背板把静默挂死
+  // 转成可见、可清理的错误。
+  let timeoutId = null;
   try {
-    const worker = await namespace.createWorker(language, undefined, {
-      corePath: vendorPaths.corePath,
-      workerPath: vendorPaths.workerPath,
-      langPath: vendorPaths.langPath || TESSERACT_VENDOR_PATHS.langPath,
-      cachePath: TESSDATA_CACHE_PATH,
-      cacheMethod: "readOnly",
-      logger: () => {},
-    });
+    const worker = await Promise.race([
+      namespace.createWorker(language, undefined, {
+        corePath: vendorPaths.corePath,
+        workerPath: vendorPaths.workerPath,
+        langPath: vendorPaths.langPath || TESSERACT_VENDOR_PATHS.langPath,
+        cachePath: TESSDATA_CACHE_PATH,
+        cacheMethod: "readOnly",
+        logger: () => {},
+      }),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Tesseract worker 初始化超过 ${WORKER_INIT_TIMEOUT_MS / 1000}s 未完成（多为 tessdata 缓存未命中且 langPath 兜底不可用）`)),
+          WORKER_INIT_TIMEOUT_MS,
+        );
+      }),
+    ]);
     worker.__t2fTessdataLanguage = language;
     return worker;
   } catch (error) {
@@ -175,6 +204,8 @@ export async function createTesseractWorker({
       code: "OCR_ENGINE_FAILED",
       details: { reason: "worker-init-failed", cause: String(error?.name || error?.message || "unknown") },
     });
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
   }
 }
 

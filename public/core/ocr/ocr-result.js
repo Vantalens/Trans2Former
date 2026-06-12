@@ -1,16 +1,9 @@
 import { ConversionError } from "../conversion-error.js";
-import { normalizeOCRLanguage } from "./ocr-language.js";
+import { normalizeOCRLanguage, OCR_LANGUAGES } from "./ocr-language.js";
 
 export const OCR_RESULT_SCHEMA_VERSION = "trans2former.ocr-result.v1";
 
-export const OCR_LANGUAGES = Object.freeze([
-  "zh-CN",
-  "zh-TW",
-  "en",
-  "ja",
-  "ko",
-  "auto",
-]);
+export { OCR_LANGUAGES };
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

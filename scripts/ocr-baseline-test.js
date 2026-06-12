@@ -41,6 +41,7 @@ import {
   runOCRStage,
   getDefaultOCRLanguage,
   normalizeOCRLanguage,
+  coerceOCRLanguage,
   toTesseractLanguage,
   runRecognize,
   detectOCRLowConfidence,
@@ -683,6 +684,11 @@ function makeStubEngine(overrides = {}) {
   assert.equal(getDefaultOCRLanguage({}), "zh-CN");
   assert.equal(getDefaultOCRLanguage({ options: { ocr: { language: "chi_sim" } } }), "zh-CN");
   assert.equal(getDefaultOCRLanguage({ options: { ocr: { language: "en" } } }), "en");
+  // stage boundary coerces unknown configured languages to auto instead of letting the
+  // whole recognition fail at result validation after a successful inference
+  assert.equal(getDefaultOCRLanguage({ options: { ocr: { language: "fr" } } }), "auto");
+  assert.equal(coerceOCRLanguage("de"), "auto");
+  assert.equal(coerceOCRLanguage("chi_sim"), "zh-CN");
 
   // runOCRStage wires ctx.options.ocr.language through to engine.recognize
   const seen = [];
@@ -948,6 +954,26 @@ function makeStubEngine(overrides = {}) {
     assert.equal(enhanced.metadata?.ocr?.truncated, true);
     assert.equal(enhanced.metadata?.modelReview?.ocr?.totalPageCount, 8);
     assert.equal(enhanced.metadata?.modelReview?.ocr?.pageCount, 2);
+
+    // maxScanPages 0 / negative / NaN must clamp to the default instead of silently
+    // dropping the whole document or emitting negative page math
+    for (const bogus of [0, -3, Number.NaN]) {
+      const clamped = await runScannedPdfOCRStage({
+        schemaVersion: "trans2former.document.v1",
+        title: "scan-clamp",
+        sourceFormat: "pdf",
+        blocks: [],
+        assets: [],
+        metadata: {},
+      }, {
+        content: "%PDF-1.4\nfake\n%%EOF",
+        options: { ocr: { maxScanPages: bogus } },
+      });
+      assert.equal(clamped.metadata?.ocr?.pageCount, 5, `maxScanPages=${bogus} must clamp to the default of 5`);
+      const clampWarning = (clamped.metadata?.warnings || []).find((w) => w.code === OCR_SCAN_PAGES_TRUNCATED);
+      assert.ok(clampWarning, `maxScanPages=${bogus}: truncation past the clamped default must still warn`);
+      assert.equal(clampWarning.details.processedPages, 5);
+    }
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
     resetPdfPageRasterizer();

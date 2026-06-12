@@ -87,12 +87,18 @@ export async function rehydrateTesseractAvailability({ storage = defaultOCRStora
   // recognize() 时把关（loadTesseractRuntime）。
   markTesseractVendorReady(true);
   const ready = await tesseractOCREngine.ensureProbe();
-  if (ready && defaultModelCache.has(TESSERACT_MANIFEST_ID)) {
+  if (!ready) {
+    // 注入 storage 与引擎 _storage 分叉等罕见场景：probe 失败时回滚标志，不留悬空的
+    // vendor-ready=true。
+    markTesseractVendorReady(false);
+    return { rehydrated: false, reason: "probe-failed" };
+  }
+  if (defaultModelCache.has(TESSERACT_MANIFEST_ID)) {
     defaultModelCache.setStatus(TESSERACT_MANIFEST_ID, STATUS_AVAILABLE, {
       message: `本地缓存 tessdata (${cached.join(", ")}) 已在启动时恢复。`,
       source: "cached",
       languages: cached,
     });
   }
-  return { rehydrated: ready, reason: ready ? "cached" : "probe-failed" };
+  return { rehydrated: true, reason: "cached" };
 }

@@ -1,7 +1,7 @@
 import { defaultOCRRegistry } from "./ocr-engine.js";
 import { enhanceWithOCR } from "./png-ocr.js";
 import { createOCREngineFailedWarning } from "./ocr-warnings.js";
-import { DEFAULT_OCR_LANGUAGE, normalizeOCRLanguage } from "./ocr-language.js";
+import { DEFAULT_OCR_LANGUAGE, coerceOCRLanguage } from "./ocr-language.js";
 import { withWarnings } from "../warnings.js";
 
 function shouldSkip(ctx) {
@@ -33,5 +33,5 @@ export async function runOCRStage(model, ctx = {}) {
 
 export function getDefaultOCRLanguage(ctx = {}) {
   const raw = ctx?.options?.ocr?.language;
-  return raw ? normalizeOCRLanguage(raw) : DEFAULT_OCR_LANGUAGE;
+  return raw ? coerceOCRLanguage(raw) : DEFAULT_OCR_LANGUAGE;
 }

@@ -442,7 +442,7 @@ export {
 export { enhanceWithOCR } from "./core/ocr/png-ocr.js";
 export { deriveOcrStructure, blocksFromOcrResult } from "./core/ocr/ocr-structure.js";
 export { runOCRStage, getDefaultOCRLanguage } from "./core/ocr/ocr-stage.js";
-export { normalizeOCRLanguage, toTesseractLanguage, DEFAULT_OCR_LANGUAGE } from "./core/ocr/ocr-language.js";
+export { normalizeOCRLanguage, coerceOCRLanguage, toTesseractLanguage, DEFAULT_OCR_LANGUAGE } from "./core/ocr/ocr-language.js";
 export { detectOCRLowConfidence } from "./core/ocr/ocr-validator.js";
 export {
   isScannedPdf,

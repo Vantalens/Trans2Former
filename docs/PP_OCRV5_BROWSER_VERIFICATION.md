@@ -28,7 +28,7 @@
 2. 打开**安全中心** → 「模型缓存」card，找到 **PP-OCRv5 高级 OCR (ONNX/WebGPU)** 行：
    - 若已跑过 `npm run vendor:paddle`，det/rec/dict 随包，启动即自动载入、状态直接 **可用**，无需手动导入。
    - 手动覆盖/替换：点「导入 det.onnx / rec.onnx / dict.txt」选择对应文件；**必选 det+rec+dict 齐全**后状态即变 **可用**（SHA-256 校验通过）。cls.onnx 为可选导入（方向校正）。
-   - （字典：默认 `dict.txt` 已随包，无需手动导入。自定义字典也可经「导入 dict.txt」按钮替换——非钉定字典会被 SHA-256 校验拒绝。）
+   - （字典：默认 `dict.txt` 已随包，无需手动导入。「导入 dict.txt」按钮仅接受与钉定清单 SHA-256 一致的官方字典；自定义字典暂不支持——任何非钉定字节会被校验拒绝，且 console 直写的副本会在下次启动复验时被清除还原。）
 3. 验证**引擎优先级**：在 console 执行
    ```js
    const m = await import("/browser-transformer.js");
