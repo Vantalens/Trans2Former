@@ -32,7 +32,6 @@ export function ensurePaddleOcrBootstrap() {
     for (const file of PADDLE_OCR_MODEL_FILES) {
       perFile[file] = PADDLE_OCR_VENDOR_FILES[file]?.sha256 || "";
     }
-    perFile["dict.txt"] = PADDLE_OCR_VENDOR_FILES["dict.txt"].sha256;
     const manifest = createModelManifest({
       manifestId: PADDLE_OCR_MANIFEST_ID,
       task: "ocr-text",

@@ -388,12 +388,12 @@ async function importPaddleModel(dialog, button) {
           : false;
         if (ready) {
           defaultModelCache.setStatus(manifestId, STATUS_AVAILABLE, {
-            message: `PP-OCRv5 必选模型 (det/rec) 就位 (最近导入 ${file}, ${knownSpec ? "SHA-256 已匹配清单" : `sha256=${sha256.slice(0, 12)}…`})`,
+            message: `PP-OCRv5 必选资产 (${PADDLE_OCR_REQUIRED_FILES.join("/")}) 就位 (最近导入 ${file}, ${knownSpec ? "SHA-256 已匹配清单" : `sha256=${sha256.slice(0, 12)}…`})`,
             file,
             sha256,
             size: buffer.byteLength,
           });
-          setStatusMessage(dialog, `${file} 已导入，PP-OCRv5 必选模型齐全 ✅（cls 可选）`, "success");
+          setStatusMessage(dialog, `${file} 已导入，PP-OCRv5 必选资产齐全 ✅（cls 可选）`, "success");
         } else {
           const missing = await missingPaddleFiles();
           defaultModelCache.setStatus(manifestId, STATUS_VERIFYING, {
@@ -415,7 +415,7 @@ async function importPaddleModel(dialog, button) {
 }
 
 async function missingPaddleFiles() {
-  // 只报必选缺失（det/rec）；cls 为可选，不算缺。
+  // 只报必选缺失（PADDLE_OCR_REQUIRED_FILES 驱动）；cls 为可选，不算缺。
   const missing = [];
   for (const file of PADDLE_OCR_REQUIRED_FILES) {
     if (!(await defaultOCRStorage.has(`paddleocr/v5/${file}`))) missing.push(file);
@@ -433,7 +433,7 @@ async function clearPaddleModels(dialog, button) {
       await paddleOcrEngine.ensureProbe();
     }
     defaultModelCache.setStatus(manifestId, STATUS_NOT_DOWNLOADED, {
-      message: "已清除本地 PP-OCRv5 模型；下次启用需重新导入 det/rec（cls 可选）。",
+      message: `已清除本地 PP-OCRv5 资产；下次启用需重新导入 ${PADDLE_OCR_REQUIRED_FILES.join("/")}（cls 可选）。`,
     });
     setStatusMessage(dialog, "PP-OCRv5 模型已清除", "info");
   } catch (error) {

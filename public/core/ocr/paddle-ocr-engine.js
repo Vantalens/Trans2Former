@@ -47,12 +47,13 @@ async function decodeImageToImageData(image) {
 
 export const PADDLE_OCR_MANIFEST_ID = "ocr-text.paddleocr.v5";
 
-// PP-OCRv5 ONNX 模型（检测 / 方向分类 / 识别）。全集供 UI 列举/清理；可用性只看必选集。
+// PP-OCRv5 资产（检测 / 方向分类 / 识别 / 字典）。全集供 UI 列举/清理；可用性看必选集。
 const MODEL_KEY_PREFIX = "paddleocr/v5/";
-export const PADDLE_OCR_MODEL_FILES = Object.freeze(["det.onnx", "cls.onnx", "rec.onnx"]);
-// 必选集：det（DB 检测）+ rec（CTC 识别）。cls（方向分类）为可选——管线运行时已容忍其
-// 缺失（clsSession 为 null 时跳过 180° 校正），故不纳入可用性闸门。
-export const PADDLE_OCR_REQUIRED_FILES = Object.freeze(["det.onnx", "rec.onnx"]);
+export const PADDLE_OCR_MODEL_FILES = Object.freeze(["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]);
+// 必选集：det（DB 检测）+ rec（CTC 识别）+ dict（CTC 解码字典——缺失时识别输出全空文本，
+// 引擎报 available 却产不出内容）。cls（方向分类）为可选——管线运行时已容忍其缺失
+// （clsSession 为 null 时跳过 180° 校正），故不纳入可用性闸门。
+export const PADDLE_OCR_REQUIRED_FILES = Object.freeze(["det.onnx", "rec.onnx", "dict.txt"]);
 
 // 就绪状态放模块级可变变量，而非冻结对象的实例属性（冻结对象在严格模式下无法被
 // ensureProbe 赋值）。引擎对象本身仍可 Object.freeze 防外部篡改。
@@ -107,7 +108,7 @@ export const paddleOcrEngine = Object.freeze({
     }
     if (!(await hasAllModels(this._storage))) {
       throw new ConversionError(
-        "未在本地缓存中找到 PP-OCRv5 必选模型（det/rec）；请先在安全中心导入/下载（cls 方向分类可选）。",
+        "未在本地缓存中找到 PP-OCRv5 必选资产（det/rec/dict）；请先在安全中心导入/下载（cls 方向分类可选）。",
         {
           category: "convert",
           code: OCR_UNAVAILABLE,
@@ -136,9 +137,16 @@ export const paddleOcrEngine = Object.freeze({
         this._storage.get(`${MODEL_KEY_PREFIX}rec.onnx`),
       ]);
       const dictBuf = await this._storage.get(DICT_KEY);
-      const dictionary = dictBuf
-        ? parseCharDictionary(new TextDecoder().decode(dictBuf instanceof ArrayBuffer ? new Uint8Array(dictBuf) : dictBuf))
-        : [];
+      // hasAllModels 闸门已保证 dict 在缓存；此处防御直写存储绕过——没有字典时 CTC
+      // 解码只会产出空文本，宁可显式失败。
+      if (!dictBuf || (dictBuf.byteLength ?? 0) === 0) {
+        throw new ConversionError("PP-OCRv5 字典 dict.txt 缺失或为空，CTC 解码无法产出文本。", {
+          category: "convert",
+          code: OCR_UNAVAILABLE,
+          details: { engineId: "paddleocr-v5", manifestId: PADDLE_OCR_MANIFEST_ID, reason: "dict-missing" },
+        });
+      }
+      const dictionary = parseCharDictionary(new TextDecoder().decode(dictBuf instanceof ArrayBuffer ? new Uint8Array(dictBuf) : dictBuf));
       detSession = await createOcrSession({ ort, modelBuffer: detBuf, providers });
       clsSession = clsBuf ? await createOcrSession({ ort, modelBuffer: clsBuf, providers }) : null;
       recSession = await createOcrSession({ ort, modelBuffer: recBuf, providers });

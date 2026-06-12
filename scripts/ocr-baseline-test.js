@@ -1009,7 +1009,7 @@ function makeStubEngine(overrides = {}) {
   // With vendor + models simulated ready, recognize reaches the runtime loader and surfaces
   // the vendor-load failure (rather than the earlier vendor-not-ready / model-missing stages).
   markPaddleOcrVendorReady(true);
-  for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+  for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
     await paddleOcrEngine._storage.put(`paddleocr/v5/${file}`, new Uint8Array([1]).buffer, { sha256: "x" });
   }
   try {
@@ -1019,47 +1019,59 @@ function makeStubEngine(overrides = {}) {
       "paddle recognize should reach loadOnnxRuntime and reject with OCR_VENDOR_LOAD_FAILED in Node",
     );
   } finally {
-    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
       await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
     }
     markPaddleOcrVendorReady(false);
   }
 }
 
-// 37. PP-OCRv5 model import availability flip (P9-D.3): required det+rec present + vendor ready
-//     => isAvailable() true; cls is OPTIONAL (removing it stays ready); removing a required
-//     model (rec) => false. Mirrors security-center import/clear with cls optional.
+// 37. PP-OCRv5 asset import availability flip (P9-D.3): required det+rec+dict present + vendor
+//     ready => isAvailable() true; cls is OPTIONAL (removing it stays ready); removing a
+//     required asset (rec / dict) => false. Mirrors security-center import/clear with cls optional.
 {
   const det = "paddleocr/v5/det.onnx";
   const cls = "paddleocr/v5/cls.onnx";
   const rec = "paddleocr/v5/rec.onnx";
+  const dict = "paddleocr/v5/dict.txt";
   markPaddleOcrVendorReady(true);
   try {
-    // partial: det present but required rec missing => not ready (cls present but optional)
+    // partial: det present but required rec/dict missing => not ready (cls present but optional)
     await paddleOcrEngine._storage.put(det, new Uint8Array([1]).buffer, { sha256: "a" });
     await paddleOcrEngine._storage.put(cls, new Uint8Array([2]).buffer, { sha256: "b" });
-    assert.equal(await paddleOcrEngine.ensureProbe(), false, "det without required rec should not be ready");
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "det without required rec/dict should not be ready");
     assert.equal(paddleOcrEngine.isAvailable(), false);
 
-    // required det+rec present => ready
+    // det+rec without dict => still not ready (issue #7: engine used to report available
+    // without the CTC dictionary and produced empty text)
     await paddleOcrEngine._storage.put(rec, new Uint8Array([3]).buffer, { sha256: "c" });
-    assert.equal(await paddleOcrEngine.ensureProbe(), true, "required det+rec present => ready");
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "det+rec without dict must not be ready");
+    assert.equal(paddleOcrEngine.isAvailable(), false);
+
+    // required det+rec+dict present => ready
+    await paddleOcrEngine._storage.put(dict, new Uint8Array([4]).buffer, { sha256: "d" });
+    assert.equal(await paddleOcrEngine.ensureProbe(), true, "required det+rec+dict present => ready");
     assert.equal(paddleOcrEngine.isAvailable(), true);
 
     // vendor flag off => unavailable even with models
     markPaddleOcrVendorReady(false);
     assert.equal(paddleOcrEngine.isAvailable(), false, "vendor not ready => unavailable regardless of models");
 
-    // remove OPTIONAL cls => still ready (det+rec remain)
+    // remove OPTIONAL cls => still ready (det+rec+dict remain)
     markPaddleOcrVendorReady(true);
     await paddleOcrEngine._storage.delete(cls);
     assert.equal(await paddleOcrEngine.ensureProbe(), true, "removing optional cls keeps readiness");
 
+    // remove REQUIRED dict => not ready
+    await paddleOcrEngine._storage.delete(dict);
+    assert.equal(await paddleOcrEngine.ensureProbe(), false, "removing required dict should drop readiness");
+
     // remove a REQUIRED model (rec) => not ready
+    await paddleOcrEngine._storage.put(dict, new Uint8Array([4]).buffer, { sha256: "d" });
     await paddleOcrEngine._storage.delete(rec);
     assert.equal(await paddleOcrEngine.ensureProbe(), false, "removing required rec should drop readiness");
   } finally {
-    for (const key of [det, cls, rec]) await paddleOcrEngine._storage.delete(key);
+    for (const key of [det, cls, rec, dict]) await paddleOcrEngine._storage.delete(key);
     markPaddleOcrVendorReady(false);
     await paddleOcrEngine.ensureProbe();
   }
@@ -1088,7 +1100,7 @@ function makeStubEngine(overrides = {}) {
   await tesseractOCREngine._storage.put("tesseract/eng.traineddata", new Uint8Array([1]).buffer, { sha256: "x" });
   await tesseractOCREngine.ensureProbe();
   markPaddleOcrVendorReady(true);
-  for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+  for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
     await paddleOcrEngine._storage.put(`paddleocr/v5/${file}`, new Uint8Array([1]).buffer, { sha256: "x" });
   }
   await paddleOcrEngine.ensureProbe();
@@ -1098,14 +1110,14 @@ function makeStubEngine(overrides = {}) {
     assert.equal(defaultOCRRegistry.pickForTask("ocr-text").id, "paddleocr-v5", "PP-OCRv5 should be preferred over tesseract when both available");
 
     // Remove paddle models => tesseract wins.
-    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
       await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
     }
     await paddleOcrEngine.ensureProbe();
     assert.equal(defaultOCRRegistry.pickForTask("ocr-text").id, "tesseract-zh-en", "tesseract should win when paddle unavailable");
   } finally {
     await tesseractOCREngine._storage.delete("tesseract/eng.traineddata");
-    for (const file of ["det.onnx", "cls.onnx", "rec.onnx"]) {
+    for (const file of ["det.onnx", "cls.onnx", "rec.onnx", "dict.txt"]) {
       await paddleOcrEngine._storage.delete(`paddleocr/v5/${file}`);
     }
     markTesseractVendorReady(false);
