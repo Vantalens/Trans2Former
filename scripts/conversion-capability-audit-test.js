@@ -40,7 +40,12 @@ const binaryInputFormats = new Set(["doc", "docx", "xlsx", "epub", "pptx", "pdf"
 
 function createLegacyDocFixture() {
   const encoder = new TextEncoder();
-  const utf16le = (text) => Uint8Array.from([...text].flatMap((char) => [char.charCodeAt(0), 0x00]));
+  // 真 UTF-16LE：低字节在前、高字节在后（旧实现 [code, 0x00] 把 '中' 0x4E2D 截成 0x2D，
+  // fixture 根本不是合法 UTF-16，测不到 CJK 提取——issue #89 复核发现）
+  const utf16le = (text) => Uint8Array.from([...text].flatMap((char) => {
+    const code = char.charCodeAt(0);
+    return [code & 0xff, code >> 8];
+  }));
   return Uint8Array.from([
     0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
     ...encoder.encode("DOC noise\n"),
@@ -70,6 +75,7 @@ for (const [from, content] of Object.entries(sourceByFormat)) {
     if (result.type === "text") {
       if (from === "doc") {
         assert.equal(result.data.includes("Legacy Doc Title"), true, `${from} -> ${to} should preserve readable legacy DOC text`);
+        assert.equal(result.data.includes("中文测试内容"), true, `${from} -> ${to} should extract UTF-16 CJK body text (issue #89)`);
       } else {
         assert.equal(/[�ï¿½]/.test(result.data), false, `${from} -> ${to} should not contain mojibake markers`);
       }
@@ -137,6 +143,35 @@ const ofdContainer = bytesToDataUrl(writeStoredZip([{ name: "OFD.xml", data: sou
 const ofdResult = JSON.parse(convertContent({ content: ofdContainer, from: "ofd", to: "json", title: "container.ofd" }).data);
 assert.equal(ofdResult.metadata.ofd.container, "zip");
 assert.match(ofdResult.plainText, /标题/);
+
+// issue #97：OFD reader 是 L0 占位，全部出路必须 restricted 并在转换前披露 PATH_NOT_RECOMMENDED
+for (const to of getAllowedOutputFormats("ofd")) {
+  assert.equal(
+    getRouteDetails("ofd", to).routeClass,
+    "restricted",
+    `ofd -> ${to} must be marked restricted while the reader is a placeholder`,
+  );
+}
+const ofdModel = toConversionDocumentModel(sourceByFormat.ofd, "ofd", "md", "case.ofd");
+assert.equal(
+  (ofdModel.metadata?.warnings || []).some((warning) => warning.code === "PATH_NOT_RECOMMENDED"),
+  true,
+  "ofd -> md must surface PATH_NOT_RECOMMENDED before conversion",
+);
+
+// issue #114：多表/多 sheet 转 CSV 不再静默丢弃——全部拼接并产出 lossy warning
+const multiTableMd = "| A | B |\n| --- | --- |\n| 1 | 2 |\n\n第二张表：\n\n| C | D |\n| --- | --- |\n| 3 | 4 |\n";
+const multiCsv = convertContent({ content: multiTableMd, from: "md", to: "csv", title: "multi.md" });
+assert.match(multiCsv.data, /A,B/, "first table must be exported");
+assert.match(multiCsv.data, /C,D/, "second table must be exported instead of silently dropped");
+assert.match(multiCsv.data, /\n\n/, "tables must be separated by a blank line");
+assert.equal(
+  multiCsv.quality?.qualityReport?.warningsBySeverity?.lossy >= 1,
+  true,
+  "multi-table CSV export must register a lossy warning in the quality report",
+);
+const singleCsv = convertContent({ content: "| A | B |\n| --- | --- |\n| 1 | 2 |\n", from: "md", to: "csv", title: "single.md" });
+assert.equal(singleCsv.data, "A,B\n1,2\n", "single-table CSV output must stay byte-identical");
 
 console.log("Conversion capability audit passed: writable matrix is stable, placeholder image outputs are hidden, and GBK/UTF-8 text decoding preserves Chinese content.");
 

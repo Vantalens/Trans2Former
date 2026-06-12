@@ -101,10 +101,23 @@ export function readCsv({ content, title = "table", format = "csv" }) {
 }
 
 export function writeCsv({ model }) {
-  const table = model.blocks.find((block) => block.type === "table");
+  // 多表/多 sheet 全部导出（空行分隔），不再静默丢弃第 2 个及之后的表（issue #114）；
+  // 单表输出字节级不变。sheet 名与非表格正文仍不进 CSV，以 lossy warning 披露。
+  const tables = (model.blocks || []).filter((block) => block.type === "table");
+  const warnings = [];
   let rows;
-  if (table) {
-    rows = [table.headers, ...table.rows];
+  if (tables.length > 0) {
+    rows = tables.flatMap((table, index) => index === 0
+      ? [table.headers, ...table.rows]
+      : [[], table.headers, ...table.rows]);
+    if (tables.length > 1) {
+      warnings.push(createWarning(
+        "lossy",
+        "CSV_MULTIPLE_TABLES_CONCATENATED",
+        `${tables.length} 个表格/工作表被拼接进同一个 CSV，以空行分隔；sheet 名称与非表格正文不会进入 CSV。`,
+        { tableCount: tables.length },
+      ));
+    }
   } else {
     rows = [["Text"], ...getPlainText(model).split(/\n{2,}/).filter(Boolean).map((text) => [text])];
   }
@@ -114,5 +127,6 @@ export function writeCsv({ model }) {
     format: "csv",
     data: `${rows.map((row) => row.map((cell) => escapeCsvCell(stripMarkdownInlineSyntax(cell))).join(",")).join("\n")}\n`,
     mime: "text/csv;charset=utf-8",
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
