@@ -364,11 +364,13 @@ export {
   OCR_LOW_CONFIDENCE,
   OCR_ENGINE_FAILED,
   OCR_DEGRADED_ROUTE,
+  OCR_SCAN_PAGES_TRUNCATED,
   OCR_WARNING_CODES,
   createOCRUnavailableWarning,
   createOCREngineFailedWarning,
   createOCRLowConfidenceWarning,
   createOCRDegradedRouteWarning,
+  createOCRScanPagesTruncatedWarning,
 } from "./core/ocr/ocr-warnings.js";
 export { ensureOCRBootstrap } from "./core/ocr/ocr-bootstrap.js";
 export {

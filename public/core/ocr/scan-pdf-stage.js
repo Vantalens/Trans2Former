@@ -1,7 +1,7 @@
 import { createParagraph } from "../document-model.js";
 import { createWarning, withWarnings } from "../warnings.js";
 import { defaultOCRRegistry } from "./ocr-engine.js";
-import { createOCREngineFailedWarning, createOCRUnavailableWarning, createOCRLowConfidenceWarning } from "./ocr-warnings.js";
+import { createOCREngineFailedWarning, createOCRUnavailableWarning, createOCRLowConfidenceWarning, createOCRScanPagesTruncatedWarning } from "./ocr-warnings.js";
 import { defaultPdfPageRasterizer } from "./pdf-rasterizer.js";
 import { mergeOCRResultsToFixedLayout } from "./ocr-to-fixed-layout.js";
 import { mapLinesToBlockIds } from "./ocr-structure.js";
@@ -81,6 +81,18 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
   if (effectivePages === 0) return model;
 
   const enhanced = cloneModel(model);
+  const truncated = typeof pageCount === "number" && pageCount > effectivePages;
+  if (truncated) {
+    // 在循环前注入：即使后续每页 OCR 都失败，截断事实也不丢。
+    enhanced.metadata = withWarnings(enhanced.metadata, [
+      createOCRScanPagesTruncatedWarning({
+        totalPages: pageCount,
+        processedPages: effectivePages,
+        maxScanPages: maxPages,
+        engineId: engine.id,
+      }),
+    ]);
+  }
   const lines = [];
   const aggregateConfidences = [];
   const pageResults = [];
@@ -165,6 +177,8 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
   enhanced.metadata.ocr = {
     language: language || "auto",
     pageCount: effectivePages,
+    totalPageCount: typeof pageCount === "number" ? pageCount : effectivePages,
+    truncated,
     lineCount: lines.length,
     lines,
   };
@@ -176,6 +190,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     inferenceMode: "local",
     ocr: {
       pageCount: effectivePages,
+      totalPageCount: typeof pageCount === "number" ? pageCount : effectivePages,
       lineCount: lines.length,
       averageConfidence,
       runtimeMs: runtimeMsTotal,

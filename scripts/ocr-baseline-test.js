@@ -14,6 +14,7 @@ import {
   PLACEHOLDER_OCR_MANIFEST_ID,
   OCR_UNAVAILABLE,
   OCR_WARNING_CODES,
+  OCR_SCAN_PAGES_TRUNCATED,
   createOCRUnavailableWarning,
   createOCREngineFailedWarning,
   createOCRLowConfidenceWarning,
@@ -102,7 +103,8 @@ function makeStubEngine(overrides = {}) {
   assert.equal(OCR_LANGUAGES.includes("zh-CN"), true);
   assert.equal(OCR_LANGUAGES.includes("auto"), true);
   assert.equal(OCR_WARNING_CODES.includes(OCR_UNAVAILABLE), true);
-  assert.equal(OCR_WARNING_CODES.length, 4);
+  assert.equal(OCR_WARNING_CODES.includes(OCR_SCAN_PAGES_TRUNCATED), true);
+  assert.equal(OCR_WARNING_CODES.length, 5);
 }
 
 // 2. createOCRResult + validate happy path
@@ -753,6 +755,69 @@ function makeStubEngine(overrides = {}) {
     assert.equal(enhanced.metadata?.modelReview?.engine, "scan-stub-engine");
     assert.equal(enhanced.metadata?.modelReview?.ocr?.pageCount, 2);
     assert.equal(enhanced.metadata?.ocr?.lineCount, 2);
+    // No truncation when all pages fit within maxScanPages.
+    assert.equal(enhanced.metadata?.ocr?.truncated, false);
+    assert.equal(enhanced.metadata?.ocr?.totalPageCount, 2);
+    assert.equal(
+      (enhanced.metadata?.warnings || []).some((w) => w.code === OCR_SCAN_PAGES_TRUNCATED),
+      false,
+      "no truncation warning when every page is processed",
+    );
+  } finally {
+    defaultOCRRegistry.unregister(stubEngine.id);
+    resetPdfPageRasterizer();
+  }
+}
+
+// 29b. runScannedPdfOCRStage surfaces page truncation: pages beyond maxScanPages emit a
+//      lossy OCR_SCAN_PAGES_TRUNCATED warning and metadata records the total page count.
+{
+  const stubRasterizer = {
+    async countPages() { return 8; },
+    async rasterize({ pageIndex }) {
+      return { dataUrl: `data:image/png;base64,PAGE${pageIndex}==`, width: 100, height: 100 };
+    },
+  };
+  setPdfPageRasterizer(stubRasterizer);
+  const stubEngine = {
+    id: "scan-trunc-engine",
+    taskCapabilities: ["ocr-text"],
+    manifestId: "scan-trunc",
+    isAvailable: () => true,
+    recognize: async ({ image }) => createOCRResult({
+      language: "zh-CN",
+      pages: [{ pageIndex: 0, width: 100, height: 100, lines: [{ text: `T-${String(image).slice(-8)}`, confidence: 0.9, bbox: null }] }],
+      fullText: "t",
+      averageConfidence: 0.9,
+      runtimeMs: 1,
+      engine: "scan-trunc-engine",
+      modelVersion: "0.0.1",
+    }),
+  };
+  defaultOCRRegistry.register(stubEngine);
+  try {
+    const enhanced = await runScannedPdfOCRStage({
+      schemaVersion: "trans2former.document.v1",
+      title: "scan-trunc",
+      sourceFormat: "pdf",
+      blocks: [],
+      assets: [],
+      metadata: {},
+    }, {
+      content: "%PDF-1.4\nfake\n%%EOF",
+      options: { ocr: { maxScanPages: 2 } },
+    });
+    const warning = (enhanced.metadata?.warnings || []).find((w) => w.code === OCR_SCAN_PAGES_TRUNCATED);
+    assert.ok(warning, "truncation warning must be emitted when pageCount exceeds maxScanPages");
+    assert.equal(warning.severity, "lossy", "unprocessed pages are real content loss");
+    assert.equal(warning.details.totalPages, 8);
+    assert.equal(warning.details.processedPages, 2);
+    assert.equal(warning.details.maxScanPages, 2);
+    assert.equal(enhanced.metadata?.ocr?.pageCount, 2, "pageCount keeps meaning processed pages");
+    assert.equal(enhanced.metadata?.ocr?.totalPageCount, 8);
+    assert.equal(enhanced.metadata?.ocr?.truncated, true);
+    assert.equal(enhanced.metadata?.modelReview?.ocr?.totalPageCount, 8);
+    assert.equal(enhanced.metadata?.modelReview?.ocr?.pageCount, 2);
   } finally {
     defaultOCRRegistry.unregister(stubEngine.id);
     resetPdfPageRasterizer();

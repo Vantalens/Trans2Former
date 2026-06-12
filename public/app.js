@@ -627,12 +627,14 @@ function renderVerificationReport(quality = currentConversionQuality) {
       const q = modelReview.ocrQuality || {};
       const conf = typeof ocr.averageConfidence === "number" ? ocr.averageConfidence.toFixed(3) : "-";
       const parts = [`引擎 ${ocr.engine || "-"}`, `${ocr.lineCount ?? 0} 行`, `置信度 ${conf}`];
+      const scanTruncated = typeof ocr.totalPageCount === "number" && ocr.totalPageCount > (ocr.pageCount ?? 0);
+      if (scanTruncated) parts.push(`仅 ${ocr.pageCount}/${ocr.totalPageCount} 页`);
       if (q.grade) parts.push(`质量 ${q.grade}`);
       if (q.lowConfidenceLines) parts.push(`低置信 ${q.lowConfidenceLines}`);
       if (q.skewApplied) parts.push(`纠偏 ${q.skewApplied}°`);
       if (q.rotatedLines) parts.push(`方向校正 ${q.rotatedLines}`);
       if (q.denoised) parts.push("已去噪");
-      const state = q.grade === "low" ? "drift" : (q.grade === "medium" ? "skip" : "ok");
+      const state = scanTruncated || q.grade === "low" ? "drift" : (q.grade === "medium" ? "skip" : "ok");
       applyVerificationRow(verificationOcrRecognition, { state, text: parts.join(" · ") });
       verificationOcrRecognitionRow.hidden = false;
     } else {
