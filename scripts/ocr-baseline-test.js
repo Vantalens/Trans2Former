@@ -31,6 +31,8 @@ import {
   toDocumentModel,
   enhanceWithOCR,
   loadTesseractRuntime,
+  createTesseractWorker,
+  TESSDATA_CACHE_PATH,
   OCR_VENDOR_LOAD_FAILED,
   sha256Hex,
   convertContentAsync,
@@ -322,6 +324,37 @@ function makeStubEngine(overrides = {}) {
     }
   } finally {
     markTesseractVendorReady(false);
+  }
+}
+
+// 12b. createTesseractWorker feeds tessdata via the worker cache, not a blob langPath
+{
+  const calls = [];
+  const stubNamespace = {
+    createWorker: async (langs, oem, opts) => {
+      calls.push({ langs, opts });
+      return { terminate: async () => {} };
+    },
+  };
+  await createTesseractWorker({
+    namespace: stubNamespace,
+    language: "eng",
+    tessdataBuffer: new Uint8Array([1, 2, 3]).buffer,
+  });
+  assert.equal(typeof calls[0].langs, "string", "createWorker langs must be a plain language string, not Lang objects");
+  assert.equal(calls[0].langs, "eng");
+  assert.equal(calls[0].opts.langPath, "/vendor/tesseract/tessdata", "langPath must be a same-origin path");
+  assert.equal(calls[0].opts.langPath.startsWith("blob:"), false, "blob langPath is not joinable by the tesseract worker");
+  assert.equal(calls[0].opts.cachePath, TESSDATA_CACHE_PATH);
+  assert.equal(calls[0].opts.cacheMethod, "readOnly", "worker must read the pre-seeded tessdata cache");
+
+  const runtimeSource = await readFile(new URL("../public/core/ocr/tesseract-runtime.js", import.meta.url), "utf8");
+  assert.equal(runtimeSource.includes("createObjectURL"), false, "blob URL tessdata delivery must not return");
+  try {
+    const workerBundle = await readFile(new URL("../public/vendor/tesseract/worker/worker.min.js", import.meta.url), "utf8");
+    assert.equal(workerBundle.includes("keyval-store"), true, "tesseract.js worker cache must still use the idb-keyval default DB our seeding targets");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
   }
 }
 

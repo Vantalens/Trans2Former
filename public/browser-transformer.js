@@ -429,8 +429,10 @@ export { IndexedDBStorage } from "./core/ocr/indexeddb-storage.js";
 export {
   OCR_VENDOR_LOAD_FAILED,
   TESSERACT_VENDOR_PATHS,
+  TESSDATA_CACHE_PATH,
   loadTesseractRuntime,
   createTesseractWorker,
+  clearSeededTessdata,
   runRecognize,
   disposeWorker,
 } from "./core/ocr/tesseract-runtime.js";

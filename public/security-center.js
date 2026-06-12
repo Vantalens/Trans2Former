@@ -9,6 +9,7 @@ import {
   getTaskLabel,
   listKnownTaskLabels,
   markTesseractVendorReady,
+  clearSeededTessdata,
   sha256Hex,
   tesseractOCREngine,
   paddleOcrEngine,
@@ -337,6 +338,7 @@ async function clearTessdata(dialog, button) {
   try {
     for (const language of ["chi_sim", "eng"]) {
       await defaultOCRStorage.delete(`tesseract/${language}.traineddata`);
+      await clearSeededTessdata(language);
     }
     if (typeof tesseractOCREngine.ensureProbe === "function") {
       await tesseractOCREngine.ensureProbe();
