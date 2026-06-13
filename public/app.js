@@ -1082,7 +1082,11 @@ function updateFormatCapabilityNote() {
   const from = formatCapabilities.find((item) => item.format === fromFormatSelect.value);
   const to = formatCapabilities.find((item) => item.format === toFormatSelect.value);
   const profileNote = toFormatSelect.value === "md" ? ` · ${markdownOutputProfile}` : "";
-  noteEl.textContent = `${from?.label || fromFormatSelect.value} -> ${to?.label || toFormatSelect.value} · 本地处理${profileNote}`;
+  // 占位级 reader（如 OFD L0）在转换前如实披露成熟度，避免用户误以为正文会被提取
+  const maturityNote = from?.readerMaturity === "placeholder"
+    ? " · 该输入解析为占位实现，正文不会被提取"
+    : "";
+  noteEl.textContent = `${from?.label || fromFormatSelect.value} -> ${to?.label || toFormatSelect.value} · 本地处理${profileNote}${maturityNote}`;
 }
 
 function syncFormatOptions() {

@@ -1,6 +1,6 @@
 import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
 import { writeStoredZip } from "../core/zip-writer.js";
-import { escapeHtml } from "./text-utils.js";
+import { escapeXmlText } from "./text-utils.js";
 import { getCellInlineTokens, getInlineTokens, parseInlineMarkdown } from "./inline-tokens.js";
 
 const NS = "http" + "://schemas.openxmlformats.org";
@@ -68,7 +68,7 @@ function runPropertiesXml(style) {
 function renderRun(run, hyperlinks) {
   if (run.lineBreak) return `<w:r>${runPropertiesXml(run.style || {})}<w:br/></w:r>`;
   const rPr = runPropertiesXml(run.style || {});
-  const text = `<w:t xml:space="preserve">${escapeHtml(run.text || "")}</w:t>`;
+  const text = `<w:t xml:space="preserve">${escapeXmlText(run.text || "")}</w:t>`;
   const baseRun = `<w:r>${rPr}${text}</w:r>`;
   if (run.hyperlinkHref) {
     const rId = hyperlinks.register(run.hyperlinkHref);
@@ -164,7 +164,7 @@ function codeParagraph(block) {
   const lines = String(block.code ?? "").replace(/\r\n?/g, "\n").split("\n");
   const runs = lines.map((line, index) => {
     const breaks = index < lines.length - 1 ? "<w:br/>" : "";
-    return `<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="Consolas"/></w:rPr><w:t xml:space="preserve">${escapeHtml(line)}</w:t>${breaks}</w:r>`;
+    return `<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="Consolas"/></w:rPr><w:t xml:space="preserve">${escapeXmlText(line)}</w:t>${breaks}</w:r>`;
   }).join("");
   return [
     "    <w:p>",
@@ -225,7 +225,7 @@ function buildRelationships(hyperlinks) {
     `  <Relationship Id="rIdNumbering" Type="${REL_NS}/numbering" Target="numbering.xml"/>`,
   ];
   const linkRels = hyperlinks.entries().map(([target, rId]) =>
-    `  <Relationship Id="${rId}" Type="${REL_NS}/hyperlink" Target="${escapeHtml(target)}" TargetMode="External"/>`
+    `  <Relationship Id="${rId}" Type="${REL_NS}/hyperlink" Target="${escapeXmlText(target)}" TargetMode="External"/>`
   );
   const allRels = [...fixedRels, ...linkRels].join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -268,7 +268,7 @@ ${bodyXml}
     {
       name: "docProps/core.xml",
       data: `<?xml version="1.0" encoding="UTF-8"?>
-<cp:coreProperties xmlns:cp="${NS}/package/2006/metadata/core-properties" xmlns:dc="${DC_NS}"><dc:title>${escapeHtml(title)}</dc:title></cp:coreProperties>`,
+<cp:coreProperties xmlns:cp="${NS}/package/2006/metadata/core-properties" xmlns:dc="${DC_NS}"><dc:title>${escapeXmlText(title)}</dc:title></cp:coreProperties>`,
     },
     {
       name: "word/styles.xml",

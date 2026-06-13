@@ -1,23 +1,23 @@
 import { ConversionError } from "../core/conversion-error.js";
 import { createDocumentModel, createParagraph, createRawBlock } from "../core/document-model.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
-import { escapeHtml } from "./text-utils.js";
+import { escapeXmlText, stripIllegalXmlChars } from "./text-utils.js";
 import { getCellInlineTokens, getInlineTokens } from "./inline-tokens.js";
 
 // 把 inline tokens 渲染为嵌套 XML：<strong>/<em>/<del>/<code>/<link href="...">/<br/>
 function inlinesToXml(tokens) {
   return (tokens || []).map((node) => {
     if (!node || typeof node !== "object") return "";
-    if (node.type === "text") return escapeHtml(node.value || "");
-    if (node.type === "code") return `<code>${escapeHtml(node.value || "")}</code>`;
+    if (node.type === "text") return escapeXmlText(node.value || "");
+    if (node.type === "code") return `<code>${escapeXmlText(node.value || "")}</code>`;
     if (node.type === "linebreak") return "<br/>";
-    if (node.type === "footnoteRef") return `<footnoteRef id="${escapeHtml(node.id || "")}"/>`;
+    if (node.type === "footnoteRef") return `<footnoteRef id="${escapeXmlText(node.id || "")}"/>`;
     if (node.type === "strong") return `<strong>${inlinesToXml(node.inlines)}</strong>`;
     if (node.type === "em") return `<em>${inlinesToXml(node.inlines)}</em>`;
     if (node.type === "del") return `<del>${inlinesToXml(node.inlines)}</del>`;
     if (node.type === "link") {
-      const titleAttr = node.title ? ` title="${escapeHtml(node.title)}"` : "";
-      return `<link href="${escapeHtml(node.href || "")}"${titleAttr}>${inlinesToXml(node.inlines)}</link>`;
+      const titleAttr = node.title ? ` title="${escapeXmlText(node.title)}"` : "";
+      return `<link href="${escapeXmlText(node.href || "")}"${titleAttr}>${inlinesToXml(node.inlines)}</link>`;
     }
     if (Array.isArray(node.inlines)) return inlinesToXml(node.inlines);
     return "";
@@ -52,7 +52,8 @@ function formatOpenTag(tagName, attributes) {
 }
 
 function safeCdata(text) {
-  return String(text ?? "").replaceAll("]]>", "]]]]><![CDATA[>");
+  // CDATA 内的控制字符同属 XML 1.0 非法，必须一并剔除（issue #96）
+  return stripIllegalXmlChars(text).replaceAll("]]>", "]]]]><![CDATA[>");
 }
 
 function parserError(message, format) {
@@ -245,7 +246,7 @@ export function writeXml({ model, title = model.title }) {
     if (block.type === "heading") return `    <heading level="${block.level}">${renderBlockInlines(block)}</heading>`;
     if (block.type === "paragraph") return `    <paragraph>${renderBlockInlines(block)}</paragraph>`;
     if (block.type === "quote") return `    <quote>${renderBlockInlines(block)}</quote>`;
-    if (block.type === "code") return `    <code language="${escapeHtml(block.language)}"><![CDATA[\n${safeCdata(block.code)}\n    ]]></code>`;
+    if (block.type === "code") return `    <code language="${escapeXmlText(block.language)}"><![CDATA[\n${safeCdata(block.code)}\n    ]]></code>`;
     if (block.type === "list") {
       const items = (block.items || []).map((item, idx) => {
         const itemInlines = Array.isArray(block.itemInlines) ? block.itemInlines[idx] : null;
@@ -270,16 +271,16 @@ export function writeXml({ model, title = model.title }) {
       ].join("\n")).join("\n");
       return `    <table>\n${header}\n${rows}\n    </table>`;
     }
-    if (block.type === "image") return `    <image src="${escapeHtml(block.src)}" alt="${escapeHtml(block.alt)}" />`;
-    if (block.type === "asset") return `    <asset-ref id="${escapeHtml(block.assetId)}" alt="${escapeHtml(block.alt)}" />`;
-    if (block.type === "raw") return `    <raw index="${index}" format="${escapeHtml(block.format)}"><![CDATA[${safeCdata(block.content)}]]></raw>`;
+    if (block.type === "image") return `    <image src="${escapeXmlText(block.src)}" alt="${escapeXmlText(block.alt)}" />`;
+    if (block.type === "asset") return `    <asset-ref id="${escapeXmlText(block.assetId)}" alt="${escapeXmlText(block.alt)}" />`;
+    if (block.type === "raw") return `    <raw index="${index}" format="${escapeXmlText(block.format)}"><![CDATA[${safeCdata(block.content)}]]></raw>`;
     return "";
   }).filter(Boolean).join("\n");
 
   return {
     type: "text",
     format: "xml",
-    data: `<?xml version="1.0" encoding="UTF-8"?>\n<document schemaVersion="${model.schemaVersion}" title="${escapeHtml(title)}" sourceFormat="${escapeHtml(model.sourceFormat)}">\n  <blocks>\n${blocks}\n  </blocks>\n</document>\n`,
+    data: `<?xml version="1.0" encoding="UTF-8"?>\n<document schemaVersion="${model.schemaVersion}" title="${escapeXmlText(title)}" sourceFormat="${escapeXmlText(model.sourceFormat)}">\n  <blocks>\n${blocks}\n  </blocks>\n</document>\n`,
     mime: "application/xml;charset=utf-8",
   };
 }

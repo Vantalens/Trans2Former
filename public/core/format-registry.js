@@ -39,6 +39,13 @@ const ROUTE_CLASS_OVERRIDES = {
   "html->pptx": "generated",
   "json->pptx": "generated",
   "pptx->pptx": "generated",
+  // OFD reader 是 L0 占位（仅容器元信息，正文不提取），全部出路标 restricted，
+  // 转换前注入 PATH_NOT_RECOMMENDED、landing 徽章显示「受限」（issue #97）。
+  "ofd->md": "restricted",
+  "ofd->html": "restricted",
+  "ofd->txt": "restricted",
+  "ofd->json": "restricted",
+  "ofd->xml": "restricted",
   "ofd->pdf": "restricted",
 };
 
@@ -570,6 +577,16 @@ export class ConverterRegistry {
     return this._assembleQuality({ cycle, effectiveTo, auditedModel, verification, content, fromFormat, fileName, options });
   }
 
+  // writer 阶段的损失（output.warnings）并回 model.metadata，否则 qualityReport
+  // 由写出前的 model 计算，writer 登记的 lossy 损失永远进不了报告（issue #114）。
+  _mergeWriterWarnings({ model, output, content, fromFormat, toFormat, fileName, options }) {
+    if (!Array.isArray(output?.warnings) || output.warnings.length === 0) return model;
+    return ensureDocumentAudit({
+      ...model,
+      metadata: withWarnings(model.metadata || {}, output.warnings),
+    }, { content, reader: fromFormat, writer: toFormat, targetFormat: toFormat, fileName, options });
+  }
+
   convert({ content, from, to, title = "document", fileName = "", options = {} }) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
@@ -579,7 +596,8 @@ export class ConverterRegistry {
       return output;
     }
     const ctx = this._buildRepairCtx({ content, fromFormat, toFormat, title, fileName, options });
-    return this._wrapWithRepairCycle({ model, output, ctx, content, fromFormat, toFormat, fileName, options });
+    const qualityModel = this._mergeWriterWarnings({ model, output, content, fromFormat, toFormat, fileName, options });
+    return this._wrapWithRepairCycle({ model: qualityModel, output, ctx, content, fromFormat, toFormat, fileName, options });
   }
 
   async convertAsync({ content, from, to, title = "document", fileName = "", options = {} }) {
@@ -613,6 +631,7 @@ export class ConverterRegistry {
       return output;
     }
     const ctx = this._buildRepairCtx({ content, fromFormat, toFormat, title, fileName, options });
-    return this._wrapWithRepairCycleAsync({ model, output, ctx, content, fromFormat, toFormat, fileName, options });
+    const qualityModel = this._mergeWriterWarnings({ model, output, content, fromFormat, toFormat, fileName, options });
+    return this._wrapWithRepairCycleAsync({ model: qualityModel, output, ctx, content, fromFormat, toFormat, fileName, options });
   }
 }

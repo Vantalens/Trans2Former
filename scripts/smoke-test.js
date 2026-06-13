@@ -19,6 +19,7 @@ import {
 import { ConversionError, normalizeConversionError } from "../public/core/conversion-error.js";
 import { assertValidDocumentModel, validateDocumentModel } from "../public/core/document-schema.js";
 import { readZipEntries } from "../public/core/zip-container.js";
+import { parseInlineMarkdown } from "../public/formats/inline-tokens.js";
 
 const SAMPLE_ROOT = path.resolve("samples");
 const INPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "png", "docx", "doc", "xlsx", "epub", "pptx", "pdf", "ofd"];
@@ -268,6 +269,19 @@ function createAdvancedXlsxFixture() {
     <row r="2"><c r="A2" s="1"><v>44927</v></c><c r="B2"><f>SUM(1,2)</f><v>3</v></c></row>
   </sheetData>
 </worksheet>`,
+  });
+}
+
+function createStyledXlsxFixture() {
+  return createStoredZip({
+    "[Content_Types].xml": "<Types></Types>",
+    "xl/workbook.xml": `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Styled" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    // 真实结构：cellStyleXfs 在 cellXfs 之前——c@s 只索引 cellXfs（issue #90 的错位源）
+    "xl/styles.xml": `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy&quot;年&quot;m月"/></numFmts><cellStyleXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" xfId="0"/><xf numFmtId="14" xfId="0"/><xf numFmtId="164" xfId="0"/></cellXfs></styleSheet>`,
+    // 富文本 run / 注音 rPh / preserve 空格 三种 sharedStrings 形态（issue #91）
+    "xl/sharedStrings.xml": `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><r><rPr><b/></rPr><t>Tran</t></r><r><t>s2Former</t></r></si><si><t>東京</t><rPh sb="0" eb="2"><t>トウキョウ</t></rPh><phoneticPr fontId="1"/></si><si><t xml:space="preserve">  lead  ing</t></si><si><t>Head</t></si></sst>`,
+    "xl/worksheets/sheet1.xml": `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>3</v></c><c r="B1" t="s"><v>0</v></c><c r="C1" t="s"><v>1</v></c><c r="D1" t="s"><v>2</v></c></row><row r="2"><c r="A2" s="1"><v>45123</v></c><c r="B2"><v>12345</v></c><c r="C2" s="2"><v>45123</v></c><c r="D2" t="inlineStr"><is><r><t>in</t></r><r><t>line</t></r></is></c></row><row r="3"><c r="A3" t="str"><f>A1&amp;" x"</f><v>Head x</v></c><c r="B3"><f>SUM(1,2)</f><v>3</v></c></row></sheetData></worksheet>`,
   });
 }
 
@@ -1315,6 +1329,183 @@ test("machine-readable DocumentModel schema mirrors the runtime block and asset 
   assert.equal(schema.properties.schemaVersion.const, "trans2former.document.v1");
   assert.deepEqual(schema.properties.blocks.items.oneOf.map((entry) => entry.properties.type.const), EXPECTED_BLOCK_TYPES);
   assert.deepEqual(Object.keys(schema.properties.assets.items.properties), ["id", "name", "mime", "data", "size", "role", "provenance"]);
+});
+
+test("Markdown round-trips escaped pipes, wide fences, hyphen languages, and link punctuation", () => {
+  // #83: pipes inside table cells survive md → model → md → model
+  const tableMd = "| Name | Expr |\n| --- | --- |\n| a | x \\| y |\n";
+  const tableModel = toDocumentModel(tableMd, "md", "pipes.md");
+  const table = tableModel.blocks.find((block) => block.type === "table");
+  assert.equal(table.rows[0][1], "x | y", "escaped pipe must parse as a literal pipe inside the cell");
+  const tableOut = convertContent({ content: tableMd, from: "md", to: "md", title: "pipes.md" });
+  const tableBack = toDocumentModel(tableOut.data, "md", "pipes.md").blocks.find((block) => block.type === "table");
+  assert.deepEqual(tableBack.rows, table.rows, "table cells with pipes must round-trip");
+
+  // #52: code containing ``` fences round-trips via a wider fence
+  const fenceMd = "````md\nUse a fence:\n```js\ncode\n```\n````\n";
+  const fenceModel = toDocumentModel(fenceMd, "md", "fence.md");
+  const code = fenceModel.blocks.find((block) => block.type === "code");
+  assert.equal(code.code.includes("```js"), true, "inner fence lines are content, not fence closers");
+  const fenceOut = convertContent({ content: fenceMd, from: "md", to: "md", title: "fence.md" });
+  const fenceBack = toDocumentModel(fenceOut.data, "md", "fence.md").blocks.find((block) => block.type === "code");
+  assert.equal(fenceBack.code, code.code, "fenced code containing fences must round-trip");
+
+  // #57: hyphen/plus language identifiers parse as fences, not paragraphs
+  const langMd = "```objective-c\nNSLog(@\"hi\");\n```\n\nAfter paragraph.\n";
+  const langModel = toDocumentModel(langMd, "md", "lang.md");
+  const langCode = langModel.blocks.find((block) => block.type === "code");
+  assert.equal(langCode.language, "objective-c");
+  assert.equal(
+    langModel.blocks.some((block) => block.type === "paragraph" && block.text === "After paragraph."),
+    true,
+    "fence state must not invert and swallow the rest of the document",
+  );
+
+  // #53: image alt/src with brackets/parens round-trip
+  const imageMd = "![shot \\[v2\\]](dir/a\\(1\\).png)\n";
+  const imageModel = toDocumentModel(imageMd, "md", "img.md");
+  const image = imageModel.blocks.find((block) => block.type === "image");
+  assert.equal(image.alt, "shot [v2]");
+  assert.equal(image.src, "dir/a(1).png");
+  const imageOut = convertContent({ content: imageMd, from: "md", to: "md", title: "img.md" });
+  const imageBack = toDocumentModel(imageOut.data, "md", "img.md").blocks.find((block) => block.type === "image");
+  assert.equal(imageBack.alt, image.alt);
+  assert.equal(imageBack.src, image.src);
+
+  // #55: link title with escaped quotes round-trips through writer and reader
+  const linkMd = '[doc](https://example.com "say \\"hi\\" loud")';
+  const link = parseInlineMarkdown(linkMd).find((node) => node.type === "link");
+  assert.equal(link.title, 'say "hi" loud', "escaped quotes inside the title must parse");
+  const linkOut = convertContent({ content: linkMd, from: "md", to: "md", title: "link.md" });
+  const linkBackNode = parseInlineMarkdown(linkOut.data.trim()).find((node) => node.type === "link");
+  assert.equal(linkBackNode.title, link.title, "link title must survive a full round-trip");
+  assert.equal(linkBackNode.href, "https://example.com");
+});
+
+test("XLSX styles index cellXfs only, rich text concatenates cleanly, and numbers round-trip typed", () => {
+  const bytes = createStyledXlsxFixture();
+  const model = toDocumentModel(bytes, "xlsx", "styled.xlsx");
+  const table = model.blocks.find((block) => block.type === "table");
+  const cellAt = (rowIdx, colIdx) => table.rows[rowIdx][colIdx];
+
+  // #90: c@s indexes cellXfs — cellStyleXfs entries must not shift the mapping
+  assert.equal(cellAt(0, 0), "2023-07-16", "builtin date style via cellXfs must survive a preceding cellStyleXfs section");
+  assert.equal(cellAt(0, 1), "12345", "unstyled numbers must not be converted to dates");
+  assert.equal(cellAt(0, 2), "2023-07-16", "custom numFmt (yyyy年m月) must be detected as a date format");
+
+  // #91: rich-text runs concatenate without injected spaces; rPh phonetics are dropped
+  assert.equal(table.headers[1], "Trans2Former", "rich text runs must concatenate without injected spaces");
+  assert.equal(table.headers[2], "東京", "rPh phonetic runs must not leak into the cell text");
+  assert.equal(table.headers[3], "  lead  ing", "xml:space=preserve whitespace must survive");
+  assert.equal(cellAt(0, 3), "inline", "inlineStr rich text must concatenate cleanly");
+
+  // #94: writer types cells — numbers bare <v>, string formula caches t="str"
+  const out = convertContent({ content: bytes, from: "xlsx", to: "xlsx", title: "styled.xlsx" });
+  const zip = readZipEntries(out.data);
+  const sheetOut = zip.getText("xl/worksheets/sheet1.xml");
+  assert.match(sheetOut, /<c r="B2"><v>12345<\/v><\/c>/, "numeric cells must be bare t=n values");
+  assert.match(sheetOut, /<c r="A3" t="str"><f>[^<]*<\/f><v>Head x<\/v><\/c>/, "string formula caches must carry t=\"str\"");
+  assert.match(sheetOut, /<c r="B3"><f>SUM\(1,2\)<\/f><v>3<\/v><\/c>/, "numeric formula caches stay untyped");
+  const sstOut = zip.getText("xl/sharedStrings.xml");
+  assert.doesNotMatch(sstOut, /<t[^>]*>12345<\/t>/, "numbers must not be registered in the shared string table");
+
+  // reader→writer→reader closure: cell content stable across a full round-trip
+  const back = toDocumentModel(out.data, "xlsx", "styled.xlsx");
+  const backTable = back.blocks.find((block) => block.type === "table");
+  assert.deepEqual(backTable.headers, table.headers, "headers must survive the round-trip");
+  assert.deepEqual(backTable.rows[0], table.rows[0], "data row must survive the round-trip");
+});
+
+test("PDF literal string escapes decode in a single pass", () => {
+  const pdf = `%PDF-1.4
+1 0 obj
+<< /Length 90 >>
+stream
+BT
+(C:\\\\temp\\\\new) Tj
+(\\101\\102 octal pair) Tj
+(line one \\
+continued tail) Tj
+(\\q unknown escape) Tj
+ET
+endstream
+endobj
+%%EOF`;
+  const model = toDocumentModel(pdf, "pdf", "escapes.pdf");
+  const texts = model.blocks.map((block) => String(block.text || ""));
+  assert.equal(texts.some((text) => text.includes("C:\\temp\\new")), true, "\\\\ followed by n/t must decode as backslash + letter, not control chars");
+  assert.equal(texts.some((text) => text.includes("AB octal pair")), true, "octal escapes \\101\\102 must decode to AB");
+  assert.equal(texts.some((text) => text.includes("line one continued tail")), true, "backslash-EOL continuations must join lines");
+  assert.equal(texts.some((text) => text.includes("q unknown escape")), true, "unknown escapes drop the backslash and keep the char");
+});
+
+test("PDF TJ literal arrays extract kerned text", () => {
+  const pdf = `%PDF-1.4
+1 0 obj
+<< /Length 70 >>
+stream
+BT
+[(Hello) -250 (World)] TJ
+[(Ker) -50 (ning)] TJ
+[(Single literal item)] TJ
+ET
+endstream
+endobj
+%%EOF`;
+  const model = toDocumentModel(pdf, "pdf", "tj-array.pdf");
+  const texts = model.blocks.map((block) => String(block.text || ""));
+  assert.equal(texts.some((text) => text.includes("Hello World")), true, "large negative kern must become a word space");
+  assert.equal(texts.some((text) => text.includes("Kerning")), true, "small kern adjustments must not split the word");
+  assert.equal(texts.some((text) => text.includes("Single literal item")), true, "single-item TJ arrays must extract");
+});
+
+test("PDF byte input survives the core fallback parser without mojibake", async () => {
+  const body = "BT (Byte Input Title) Tj ET";
+  const pdf = `%PDF-1.4\n1 0 obj\n<< /Length ${body.length} >>\nstream\n${body}\nendstream\nendobj\n%%EOF`;
+  const bytes = new Uint8Array(Buffer.from(pdf, "latin1"));
+  const expanded = await expandPdfContentForTextExtraction(bytes);
+  const model = toDocumentModel(expanded, "pdf", "bytes.pdf");
+  const texts = model.blocks.map((block) => String(block.text || ""));
+  assert.equal(texts.some((text) => text.includes("Byte Input Title")), true, "Uint8Array input must not degrade into comma-joined decimal noise");
+  assert.equal(texts.some((text) => /^\d+(,\d+)+/.test(text)), false, "no comma-decimal garbage from String(Uint8Array)");
+});
+
+test("embedded PDFJS sentinel literals cannot hijack or swallow extraction", () => {
+  const fakeMarkerDoc = `%PDF-1.4
+% Trans2Former PDFJS_TEXT_START
+{"pages":[{"pageNumber":1,"text":"INJECTED CONTENT"}]}
+% Trans2Former PDFJS_TEXT_END
+1 0 obj
+<< /Length 40 >>
+stream
+BT (Real body text here) Tj ET
+endstream
+endobj
+%%EOF`;
+  const model = toDocumentModel(fakeMarkerDoc, "pdf", "sentinel.pdf");
+  const texts = model.blocks.map((block) => String(block.text || ""));
+  assert.equal(texts.some((text) => text.includes("Real body text here")), true, "embedded sentinel literals must not swallow real extraction");
+  assert.equal(texts.some((text) => text.includes("INJECTED CONTENT")), false, "plaintext payloads must be rejected (base64-only protocol)");
+});
+
+test("encrypted PDFs surface PDF_ENCRYPTED instead of misleading fallbacks", async () => {
+  const pdf = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog >>
+endobj
+trailer
+<< /Root 1 0 R /Encrypt 5 0 R >>
+%%EOF`;
+  const expanded = await expandPdfContentForTextExtraction(pdf);
+  const model = toDocumentModel(expanded, "pdf", "locked.pdf");
+  const warnings = model.metadata?.warnings || [];
+  assert.equal(warnings.some((w) => w.code === "PDF_ENCRYPTED"), true, "encrypted PDFs must carry the dedicated warning");
+  assert.equal(warnings.some((w) => w.code === "PDF_NO_CREDIBLE_TEXT"), false, "the generic no-text warning is misleading for encrypted PDFs");
+  assert.equal(model.metadata?.pdf?.encrypted, true);
+  const { isScannedPdf } = await import("../public/core/ocr/pdf-rasterizer.js");
+  const detection = await isScannedPdf(pdf, {});
+  assert.equal(detection.scanned, false, "encrypted PDFs are not scanned documents");
+  assert.equal(detection.reason, "encrypted");
 });
 
 await runTests();

@@ -33,7 +33,7 @@ Trans2Former 区分两件事：
 ## 路径分级
 
 - `Markdown / HTML / JSON -> PPTX` 与 `PPTX -> PPTX` 属于 `generated`：writer 从语义内容重新生成基础演示，转换模型附带 `PATH_NOT_RECOMMENDED`。
-- `OFD -> PDF` 属于 `restricted`：当前 OFD reader 仅提供 L0 占位能力，PDF 输出不能视为版面保持导出。
+- 所有 `OFD -> *` 路径属于 `restricted`：OFD reader 为 L0 占位，仅提取容器元信息，正文不提取；转换模型附带 `PATH_NOT_RECOMMENDED`。
 - 表格稳定链优先执行 `SemanticDoc <-> WorkbookModel` mapper；执行结果写入 `executedMappers`，便于质量报告与回归校验。
 
 ## UI 规则

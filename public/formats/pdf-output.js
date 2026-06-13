@@ -1,30 +1,18 @@
 import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
 import { writePdfHighFidelity } from "./pdf-output-high-fidelity.js";
 import { getCellInlineTokens, getInlineTokens } from "./inline-tokens.js";
+import { createWarning } from "../core/warnings.js";
+import { utf16BeHex, pdfUnicodeString, buildCidFontObjects, charWidthFactor, sanitizeGb1Text } from "./pdf-cid-font.js";
 
 // 程序化 PDF 输出：保留 block 结构与 inline 样式。
 // 不嵌入额外字体，只用 STSong-Light（CJK + ASCII 都能渲染），通过：
 //   - 字号变化区分 heading / paragraph / code
 //   - Text render mode 2（fill + stroke）模拟粗体
+//   - Tm 斜切矩阵（0.21 skew）模拟斜体（issue #109）
+//   - 灰底矩形标识行内代码（issue #109）
 //   - 蓝色 + 下划线 + URL annotation 表达链接
 //   - 左缩进表达 quote / code / list
 // 来还原视觉层级。
-
-function utf16BeHex(value) {
-  return [...String(value ?? "")]
-    .map((char) => char.codePointAt(0))
-    .flatMap((codePoint) => {
-      if (codePoint <= 0xffff) return [codePoint];
-      const offset = codePoint - 0x10000;
-      return [0xd800 + (offset >> 10), 0xdc00 + (offset & 0x3ff)];
-    })
-    .map((codeUnit) => codeUnit.toString(16).toUpperCase().padStart(4, "0"))
-    .join("");
-}
-
-function pdfUnicodeString(value) {
-  return `<FEFF${utf16BeHex(value)}>`;
-}
 
 function escapePdfTextLiteral(value) {
   return String(value ?? "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
@@ -38,27 +26,32 @@ const MARGIN_TOP = 60;
 const MARGIN_BOTTOM = 60;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 
-// 每字符约占 fontSize * factor 的水平空间。CJK ≈ 1.0，ASCII ≈ 0.5。
+// 每字符约占 fontSize * factor 的水平空间（issue #105/#107）。
+// 用 charWidthFactor 统一查表，与字体对象的 /W 和 DW 一致。
 function charAdvance(char, fontSize) {
   const code = char.codePointAt(0);
-  const isWide = (code >= 0x3000 && code <= 0x9fff)
-    || (code >= 0xac00 && code <= 0xd7af)
-    || (code >= 0xff00 && code <= 0xffef);
-  return fontSize * (isWide ? 1.0 : 0.5);
+  return fontSize * charWidthFactor(code);
 }
 
 // 把一组 inline segments wrap 成多行，每行仍是 segments 数组并附带宽度。
 // segment 形态: { text, style, href? }，style: { bold, italic, code, link, strike }
-function wrapSegments(segments, fontSize, maxWidth) {
+function wrapSegments(segments, fontSize, maxWidth, stats) {
   const lines = [];
   let currentLine = [];
   let currentWidth = 0;
 
   function pushSegment(text, style, href) {
     if (!text) return;
+    // issue #105/#107: 字符降级为 Adobe-GB1 覆盖内字符
+    const { text: sanitized, dropped } = sanitizeGb1Text(text);
+    if (stats && dropped.size > 0) {
+      for (const [char, count] of dropped) {
+        stats.dropped.set(char, (stats.dropped.get(char) || 0) + count);
+      }
+    }
     let buffer = "";
     let bufferWidth = 0;
-    for (const char of text) {
+    for (const char of sanitized) {
       if (char === "\n") {
         if (buffer) {
           currentLine.push({ text: buffer, style, href, width: bufferWidth });
@@ -187,13 +180,20 @@ function blockLayout(block) {
 }
 
 // 把 block 转成 layout lines：每个 line = { segments, indent, fontSize, leading, isLastInBlock }
-function blockToLines(block) {
+function blockToLines(block, stats) {
   const layout = blockLayout(block);
   const maxWidth = CONTENT_WIDTH - layout.indent;
 
   if (block.type === "code") {
     const text = String(block.code ?? "");
-    const codeSegments = text.split("\n").map((line) => [{ text: line, style: { code: true }, href: "" }]);
+    // issue #105/#107: code block 内字符降级
+    const { text: sanitized, dropped } = sanitizeGb1Text(text);
+    if (stats && dropped.size > 0) {
+      for (const [char, count] of dropped) {
+        stats.dropped.set(char, (stats.dropped.get(char) || 0) + count);
+      }
+    }
+    const codeSegments = sanitized.split("\n").map((line) => [{ text: line, style: { code: true }, href: "" }]);
     return codeSegments.map((segments, i) => ({
       segments,
       indent: layout.indent,
@@ -215,7 +215,7 @@ function blockToLines(block) {
         : flattenInlinesToSegments(getInlineTokens({ text: item }));
       const prefixed = [{ text: marker, style: {}, href: "" }, ...segments];
       const indent = layout.indent + depth * 16;
-      const wrapped = wrapSegments(prefixed, layout.fontSize, CONTENT_WIDTH - indent);
+      const wrapped = wrapSegments(prefixed, layout.fontSize, CONTENT_WIDTH - indent, stats);
       wrapped.forEach((lineSegments, idx) => {
         lines.push({
           segments: lineSegments,
@@ -232,7 +232,7 @@ function blockToLines(block) {
   }
 
   if (block.type === "table") {
-    return tableToLines(block);
+    return tableToLines(block, stats);
   }
 
   // heading / paragraph / quote / image / asset / raw
@@ -254,7 +254,7 @@ function blockToLines(block) {
     segments = segments.map((seg) => ({ ...seg, style: { ...seg.style, italic: true } }));
   }
 
-  const wrapped = wrapSegments(segments, layout.fontSize, maxWidth);
+  const wrapped = wrapSegments(segments, layout.fontSize, maxWidth, stats);
   if (wrapped.length === 0) return [];
   return wrapped.map((lineSegments, i) => ({
     segments: lineSegments,
@@ -265,7 +265,7 @@ function blockToLines(block) {
   }));
 }
 
-function tableToLines(block) {
+function tableToLines(block, stats) {
   const headers = block.headers || [];
   const rows = [headers, ...(block.rows || [])];
   if (headers.length === 0) return [];
@@ -281,7 +281,7 @@ function tableToLines(block) {
       if (rowIndex === 0) {
         segments = segments.map((seg) => ({ ...seg, style: { ...seg.style, bold: true } }));
       }
-      return wrapSegments(segments, fontSize, colWidth - 8);
+      return wrapSegments(segments, fontSize, colWidth - 8, stats);
     });
     const maxLines = Math.max(1, ...cellLines.map((c) => c.length));
     for (let lineIdx = 0; lineIdx < maxLines; lineIdx += 1) {
@@ -307,8 +307,12 @@ function tableToLines(block) {
       });
     }
     if (rowIndex === 0) {
+      // issue #105: 表格分隔线宽度用 charAdvance 而非硬编码 0.5
+      const separatorChar = "─";
+      const separatorAdvance = charAdvance(separatorChar, fontSize);
+      const repeatCount = Math.floor(CONTENT_WIDTH / separatorAdvance);
       lines.push({
-        segments: [{ text: "─".repeat(Math.floor(CONTENT_WIDTH / (fontSize * 0.5))), style: {}, href: "", width: CONTENT_WIDTH }],
+        segments: [{ text: separatorChar.repeat(repeatCount), style: {}, href: "", width: CONTENT_WIDTH }],
         indent: 0,
         fontSize,
         leading: 6,
@@ -342,6 +346,7 @@ function paginate(allLines) {
 }
 
 // 把一行 layout 生成 PDF content stream 命令，并收集 link annotation。
+// issue #109: 斜体用斜切矩阵 Tm(1 0 0.21 1)，code 用灰底矩形。
 function renderLine(line) {
   const ops = [];
   const annotations = [];
@@ -352,17 +357,30 @@ function renderLine(line) {
     const segWidth = seg.width != null ? seg.width : seg.text.length * line.fontSize * 0.5;
     const style = seg.style || {};
 
-    // 颜色：链接蓝色 / 默认黑色 / strike 用普通色
     ops.push("q"); // save state
+
+    // 颜色：链接蓝色 / code 灰底黑字 / 默认黑色
     if (style.link) ops.push("0.05 0.4 0.85 rg 0.05 0.4 0.85 RG");
     else ops.push("0 0 0 rg 0 0 0 RG");
+
+    // code 灰底矩形（issue #109）
+    if (style.code) {
+      ops.push("0.92 0.92 0.92 rg");
+      ops.push(`${cursorX - 1} ${line.y - 2} ${segWidth + 2} ${line.fontSize + 2} re f`);
+      ops.push("0 0 0 rg"); // 恢复黑色文字
+    }
 
     // 粗体：用 text rendering mode 2 (fill + stroke) + 描边宽度
     if (style.bold) ops.push("2 Tr 0.4 w");
     else ops.push("0 Tr");
 
-    // 字号
-    ops.push(`BT /F1 ${line.fontSize} Tf ${cursorX} ${line.y} Td <${utf16BeHex(seg.text)}> Tj ET`);
+    // 字号 + 斜体斜切（issue #109）
+    if (style.italic && !style.code) {
+      // 斜切矩阵：1 0 0.21 1 x y（21% 倾斜）；Tm 替代 Td
+      ops.push(`BT /F1 ${line.fontSize} Tf 1 0 0.21 1 ${cursorX} ${line.y} Tm <${utf16BeHex(seg.text)}> Tj ET`);
+    } else {
+      ops.push(`BT /F1 ${line.fontSize} Tf ${cursorX} ${line.y} Td <${utf16BeHex(seg.text)}> Tj ET`);
+    }
 
     // 链接下划线
     if (style.link) {
@@ -389,7 +407,8 @@ function renderLine(line) {
 }
 
 function buildPdfBytes(model, title) {
-  const allLines = (model.blocks || []).flatMap((block) => blockToLines(block));
+  const stats = { dropped: new Map() }; // issue #107: 收集降级字符
+  const allLines = (model.blocks || []).flatMap((block) => blockToLines(block, stats));
   const pages = paginate(allLines);
 
   let cursor = 3;
@@ -450,9 +469,14 @@ function buildPdfBytes(model, title) {
 
   objects.push(...annotObjectsToAppend);
 
-  objects.push(`<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [${cidFontObjectNumber} 0 R] >>`);
-  objects.push(`<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor ${fontDescriptorObjectNumber} 0 R /DW 1000 >>`);
-  objects.push("<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [0 -120 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >>");
+  // issue #105/#107: 用 buildCidFontObjects 统一字体对象（UniGB-UTF16-H + /W + Supplement 5）
+  const { type0, cidFont, descriptor } = buildCidFontObjects({
+    cidFontRef: `${cidFontObjectNumber} 0 R`,
+    descriptorRef: `${fontDescriptorObjectNumber} 0 R`,
+  });
+  objects.push(type0);
+  objects.push(cidFont);
+  objects.push(descriptor);
   objects.push(`<< /Title ${pdfUnicodeString(title)} /Producer (Trans2Former) >>`);
 
   let output = "%PDF-1.4\n";
@@ -465,24 +489,44 @@ function buildPdfBytes(model, title) {
   output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
   output += offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("");
   output += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${infoObjectNumber} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return textToBytes(output);
+
+  // issue #107/#108: 降级字符 warning
+  const warnings = [];
+  if (stats.dropped.size > 0) {
+    const chars = Array.from(stats.dropped.keys()).slice(0, 10).join("");
+    warnings.push(createWarning("lossy", "PDF_CHARSET_UNSUPPORTED_CHARS", `${stats.dropped.size} character(s) not in Adobe-GB1 (e.g. ${chars}) were replaced with □.`));
+  }
+
+  return { bytes: textToBytes(output), warnings };
 }
 
 // PDF 输出双路：优先使用高保真路径（FixedLayoutModel），回落到程序化路径（SemanticDoc）
+// issue #108: 高保真失败时 warning，双路 warnings 合并透传
 export function writePdfBinary({ model, title = model.title }) {
+  const warnings = [];
+
   if (model.fixedLayout && model.fixedLayout.pages && model.fixedLayout.pages.length > 0) {
     try {
-      return writePdfHighFidelity({ model, title });
+      const hfResult = writePdfHighFidelity({ model, title });
+      if (hfResult.warnings) warnings.push(...hfResult.warnings);
+      return {
+        ...hfResult,
+        warnings: warnings.length > 0 ? warnings : undefined,
+      };
     } catch (error) {
       console.warn("[pdf-output] High-fidelity output failed, falling back to programmatic output:", error.message);
+      warnings.push(createWarning("lossy", "PDF_HIGH_FIDELITY_DEGRADED", `High-fidelity PDF output failed (${error.message}); fell back to programmatic layout.`));
     }
   }
 
-  const bytes = buildPdfBytes(model, title);
+  const { bytes, warnings: buildWarnings } = buildPdfBytes(model, title);
+  if (buildWarnings) warnings.push(...buildWarnings);
+
   return {
     type: "binary",
     format: "pdf",
     data: bytesToDataUrl(bytes, "application/pdf"),
     mime: "application/pdf",
+    warnings: warnings.length > 0 ? warnings : undefined,
   };
 }

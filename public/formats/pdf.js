@@ -4,6 +4,7 @@ import { createWarning, withWarnings } from "../core/warnings.js";
 import { escapeHtml } from "./text-utils.js";
 
 const PDF_FALLBACK_TEXT = "这是有效 PDF，但当前核心文本抽取器暂时无法读取其中的正文编码或压缩内容流。下方保留原 PDF 预览；如需转换为可编辑文本，请等待核心 OCR/Layout 增强或导入可复制文本的 PDF。";
+const PDF_ENCRYPTED_TEXT = "此 PDF 受密码保护（已加密），本地解析器无法在不输入密码的情况下提取正文。请先用 PDF 工具解除密码后重新导入；下方保留原 PDF 预览（浏览器查看器可能支持输入密码）。";
 const PDFJS_PAYLOAD_START = "% Trans2Former PDFJS_TEXT_START";
 const PDFJS_PAYLOAD_END = "% Trans2Former PDFJS_TEXT_END";
 const MAX_INFLATED_STREAM_BYTES = 64 * 1024 * 1024;
@@ -11,13 +12,22 @@ const MAX_INFLATED_TOTAL_BYTES = 128 * 1024 * 1024;
 const MAX_EMBEDDED_PDF_BYTES = 4 * 1024 * 1024;
 
 function decodePdfString(value) {
-  return String(value ?? "")
-    .replace(/\\n/g, "\n")
-    .replace(/\\r/g, "\r")
-    .replace(/\\t/g, "\t")
-    .replace(/\\\(/g, "(")
-    .replace(/\\\)/g, ")")
-    .replace(/\\\\/g, "\\");
+  // PDF 32000-1 §7.3.4.2：单遍解码转义。链式 replace 是错的——\\ 后跟 n 会被
+  // 先行的 /\\n/ 误判为换行（issue #100）。交替顺序：八进制 → \<EOL> 续行 → 单字符。
+  return String(value ?? "").replace(/\\([0-7]{1,3}|\r\n|\r|\n|[\s\S])/g, (_, esc) => {
+    if (/^[0-7]/.test(esc) && esc !== "\r" && esc !== "\n") {
+      return String.fromCharCode(Number.parseInt(esc, 8) & 0xff); // \ddd，高位溢出按规范忽略
+    }
+    switch (esc) {
+      case "n": return "\n";
+      case "r": return "\r";
+      case "t": return "\t";
+      case "b": return "\b";
+      case "f": return "\f";
+      case "\r\n": case "\r": case "\n": return ""; // \<EOL> 续行：整体删除
+      default: return esc; // 覆盖 \( \) \\，未知转义按规范丢反斜杠保留字符
+    }
+  });
 }
 
 function hexToBytes(hex) {
@@ -63,9 +73,12 @@ function decodePdfHexFallback(hex) {
 }
 
 function coercePdfText(content) {
-  if (content instanceof Uint8Array) return new TextDecoder("latin1").decode(content);
-  if (content instanceof ArrayBuffer) return new TextDecoder("latin1").decode(new Uint8Array(content));
-  if (ArrayBuffer.isView(content)) return new TextDecoder("latin1").decode(new Uint8Array(content.buffer, content.byteOffset, content.byteLength));
+  // 不能用 TextDecoder("latin1")：WHATWG 把它解析为 windows-1252，0x80-0x9F 被映射到
+  // 大于 0xFF 的码点，经 binaryStringToBytes 的 charCodeAt&0xff 回转后字节已损坏，
+  // FlateDecode 流必然解压失败（issue #103）。bytesToLatin1 与回转函数无损往返。
+  if (content instanceof Uint8Array) return bytesToLatin1(content);
+  if (content instanceof ArrayBuffer) return bytesToLatin1(new Uint8Array(content));
+  if (ArrayBuffer.isView(content)) return bytesToLatin1(new Uint8Array(content.buffer, content.byteOffset, content.byteLength));
   const text = String(content ?? "");
   const dataUrlMatch = text.match(/^data:[^;]+;base64,([A-Za-z0-9+/=]+)([\s\S]*)$/);
   if (dataUrlMatch) {
@@ -183,13 +196,16 @@ function extractTextObjects(source) {
 
 function extractPdfJsPayload(source) {
   const text = String(source || "");
-  const start = text.indexOf(PDFJS_PAYLOAD_START);
+  // 真 payload 恒由 expandPdfContentForTextExtraction 追加在串尾（契约：END 之后
+  // 只允许空白）。取最后一个 START + 尾部校验 + 仅认 base64，杜绝文档内容恰含/
+  // 伪造哨兵字面量时吞掉或劫持真 payload（issue #98）。残余风险仅剩"伪 payload
+  // 精确位于文件物理末尾且 PDF.js 提取失败"——内容作者本就控制全部内容，等价接受。
+  const start = text.lastIndexOf(PDFJS_PAYLOAD_START);
   if (start < 0) return null;
   const end = text.indexOf(PDFJS_PAYLOAD_END, start + PDFJS_PAYLOAD_START.length);
   if (end <= start) return null;
+  if (text.slice(end + PDFJS_PAYLOAD_END.length).trim() !== "") return null;
   const body = text.slice(start + PDFJS_PAYLOAD_START.length, end).trim();
-  // 哨兵之间放 base64(JSON)，避免 PDF 抽出文本恰好包含哨兵字面量时被截断。
-  // 兼容旧版未编码的明文 JSON。
   const tryParse = (json) => {
     try {
       const payload = JSON.parse(json);
@@ -198,21 +214,31 @@ function extractPdfJsPayload(source) {
       return null;
     }
   };
-  if (body.startsWith("base64:")) {
-    const raw = body.slice("base64:".length);
-    if (typeof Buffer !== "undefined") return tryParse(Buffer.from(raw, "base64").toString("utf8"));
-    if (typeof atob === "function") {
-      try { return tryParse(decodeURIComponent(escape(atob(raw)))); } catch { return null; }
-    }
-    return null;
+  if (!body.startsWith("base64:")) return null; // 编码端只产 base64，明文一律拒收
+  const raw = body.slice("base64:".length);
+  if (typeof Buffer !== "undefined") return tryParse(Buffer.from(raw, "base64").toString("utf8"));
+  if (typeof atob === "function") {
+    try { return tryParse(decodeURIComponent(escape(atob(raw)))); } catch { return null; }
   }
-  return tryParse(body);
+  return null;
 }
 
 function extractLiteralTextOperators(textObject) {
-  return [...String(textObject || "").matchAll(/\(((?:\\.|[^\\)])*)\)\s*(?:Tj|'|"|TJ)/g)]
-    .map((match) => decodePdfString(match[1]).trim())
-    .filter(isCrediblePdfText);
+  const text = String(textObject || "");
+  // 转义对必须用 \\[\s\S] 而非 \\.（. 不匹配换行，\<EOL> 续行会让整个字面串失配）
+  const single = [...text.matchAll(/\(((?:\\[\s\S]|[^\\)])*)\)\s*(?:Tj|'|")/g)]
+    .map((match) => decodePdfString(match[1]).trim());
+  // [(A) -120 (B)] TJ：字面项逐个解码拼接（issue #101——旧正则要求 ) 后紧跟操作符，
+  // 数组里的字面串零匹配）；kern 位移 ≤ -180/1000 em 视为词间空格。
+  const arrays = [...text.matchAll(/\[((?:\((?:\\[\s\S]|[^\\)])*\)|[^\]])*)\]\s*TJ/g)].map((match) => {
+    let out = "";
+    for (const item of match[1].matchAll(/\(((?:\\[\s\S]|[^\\)])*)\)|(-?\d+(?:\.\d+)?)/g)) {
+      if (item[1] !== undefined) out += decodePdfString(item[1]);
+      else if (Number(item[2]) <= -180) out += " ";
+    }
+    return out.trim();
+  });
+  return [...single, ...arrays].filter(isCrediblePdfText);
 }
 
 function normalizeHexCode(value) {
@@ -442,11 +468,14 @@ async function extractTextWithPdfJs(content) {
         fontSize: item.height,
       }));
       const annotations = await collectPdfJsAnnotations(page);
+      // issue #111: 读取 /Rotate
+      const rotation = (page.rotate || 0) % 360;
       const layoutPage = {
         pageNumber,
         size: viewport ? { width: viewport.width, height: viewport.height, unit: "pt" } : { width: 0, height: 0, unit: "pt" },
         textRuns,
         annotations,
+        rotation,
       };
       if (pageBlocks.length > 0) {
         pages.push({ pageNumber, blocks: pageBlocks, layout: layoutPage });
@@ -456,7 +485,7 @@ async function extractTextWithPdfJs(content) {
       page.cleanup();
     }
     await document.destroy();
-    return pages;
+    return { pages, encrypted: false };
   } catch (error) {
     if (typeof console !== "undefined" && console.warn) {
       console.warn("[trans2former] PDF.js extraction failed, falling back to core parser:", error?.message || error);
@@ -464,7 +493,9 @@ async function extractTextWithPdfJs(content) {
     if (document) {
       try { await document.destroy(); } catch { /* ignore */ }
     }
-    return [];
+    // 加密 PDF 在 getDocument 阶段抛 PasswordException——单独标记，
+    // 让上层给出准确文案而非误导的「扫描件/不可读」链路（issue #104）。
+    return { pages: [], encrypted: error?.name === "PasswordException" };
   }
 }
 
@@ -750,6 +781,8 @@ function extractFlateStreamPayloads(source) {
 }
 
 function encodePdfJsPayload(payload) {
+  // 只产 base64——明文 JSON 回退已删除（解码端只认 base64，issue #98 的协议收紧
+  // 要求编码/解码严格一致）。Buffer 与 btoa 双缺失时返回空串，调用方跳过注入。
   const json = JSON.stringify(payload);
   if (typeof Buffer !== "undefined") {
     return `base64:${Buffer.from(json, "utf8").toString("base64")}`;
@@ -758,18 +791,38 @@ function encodePdfJsPayload(payload) {
     try {
       return `base64:${btoa(unescape(encodeURIComponent(json)))}`;
     } catch {
-      return json;
+      return "";
     }
   }
-  return json;
+  return "";
+}
+
+function appendPdfJsPayload(sourceText, payload) {
+  const encoded = encodePdfJsPayload(payload);
+  if (!encoded) return null;
+  return `${sourceText}\n${PDFJS_PAYLOAD_START}\n${encoded}\n${PDFJS_PAYLOAD_END}\n`;
+}
+
+const PDF_ENCRYPT_PATTERN = /\/Encrypt\s+\d+\s+\d+\s+R/;
+// /Encrypt N G R 只出现在 trailer/XRef 字典；正文流是压缩字节，误报率极低。
+export function isLikelyEncryptedPdf(source) {
+  return PDF_ENCRYPT_PATTERN.test(String(source || ""));
 }
 
 export async function expandPdfContentForTextExtraction(content) {
   const source = coercePdfText(content);
-  const sourceText = String(content ?? "");
-  const pdfJsPages = await extractTextWithPdfJs(content);
+  // 字节输入不能走 String(content)——Uint8Array 会变成逗号十进制串，后续解析
+  // 全部喂垃圾（issue #103）；字符串/dataURL 输入保持原值，字节级不变。
+  const sourceText = typeof content === "string" ? content : source;
+  const { pages: pdfJsPages, encrypted } = await extractTextWithPdfJs(content);
   if (pdfJsPages.length > 0) {
-    return `${sourceText}\n${PDFJS_PAYLOAD_START}\n${encodePdfJsPayload({ engine: "pdfjs", pages: pdfJsPages })}\n${PDFJS_PAYLOAD_END}\n`;
+    const withPayload = appendPdfJsPayload(sourceText, { engine: "pdfjs", pages: pdfJsPages });
+    if (withPayload) return withPayload;
+  }
+  if (encrypted || isLikelyEncryptedPdf(source)) {
+    // 加密标志随 payload 传到 readPdf，给出准确文案并阻止误导的扫描件 OCR 链路
+    const withPayload = appendPdfJsPayload(sourceText, { engine: "pdfjs", pages: [], encrypted: true });
+    if (withPayload) return withPayload;
   }
   const inflatedStreams = [];
   let totalInflated = 0;
@@ -887,12 +940,15 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
   // ToUnicode 解码，短句不应被误伤。
   const fontGlyphIdNoise = !pdfJsPayload && looksLikeFontGlyphIdNoise(rawStrings);
   const strings = fontGlyphIdNoise ? [] : rawStrings;
+  // 加密识别（issue #104）：payload 标志或结构探测；仅在毫无可信文本时启用文案
+  const encrypted = Boolean(pdfJsPayload?.encrypted)
+    || (strings.length === 0 && isLikelyEncryptedPdf(source));
   const blocks = [];
   if (strings.length > 0) {
     blocks.push(createHeading(1, strings[0]));
     strings.slice(1).forEach((text) => blocks.push(createParagraph(text)));
   } else {
-    blocks.push(createParagraph(PDF_FALLBACK_TEXT));
+    blocks.push(createParagraph(encrypted ? PDF_ENCRYPTED_TEXT : PDF_FALLBACK_TEXT));
     const pdfDataUrl = toPdfDataUrl(content, source);
     const embeddedBase64 = pdfDataUrl.slice("data:application/pdf;base64,".length);
     const approxBytes = Math.floor(embeddedBase64.length * 3 / 4);
@@ -906,13 +962,21 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
     "PDF MVP extracts simple literal text operators only; layout, fonts, images, and scanned pages are not preserved."
   )];
   if (strings.length === 0) {
-    warnings.push(createWarning(
-      "unsupported",
-      fontGlyphIdNoise ? "PDF_FONT_GLYPH_ID_NOISE" : "PDF_NO_CREDIBLE_TEXT",
-      fontGlyphIdNoise
-        ? "PDF text operators decode to font Glyph IDs without ToUnicode mapping; readable text was not produced. Use a copyable-text PDF or a later core OCR/PDF enhancement."
-        : "No credible PDF text operators were extracted; binary/compressed data was not exposed as document text."
-    ));
+    if (encrypted) {
+      warnings.push(createWarning(
+        "unsupported",
+        "PDF_ENCRYPTED",
+        "PDF is password-protected; text extraction requires the password and was skipped."
+      ));
+    } else {
+      warnings.push(createWarning(
+        "unsupported",
+        fontGlyphIdNoise ? "PDF_FONT_GLYPH_ID_NOISE" : "PDF_NO_CREDIBLE_TEXT",
+        fontGlyphIdNoise
+          ? "PDF text operators decode to font Glyph IDs without ToUnicode mapping; readable text was not produced. Use a copyable-text PDF or a later core OCR/PDF enhancement."
+          : "No credible PDF text operators were extracted; binary/compressed data was not exposed as document text."
+      ));
+    }
   }
 
   return createDocumentModel({
@@ -925,12 +989,15 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
           ? "pdfjs-text-content"
           : strings.length > 0
             ? "literal-text-operators"
-            : fontGlyphIdNoise
-              ? "embedded-original-pdf-glyph-noise"
-              : "embedded-original-pdf",
+            : encrypted
+              ? "embedded-original-pdf-encrypted"
+              : fontGlyphIdNoise
+                ? "embedded-original-pdf-glyph-noise"
+                : "embedded-original-pdf",
         engine: pdfJsPayload?.engine || "core-mvp",
         textItemCount: strings.length,
         pageCount: pdfJsPayload?.pages?.length || undefined,
+        ...(encrypted ? { encrypted: true } : {}),
         fileName,
       },
     }, warnings),

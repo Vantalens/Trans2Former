@@ -8,7 +8,13 @@ import {
   createQuote,
   createTable,
 } from "../core/document-model.js";
-import { inlinesToHtml, inlinesToMarkdown } from "../core/models/semantic-inlines.js";
+import {
+  escapeBracketText,
+  escapeLinkDestination,
+  inlinesToHtml,
+  inlinesToMarkdown,
+  unescapeMarkdownPunctuation,
+} from "../core/models/semantic-inlines.js";
 import { getInlineTokens } from "./inline-tokens.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
 import { escapeHtml, normalizeNewlines } from "./text-utils.js";
@@ -24,13 +30,46 @@ function blockTextToHtml(block) {
   return inlinesToHtml(getInlineTokens(block));
 }
 
+// 转义感知的表格行切分：`\|` 是转义的字面管道（issue #83），与 writer 的
+// escapeTableCell 严格对称。不用 lookbehind（规避旧 Safari 兼容性）。
 function splitTableRow(line) {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim());
+  const source = line.trim();
+  const cells = [];
+  let cell = "";
+  let index = source.startsWith("|") ? 1 : 0;
+  let closedByPipe = false;
+  for (; index < source.length; index += 1) {
+    const ch = source[index];
+    if (ch === "\\" && source[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+      closedByPipe = false;
+      continue;
+    }
+    if (ch === "|") {
+      cells.push(cell.trim());
+      cell = "";
+      closedByPipe = true;
+      continue;
+    }
+    cell += ch;
+    closedByPipe = false;
+  }
+  if (!closedByPipe) cells.push(cell.trim());
+  return cells;
+}
+
+// 表格单元格写出转义：换行压成空格防结构破坏；只转义 |（不转义反斜杠——
+// `a\|b` → 写出 `a\\|b` → 读回 `a\|b`，自洽）。
+function escapeTableCell(cell) {
+  return String(cell ?? "").replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+}
+
+// 围栏宽度：比内容里最长的反引号连串多一根，至少 3（issue #52）。
+function fenceFor(content) {
+  const runs = String(content ?? "").match(/`+/g) || [];
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  return "`".repeat(Math.max(3, longest + 1));
 }
 
 function isTableSeparator(line) {
@@ -62,6 +101,7 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
   let codeLines = [];
   let inCode = false;
   let codeLanguage = "";
+  let codeFenceSize = 0;
   const warnings = [];
 
   function flushParagraph() {
@@ -88,22 +128,27 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
-    const codeFence = line.match(/^```(\w+)?\s*$/);
-    if (codeFence) {
-      if (inCode) {
+    // 围栏语义对齐 CommonMark（issue #52/#57）：开围栏 ≥3 反引号 + info string
+    //（不含反引号，language 取首个空白分隔 token，支持 objective-c/c++ 等）；
+    // 闭围栏不带 info string 且长度 ≥ 开围栏；围栏内更短的 ``` 行是内容。
+    if (inCode) {
+      const closeFence = line.match(/^(`{3,})\s*$/);
+      if (closeFence && closeFence[1].length >= codeFenceSize) {
         inCode = false;
+        codeFenceSize = 0;
         flushCode();
       } else {
-        flushParagraph();
-        flushList();
-        inCode = true;
-        codeLanguage = codeFence[1] || "";
+        codeLines.push(line);
       }
       continue;
     }
-
-    if (inCode) {
-      codeLines.push(line);
+    const openFence = line.match(/^(`{3,})([^`]*)$/);
+    if (openFence) {
+      flushParagraph();
+      flushList();
+      inCode = true;
+      codeFenceSize = openFence[1].length;
+      codeLanguage = openFence[2].trim().split(/\s+/)[0] || "";
       continue;
     }
 
@@ -155,11 +200,11 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
       continue;
     }
 
-    const image = line.match(/^!\[([^\]]*)\]\(([^\)]+)\)$/);
+    const image = line.match(/^!\[((?:\\.|[^\\\]])*)\]\(((?:\\.|[^\\)])+)\)$/);
     if (image) {
       flushParagraph();
       flushList();
-      blocks.push(createImage({ alt: image[1], src: image[2] }));
+      blocks.push(createImage({ alt: unescapeMarkdownPunctuation(image[1]), src: unescapeMarkdownPunctuation(image[2]) }));
       continue;
     }
 
@@ -251,10 +296,14 @@ export function writeMarkdown({ model, options = {} }) {
         }).join("\n");
       }
       if (block.type === "code") {
-        return `\`\`\`${block.language || ""}\n${block.code}\n\`\`\``;
+        // 围栏比内容里最长反引号连串多一根（issue #52）；language 清洗掉空白/反引号，
+        // 保证围栏行写出的必能读回。
+        const fence = fenceFor(block.code);
+        const lang = String(block.language || "").trim().split(/\s+/)[0]?.replace(/`/g, "") || "";
+        return `${fence}${lang}\n${block.code}\n${fence}`;
       }
       if (block.type === "table") {
-        const headers = `| ${block.headers.join(" | ")} |`;
+        const headers = `| ${block.headers.map(escapeTableCell).join(" | ")} |`;
         const separator = `| ${block.headers.map((_, index) => {
           const alignment = block.alignments?.[index] || "";
           if (alignment === "left") return ":---";
@@ -262,14 +311,14 @@ export function writeMarkdown({ model, options = {} }) {
           if (alignment === "right") return "---:";
           return "---";
         }).join(" | ")} |`;
-        const rows = block.rows.map((row) => `| ${row.join(" | ")} |`);
+        const rows = block.rows.map((row) => `| ${row.map(escapeTableCell).join(" | ")} |`);
         return [headers, separator, ...rows].join("\n");
       }
       if (block.type === "image") {
-        return `![${block.alt || ""}](${block.src || ""})`;
+        return `![${escapeBracketText(block.alt || "")}](${escapeLinkDestination(block.src || "")})`;
       }
       if (block.type === "asset") {
-        return `![${block.alt || block.title || "asset"}](asset:${block.assetId})`;
+        return `![${escapeBracketText(block.alt || block.title || "asset")}](asset:${block.assetId})`;
       }
       if (block.type === "raw") {
         if (block.format === "md" || block.format === "markdown") {
@@ -278,8 +327,9 @@ export function writeMarkdown({ model, options = {} }) {
         if (block.format === "html") {
           return "";
         }
+        const fence = fenceFor(block.content);
         const fenceLang = String(block.format || "").replace(/[^a-zA-Z0-9_+\-]/g, "");
-        return `\`\`\`${fenceLang}\n${block.content}\n\`\`\``;
+        return `${fence}${fenceLang}\n${block.content}\n${fence}`;
       }
       return "";
     })

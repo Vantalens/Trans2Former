@@ -5,13 +5,20 @@ import { bytesToDataUrl } from "../core/binary-utils.js";
 import { readZipEntries } from "../core/zip-container.js";
 import { writeStoredZip } from "../core/zip-writer.js";
 import { getPlainText } from "../core/document-model.js";
-import { getAttr, parseRelationships, resolvePartPath, stripTags } from "./ooxml-utils.js";
-import { escapeHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
+import { getAttr, parseRelationships, resolvePartPath, stripTags, extractTextTags } from "./ooxml-utils.js";
+import { escapeXmlText, stripMarkdownInlineSyntax } from "./text-utils.js";
+
+// 富文本 si/is 单元格：直接拼接 <t>，不插分隔符、不 trim（尊重 xml:space="preserve"）；
+// <rPh>（注音）段内也有 <t>，先整段剔除再抽取（issue #91）。
+function extractCellText(xml) {
+  const withoutPhonetic = String(xml ?? "").replace(/<rPh\b[\s\S]*?<\/rPh>/g, "");
+  return extractTextTags(withoutPhonetic, "t");
+}
 
 function readSharedStrings(zip) {
   const xml = zip.getText("xl/sharedStrings.xml");
   if (!xml) return [];
-  return [...xml.matchAll(/<si\b[\s\S]*?<\/si>/g)].map((match) => stripTags(match[0]));
+  return [...xml.matchAll(/<si\b[\s\S]*?<\/si>/g)].map((match) => extractCellText(match[0]));
 }
 
 function columnIndex(cellRef) {
@@ -19,13 +26,34 @@ function columnIndex(cellRef) {
   return [...letters].reduce((value, char) => value * 26 + (char.charCodeAt(0) - 64), 0) - 1;
 }
 
+const BUILTIN_DATE_NUMFMT_IDS = [14, 15, 16, 17, 22, 27, 30, 36, 50, 57];
+
+// 去掉引号文本、[…] 颜色/条件段、反斜杠转义后，含 y 或 d 才判日期；
+// 纯时间格式（hh:mm:ss 只含 h/m/s）不转，避免把时间值误转成日期。
+function isDateFormatCode(formatCode) {
+  const cleaned = String(formatCode || "")
+    .replace(/"[^"]*"/g, "")
+    .replace(/\[[^\]]*\]/g, "")
+    .replace(/\\./g, "");
+  return /[yd]/i.test(cleaned);
+}
+
 function readStyleFormats(zip) {
-  const xml = zip.getText("xl/styles.xml");
-  const formats = [];
-  for (const xfMatch of String(xml || "").matchAll(/<xf\b[^>]*\/?>/g)) {
-    formats.push(Number(getAttr(xfMatch[0], "numFmtId")) || 0);
+  const xml = String(zip.getText("xl/styles.xml") || "");
+  const dateNumFmtIds = new Set(BUILTIN_DATE_NUMFMT_IDS);
+  const numFmtsSection = xml.match(/<numFmts\b[\s\S]*?<\/numFmts>/)?.[0] || "";
+  for (const fmtMatch of numFmtsSection.matchAll(/<numFmt\b[^>]*\/?>/g)) {
+    const id = Number(getAttr(fmtMatch[0], "numFmtId"));
+    if (id >= 164 && isDateFormatCode(getAttr(fmtMatch[0], "formatCode"))) dateNumFmtIds.add(id);
   }
-  return formats;
+  // ECMA-376：c@s 仅索引 <cellXfs> 集合——整文件匹配 <xf> 会把 <cellStyleXfs>
+  // 的条目混进来造成索引错位，日期检测随之失效（issue #90）。
+  const cellXfsSection = xml.match(/<cellXfs\b[\s\S]*?<\/cellXfs>/)?.[0] || "";
+  const numFmtIds = [];
+  for (const xfMatch of cellXfsSection.matchAll(/<xf\b[^>]*\/?>/g)) {
+    numFmtIds.push(Number(getAttr(xfMatch[0], "numFmtId")) || 0);
+  }
+  return { numFmtIds, dateNumFmtIds };
 }
 
 function excelSerialDateToIso(serial) {
@@ -36,8 +64,8 @@ function excelSerialDateToIso(serial) {
   return date.toISOString().slice(0, 10);
 }
 
-function isDateFormat(numFmtId) {
-  return [14, 15, 16, 17, 22, 27, 30, 36, 50, 57].includes(numFmtId);
+function isDateStyle(styleFormats, styleIndex) {
+  return styleFormats.dateNumFmtIds.has(styleFormats.numFmtIds[styleIndex] ?? 0);
 }
 
 function cellValue(cellXml, sharedStrings, styleFormats, counters) {
@@ -48,8 +76,8 @@ function cellValue(cellXml, sharedStrings, styleFormats, counters) {
   if (formula) counters.formulaCellCount += 1;
   if (type === "s") return sharedStrings[Number(raw)] || "";
   const inline = cellXml.match(/<is\b[\s\S]*?<\/is>/)?.[0];
-  if (inline) return stripTags(inline);
-  const value = isDateFormat(styleFormats[styleIndex]) ? excelSerialDateToIso(raw) : raw;
+  if (inline) return extractCellText(inline);
+  const value = isDateStyle(styleFormats, styleIndex) ? excelSerialDateToIso(raw) : raw;
   return formula ? `=${formula} => ${value}` : value;
 }
 
@@ -102,8 +130,8 @@ function extractCachedValue(cellXml, sharedStrings, styleFormats) {
   const raw = cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/)?.[1] || "";
   if (type === "s") return sharedStrings[Number(raw)] || "";
   const inline = cellXml.match(/<is\b[\s\S]*?<\/is>/)?.[0];
-  if (inline) return stripTags(inline);
-  return isDateFormat(styleFormats[styleIndex]) ? excelSerialDateToIso(raw) : raw;
+  if (inline) return extractCellText(inline);
+  return isDateStyle(styleFormats, styleIndex) ? excelSerialDateToIso(raw) : raw;
 }
 
 export function readXlsx({ content, title = "workbook", fileName = "", format = "xlsx" }) {
@@ -242,6 +270,12 @@ function generateStylesXml() {
 </styleSheet>`;
 }
 
+// 严格数值判定（而非 Number.isFinite(Number(x))），避免 "0x10"、" 100 " 等被改写。
+const NUMERIC_CELL_RE = /^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+function isNumericCellText(text) {
+  return NUMERIC_CELL_RE.test(String(text ?? ""));
+}
+
 function sheetXml(rows, stringIndex, { workbookSheet = null } = {}) {
   const NS = "http" + "://schemas.openxmlformats.org";
   const formulaByRef = new Map();
@@ -266,20 +300,27 @@ function sheetXml(rows, stringIndex, { workbookSheet = null } = {}) {
       const formula = formulaByRef.get(ref.toUpperCase());
       // P9-B：保留来自 WorkbookModel 的公式缓存。如果该 cell 在 reader 阶段被
       // 标记为公式 cell，写回 <f>expression</f><v>cachedValue</v>，让 round-trip
-      // 不丢公式。其它 cell 继续走共享字符串（type="s"）。
+      // 不丢公式。字符串缓存值必须带 t="str"——OOXML 无 t 默认 t="n"，<v> 含
+      // 文本会触发 Excel 修复对话框（issue #94）。
       if (formula) {
         const cachedValue = String(formula.cachedValue ?? cell ?? "").trim();
-        const valueXml = cachedValue ? `<v>${escapeHtml(cachedValue)}</v>` : "";
-        return `        <c r="${ref}"><f>${escapeHtml(formula.expression)}</f>${valueXml}</c>`;
+        const typeAttr = cachedValue && !isNumericCellText(cachedValue) ? ' t="str"' : "";
+        const valueXml = cachedValue ? `<v>${escapeXmlText(cachedValue)}</v>` : "";
+        return `        <c r="${ref}"${typeAttr}><f>${escapeXmlText(formula.expression)}</f>${valueXml}</c>`;
       }
-      const strIdx = stringIndex.get(stripMarkdownInlineSyntax(cell));
+      const text = stripMarkdownInlineSyntax(cell);
+      // 数值写裸 <v>（默认 t="n"），不再当文本进共享字符串（issue #94）。
+      if (isNumericCellText(text)) {
+        return `        <c r="${ref}"><v>${text}</v></c>`;
+      }
+      const strIdx = stringIndex.get(text);
       return `        <c r="${ref}" t="s"><v>${strIdx}</v></c>`;
     }).join("\n");
     return `      <row r="${rowIndex + 1}">\n${cells}\n      </row>`;
   }).join("\n");
 
   const mergeXml = mergeRefs.length > 0
-    ? `\n  <mergeCells count="${mergeRefs.length}">\n${mergeRefs.map((ref) => `    <mergeCell ref="${escapeHtml(ref)}"/>`).join("\n")}\n  </mergeCells>`
+    ? `\n  <mergeCells count="${mergeRefs.length}">\n${mergeRefs.map((ref) => `    <mergeCell ref="${escapeXmlText(ref)}"/>`).join("\n")}\n  </mergeCells>`
     : "";
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -321,18 +362,26 @@ export function writeXlsx({ model, title = model.title }) {
     return stringIndex.get(strStr);
   }
 
+  // 预扫描与 sheetXml 的数值判定必须用同一 helper（isNumericCellText），否则
+  // stringIndex.get 会返回 undefined 写出 <v>undefined</v>。数值格不进 sst。
+  let sharedCellCount = 0;
   const sheetRowsList = sheets.map((sheet) => {
     const rows = [sheet.headers, ...(sheet.rows || [])];
     rows.forEach(row => {
-      row.forEach(cell => getStringIndex(stripMarkdownInlineSyntax(cell)));
+      row.forEach(cell => {
+        const text = stripMarkdownInlineSyntax(cell);
+        if (!isNumericCellText(text)) {
+          getStringIndex(text);
+          sharedCellCount += 1;
+        }
+      });
     });
     return rows;
   });
 
-  const totalCellCount = sheetRowsList.reduce((sum, rows) => sum + rows.reduce((rowSum, row) => rowSum + row.length, 0), 0);
   const sharedStringsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<sst xmlns="${NS}/spreadsheetml/2006/main" count="${totalCellCount}" uniqueCount="${stringArray.length}">
-${stringArray.map(str => `  <si><t xml:space="preserve">${escapeHtml(str)}</t></si>`).join('\n')}
+<sst xmlns="${NS}/spreadsheetml/2006/main" count="${sharedCellCount}" uniqueCount="${stringArray.length}">
+${stringArray.map(str => `  <si><t xml:space="preserve">${escapeXmlText(str)}</t></si>`).join('\n')}
 </sst>`;
 
   const sheetEntries = sheets.map((sheet, index) => ({
@@ -344,7 +393,7 @@ ${stringArray.map(str => `  <si><t xml:space="preserve">${escapeHtml(str)}</t></
   }));
 
   const workbookSheetsXml = sheetEntries
-    .map((entry) => `<sheet name="${escapeHtml(entry.name)}" sheetId="${entry.sheetNumber}" r:id="${entry.relId}"/>`)
+    .map((entry) => `<sheet name="${escapeXmlText(entry.name)}" sheetId="${entry.sheetNumber}" r:id="${entry.relId}"/>`)
     .join("");
   const workbookRelsXml = sheetEntries
     .map((entry) => `  <Relationship Id="${entry.relId}" Type="${NS}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${entry.sheetNumber}.xml"/>`)
@@ -386,7 +435,7 @@ ${workbookRelsXml}
     },
     {
       name: "docProps/core.xml",
-      data: `<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="${NS}/package/2006/metadata/core-properties" xmlns:dc="${DC_NS}"><dc:title>${escapeHtml(title)}</dc:title></cp:coreProperties>`,
+      data: `<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="${NS}/package/2006/metadata/core-properties" xmlns:dc="${DC_NS}"><dc:title>${escapeXmlText(title)}</dc:title></cp:coreProperties>`,
     },
     {
       name: "xl/workbook.xml",
