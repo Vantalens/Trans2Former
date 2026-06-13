@@ -221,6 +221,11 @@ function buildCtx(overrides = {}) {
   assert.equal(result.quality.qualityReport.repairStatus, "not-attempted");
   assert.equal(result.quality.qualityReport.finalDecision, "verified");
   assert.equal(result.quality.modelReview.engine, "rule-based");
+  assert.equal(typeof result.quality.modelReview.runtimeMs, "number");
+  assert.ok(result.quality.modelReview.runtimeMs >= 0);
+  assert.ok(result.quality.modelReview.tasks.includes("lossy-warning-scan"));
+  assert.ok(result.quality.modelReview.tasks.includes("route-class-check"));
+  assert.ok(result.quality.modelReview.tasks.includes("ocr-low-confidence-scan"));
 }
 
 // 7. End-to-end: md -> html skips round-trip and exposes skip reason
