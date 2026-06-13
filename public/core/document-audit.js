@@ -12,6 +12,17 @@ function normalizeNewlines(value) {
   return String(value ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
+function createSourceContext(source) {
+  const normalized = normalizeNewlines(source);
+  const lineStarts = [0];
+  for (let index = 0; index < normalized.length; index += 1) {
+    if (normalized[index] === "\n") {
+      lineStarts.push(index + 1);
+    }
+  }
+  return { normalized, lineStarts };
+}
+
 function blockSearchText(block) {
   if (block.type === "heading" || block.type === "paragraph" || block.type === "quote") return block.text;
   if (block.type === "code") return block.code;
@@ -23,13 +34,23 @@ function blockSearchText(block) {
   return "";
 }
 
-function lineForOffset(source, offset) {
+function lineForOffset(lineStarts, offset) {
   if (offset < 0) return null;
-  return source.slice(0, offset).split("\n").length;
+  let low = 0;
+  let high = lineStarts.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (lineStarts[mid] <= offset) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
 }
 
-function inferSourceSpan(source, block, cursor) {
-  const normalizedSource = normalizeNewlines(source);
+function inferSourceSpan(sourceContext, block, cursor) {
+  const { normalized: normalizedSource, lineStarts } = sourceContext;
   const needle = normalizeNewlines(blockSearchText(block)).trim();
   if (!needle) {
     return {
@@ -44,7 +65,7 @@ function inferSourceSpan(source, block, cursor) {
   if (startOffset < 0) {
     startOffset = normalizedSource.indexOf(firstLine, cursor.offset);
   }
-  if (startOffset < 0) {
+  if (startOffset < 0 && cursor.offset === 0) {
     startOffset = normalizedSource.indexOf(firstLine);
   }
   if (startOffset < 0) {
@@ -58,8 +79,8 @@ function inferSourceSpan(source, block, cursor) {
   const endOffset = startOffset + Math.max(firstLine.length, needle.length);
   cursor.offset = endOffset;
   return {
-    startLine: lineForOffset(normalizedSource, startOffset),
-    endLine: lineForOffset(normalizedSource, endOffset),
+    startLine: lineForOffset(lineStarts, startOffset),
+    endLine: lineForOffset(lineStarts, endOffset),
     startOffset,
     endOffset,
   };
@@ -90,6 +111,7 @@ export function ensureDocumentAudit(model, {
   options = {},
 } = {}) {
   const cursor = { offset: 0 };
+  const sourceContext = createSourceContext(content);
   const metadataWarnings = Array.isArray(model.metadata?.warnings) ? model.metadata.warnings.map(normalizeWarning) : [];
   const blocks = (model.blocks || []).map((block, index) => {
     const blockWarnings = Array.isArray(block.warnings) ? block.warnings.map(normalizeWarning) : [];
@@ -108,7 +130,7 @@ export function ensureDocumentAudit(model, {
     return {
       ...block,
       id: block.id || `block-${index + 1}-${stableHash(identityPayload)}`,
-      sourceSpan: block.sourceSpan || inferSourceSpan(content, block, cursor),
+      sourceSpan: block.sourceSpan || inferSourceSpan(sourceContext, block, cursor),
       warnings: blockWarnings,
     };
   });
