@@ -1,6 +1,6 @@
 # Trans2Former Development Tasks
 
-最后更新：2026-05-28
+最后更新：2026-06-13
 
 维护规则：
 
