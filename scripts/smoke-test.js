@@ -17,6 +17,8 @@ import {
   mergePartialDocumentModels,
 } from "../public/core/chunking.js";
 import { ConversionError, normalizeConversionError } from "../public/core/conversion-error.js";
+import { ensureDocumentAudit } from "../public/core/document-audit.js";
+import { createDocumentModel, createParagraph } from "../public/core/document-model.js";
 import { assertValidDocumentModel, validateDocumentModel } from "../public/core/document-schema.js";
 import { readZipEntries } from "../public/core/zip-container.js";
 import { parseInlineMarkdown } from "../public/formats/inline-tokens.js";
@@ -822,6 +824,27 @@ test("DocumentModel audit layer adds stable ids, source spans, metadata, and qua
   assert.equal(model.metadata.conversion.schemaVersion, "trans2former.document.v1");
   assert.equal(model.metadata.qualityReport.warningCount, 0);
   assert.equal(model.metadata.qualityReport.structureFidelity, "high");
+});
+
+test("DocumentModel audit infers source spans for large text in near-linear time", () => {
+  const blockCount = 8000;
+  const lines = Array.from({ length: blockCount }, (_, index) => `paragraph ${String(index + 1).padStart(5, "0")} unique audit text`);
+  const model = createDocumentModel({
+    title: "large-audit.md",
+    sourceFormat: "md",
+    blocks: lines.map((line) => createParagraph(line)),
+  });
+  const startedAt = performance.now();
+  const audited = ensureDocumentAudit(model, {
+    content: lines.join("\n\n"),
+    reader: "md",
+    fileName: "large-audit.md",
+  });
+  const durationMs = performance.now() - startedAt;
+
+  assert.equal(audited.blocks.length, blockCount);
+  assert.equal(audited.blocks.at(-1).sourceSpan.startLine, (blockCount - 1) * 2 + 1);
+  assert.equal(durationMs < 900, true, `large audit should stay near-linear, took ${durationMs.toFixed(1)}ms`);
 });
 
 test("DocumentModel records block warnings, asset provenance, and conversion metadata", () => {
