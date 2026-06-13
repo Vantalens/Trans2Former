@@ -836,10 +836,15 @@ function initializeOutputDraft(result) {
 
 function setActiveWorkbenchTab(panelId) {
   document.querySelectorAll(".workbench-panel").forEach((panel) => {
-    panel.classList.toggle("is-active", panel.id === panelId);
+    const active = panel.id === panelId;
+    panel.classList.toggle("is-active", active);
+    panel.hidden = !active;
   });
   document.querySelectorAll(".tab-button").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.tabTarget === panelId);
+    const active = button.dataset.tabTarget === panelId;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+    button.tabIndex = active ? 0 : -1;
   });
 }
 
@@ -1003,11 +1008,15 @@ function setTransformBusy(isBusy) {
 function updateDownloadState(enabled) {
   if (enabled) {
     downloadOutputButton.classList.remove("disabled");
+    downloadOutputButton.removeAttribute("aria-disabled");
+    downloadOutputButton.removeAttribute("tabindex");
     openPdfPreviewButton.disabled = !lastOutputIsPdf;
     if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = false;
   } else {
     downloadOutputButton.classList.add("disabled");
     downloadOutputButton.href = "#";
+    downloadOutputButton.setAttribute("aria-disabled", "true");
+    downloadOutputButton.tabIndex = -1;
     openPdfPreviewButton.disabled = true;
     if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = true;
   }
@@ -1653,6 +1662,14 @@ dropZone.addEventListener("drop", (event) => {
   });
 });
 
+dropZone.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  event.preventDefault();
+  fileInput.click();
+});
+
 transformButton.addEventListener("click", transformContent);
 selectAllQueueButton.addEventListener("click", selectAllQueueItems);
 retryFailedButton.addEventListener("click", retryFailedQueueItems);
@@ -1690,7 +1707,24 @@ workbenchTabs.addEventListener("click", (event) => {
   const button = event.target.closest("[data-tab-target]");
   if (button) {
     showWorkbenchTab(button.dataset.tabTarget);
+    button.focus();
   }
+});
+workbenchTabs.addEventListener("keydown", (event) => {
+  const tabs = [...workbenchTabs.querySelectorAll("[role='tab']")];
+  const currentIndex = tabs.indexOf(document.activeElement);
+  if (currentIndex < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+    return;
+  }
+  event.preventDefault();
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? tabs.length - 1
+      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  const nextTab = tabs[nextIndex];
+  showWorkbenchTab(nextTab.dataset.tabTarget);
+  nextTab.focus();
 });
 copyErrorDiagnosticsButton.addEventListener("click", () => {
   copyErrorDiagnostics().catch((error) => setStatus(error.message, "error"));
@@ -1743,7 +1777,25 @@ outputCheckpointButton?.addEventListener("click", () => {
 downloadOutputButton.addEventListener("click", (event) => {
   if (downloadOutputButton.classList.contains("disabled")) {
     event.preventDefault();
+    setStatus("请先完成一次转换再下载结果", "info");
   }
+});
+
+document.addEventListener("click", (event) => {
+  document.querySelectorAll(".auxiliary-actions[open], .output-settings[open]").forEach((details) => {
+    if (!details.contains(event.target)) {
+      details.open = false;
+    }
+  });
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") {
+    return;
+  }
+  document.querySelectorAll(".auxiliary-actions[open], .output-settings[open]").forEach((details) => {
+    details.open = false;
+  });
 });
 
 loadSampleButton.addEventListener("click", () => {

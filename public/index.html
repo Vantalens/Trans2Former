@@ -59,7 +59,7 @@
         <div class="topbar-actions">
           <button id="transformButton" class="primary-button" type="button" title="开始转换文档">转换</button>
           <button id="cancelTransformButton" class="ghost-button" type="button" disabled hidden title="取消当前转换">取消</button>
-          <a id="downloadOutputButton" class="ghost-button disabled" href="#" download title="下载转换结果">下载结果</a>
+            <a id="downloadOutputButton" class="ghost-button disabled" href="#" download title="下载转换结果" aria-disabled="true" tabindex="-1">下载结果</a>
           <button id="navWorkbenchButton" class="primary-button is-landing-only" type="button" data-nav-workbench title="打开工作台">打开工作台</button>
           <button id="navLandingButton" class="ghost-button is-workbench-only" type="button" data-nav-landing title="返回首页" hidden>返回首页</button>
           <details class="auxiliary-actions">
@@ -77,7 +77,7 @@
       <main class="workspace workspace-primary" data-view="workbench" hidden>
         <section class="source-pane">
           <div class="upload-row">
-            <label id="dropZone" class="drop-zone" for="fileInput">
+            <label id="dropZone" class="drop-zone" for="fileInput" role="button" tabindex="0" aria-describedby="fileMeta">
               <input
                 id="fileInput"
                 type="file"
@@ -163,27 +163,27 @@
             </div>
           </div>
 
-          <nav id="workbenchTabs" class="workbench-tabs" aria-label="工作台视图">
-            <button class="tab-button is-active" type="button" data-tab-target="inputPreviewPanel" title="查看输入文档预览">预览</button>
-            <button class="tab-button" type="button" data-tab-target="outputPreviewPanel" title="查看转换结果">结果</button>
+          <nav id="workbenchTabs" class="workbench-tabs" role="tablist" aria-label="工作台视图">
+            <button id="inputPreviewTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="inputPreviewPanel" data-tab-target="inputPreviewPanel" title="查看输入文档预览">预览</button>
+            <button id="outputPreviewTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="outputPreviewPanel" tabindex="-1" data-tab-target="outputPreviewPanel" title="查看转换结果">结果</button>
           </nav>
 
           <div class="viewer-grid single-view">
-            <article id="inputPreviewPanel" class="viewer-card workbench-panel is-active">
+            <article id="inputPreviewPanel" class="viewer-card workbench-panel is-active" role="tabpanel" aria-labelledby="inputPreviewTab">
               <div class="viewer-card-header">
                 <span>标准化预览</span>
               </div>
               <div id="htmlPreview" class="preview-frame preview-markdown" aria-label="标准化预览"></div>
             </article>
 
-            <article id="documentModelPanel" class="viewer-card workbench-panel" hidden>
+            <article id="documentModelPanel" class="viewer-card workbench-panel" role="tabpanel" hidden>
               <div class="viewer-card-header">
                 <span>DocumentModel</span>
               </div>
               <pre id="documentModelPreview" class="preview-frame text-output-preview"></pre>
             </article>
 
-            <article id="outputPreviewPanel" class="viewer-card workbench-panel">
+            <article id="outputPreviewPanel" class="viewer-card workbench-panel" role="tabpanel" aria-labelledby="outputPreviewTab" hidden>
               <div class="viewer-card-header">
                 <span>转换结果</span>
                 <div class="viewer-card-actions">
