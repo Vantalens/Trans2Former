@@ -6,7 +6,7 @@ import { readZipEntries } from "../core/zip-container.js";
 import { writeStoredZip } from "../core/zip-writer.js";
 import { getPlainText } from "../core/document-model.js";
 import { getAttr, parseRelationships, resolvePartPath, stripTags, extractTextTags } from "./ooxml-utils.js";
-import { escapeHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
+import { escapeXmlText, stripMarkdownInlineSyntax } from "./text-utils.js";
 
 // 富文本 si/is 单元格：直接拼接 <t>，不插分隔符、不 trim（尊重 xml:space="preserve"）；
 // <rPh>（注音）段内也有 <t>，先整段剔除再抽取（issue #91）。
@@ -305,8 +305,8 @@ function sheetXml(rows, stringIndex, { workbookSheet = null } = {}) {
       if (formula) {
         const cachedValue = String(formula.cachedValue ?? cell ?? "").trim();
         const typeAttr = cachedValue && !isNumericCellText(cachedValue) ? ' t="str"' : "";
-        const valueXml = cachedValue ? `<v>${escapeHtml(cachedValue)}</v>` : "";
-        return `        <c r="${ref}"${typeAttr}><f>${escapeHtml(formula.expression)}</f>${valueXml}</c>`;
+        const valueXml = cachedValue ? `<v>${escapeXmlText(cachedValue)}</v>` : "";
+        return `        <c r="${ref}"${typeAttr}><f>${escapeXmlText(formula.expression)}</f>${valueXml}</c>`;
       }
       const text = stripMarkdownInlineSyntax(cell);
       // 数值写裸 <v>（默认 t="n"），不再当文本进共享字符串（issue #94）。
@@ -320,7 +320,7 @@ function sheetXml(rows, stringIndex, { workbookSheet = null } = {}) {
   }).join("\n");
 
   const mergeXml = mergeRefs.length > 0
-    ? `\n  <mergeCells count="${mergeRefs.length}">\n${mergeRefs.map((ref) => `    <mergeCell ref="${escapeHtml(ref)}"/>`).join("\n")}\n  </mergeCells>`
+    ? `\n  <mergeCells count="${mergeRefs.length}">\n${mergeRefs.map((ref) => `    <mergeCell ref="${escapeXmlText(ref)}"/>`).join("\n")}\n  </mergeCells>`
     : "";
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -381,7 +381,7 @@ export function writeXlsx({ model, title = model.title }) {
 
   const sharedStringsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <sst xmlns="${NS}/spreadsheetml/2006/main" count="${sharedCellCount}" uniqueCount="${stringArray.length}">
-${stringArray.map(str => `  <si><t xml:space="preserve">${escapeHtml(str)}</t></si>`).join('\n')}
+${stringArray.map(str => `  <si><t xml:space="preserve">${escapeXmlText(str)}</t></si>`).join('\n')}
 </sst>`;
 
   const sheetEntries = sheets.map((sheet, index) => ({
@@ -393,7 +393,7 @@ ${stringArray.map(str => `  <si><t xml:space="preserve">${escapeHtml(str)}</t></
   }));
 
   const workbookSheetsXml = sheetEntries
-    .map((entry) => `<sheet name="${escapeHtml(entry.name)}" sheetId="${entry.sheetNumber}" r:id="${entry.relId}"/>`)
+    .map((entry) => `<sheet name="${escapeXmlText(entry.name)}" sheetId="${entry.sheetNumber}" r:id="${entry.relId}"/>`)
     .join("");
   const workbookRelsXml = sheetEntries
     .map((entry) => `  <Relationship Id="${entry.relId}" Type="${NS}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${entry.sheetNumber}.xml"/>`)
@@ -435,7 +435,7 @@ ${workbookRelsXml}
     },
     {
       name: "docProps/core.xml",
-      data: `<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="${NS}/package/2006/metadata/core-properties" xmlns:dc="${DC_NS}"><dc:title>${escapeHtml(title)}</dc:title></cp:coreProperties>`,
+      data: `<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="${NS}/package/2006/metadata/core-properties" xmlns:dc="${DC_NS}"><dc:title>${escapeXmlText(title)}</dc:title></cp:coreProperties>`,
     },
     {
       name: "xl/workbook.xml",

@@ -6,7 +6,7 @@ import { readZipEntries } from "../core/zip-container.js";
 import { writeStoredZip } from "../core/zip-writer.js";
 import { getPlainText } from "../core/document-model.js";
 import { extractTextTags, getAttr, parseRelationships, resolvePartPath } from "./ooxml-utils.js";
-import { escapeHtml, stripMarkdownInlineSyntax } from "./text-utils.js";
+import { escapeXmlText, stripMarkdownInlineSyntax } from "./text-utils.js";
 
 function bytesToBase64(bytes) {
   if (typeof btoa === "function") {
@@ -150,7 +150,7 @@ function slideXml(model, title) {
   const lines = slideTextBlocks(model).slice(0, 10);
   const body = lines.map((line, index) => [
     "        <a:p>",
-    `          <a:r><a:rPr lang="zh-CN" sz="${index === 0 ? 2800 : 1800}"/><a:t>${escapeHtml(line)}</a:t></a:r>`,
+    `          <a:r><a:rPr lang="zh-CN" sz="${index === 0 ? 2800 : 1800}"/><a:t>${escapeXmlText(line)}</a:t></a:r>`,
     "        </a:p>",
   ].join("\n")).join("\n");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -158,7 +158,7 @@ function slideXml(model, title) {
   <p:cSld><p:spTree>
     <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
     <p:sp>
-      <p:nvSpPr><p:cNvPr id="2" name="${escapeHtml(title)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:nvSpPr><p:cNvPr id="2" name="${escapeXmlText(title)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
       <p:spPr/>
       <p:txBody>
         <a:bodyPr/>
@@ -273,7 +273,7 @@ export function writePptx({ model, title = model.title }) {
     },
     {
       name: "docProps/core.xml",
-      data: `<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="${NS}/package/2006/metadata/core-properties" xmlns:dc="${DC_NS}"><dc:title>${escapeHtml(title)}</dc:title></cp:coreProperties>`,
+      data: `<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="${NS}/package/2006/metadata/core-properties" xmlns:dc="${DC_NS}"><dc:title>${escapeXmlText(title)}</dc:title></cp:coreProperties>`,
     },
     {
       name: "docProps/app.xml",

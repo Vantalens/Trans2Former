@@ -1,10 +1,11 @@
-import { createDocumentModel, createHeading, createParagraph, createTable } from "../core/document-model.js";
+import { createCodeBlock, createDocumentModel, createHeading, createList, createParagraph, createQuote, createTable } from "../core/document-model.js";
 import { bytesToDataUrl } from "../core/binary-utils.js";
+import { createWarning, withWarnings } from "../core/warnings.js";
 import { readZipEntries } from "../core/zip-container.js";
 import { writeStoredZip } from "../core/zip-writer.js";
-import { getAttr, resolvePartPath, stripTags } from "./ooxml-utils.js";
+import { decodeXml, getAttr, resolvePartPath, stripTags } from "./ooxml-utils.js";
 import { writeHtml } from "./html.js";
-import { escapeHtml } from "./text-utils.js";
+import { escapeHtml, stripIllegalXmlChars } from "./text-utils.js";
 
 function parseManifest(opfXml) {
   const items = new Map();
@@ -23,13 +24,41 @@ function parseManifest(opfXml) {
 
 function parseXhtmlBlocks(html) {
   const blocks = [];
-  const pattern = /<h([1-6])\b[\s\S]*?<\/h\1>|<p\b[\s\S]*?<\/p>|<table\b[\s\S]*?<\/table>/gi;
+  // 块级识别覆盖 ul/ol/blockquote/pre（issue #95——旧实现把它们整体跳过，
+  // 列表/引用/代码全部丢失）。matchAll 按最左位置取胜：blockquote/ul 的起始
+  // 位置先于其内部 <p>，内部段落不会被重复提取；<p\b 不匹配 <pre。
+  const pattern = /<h([1-6])\b[\s\S]*?<\/h\1>|<(ul|ol)\b[\s\S]*?<\/\2>|<blockquote\b[\s\S]*?<\/blockquote>|<pre\b[\s\S]*?<\/pre>|<p\b[\s\S]*?<\/p>|<table\b[\s\S]*?<\/table>/gi;
   for (const match of String(html || "").matchAll(pattern)) {
     const fragment = match[0];
     const heading = fragment.match(/^<h([1-6])/i);
     if (heading) {
       const text = stripTags(fragment);
       if (text) blocks.push(createHeading(Number(heading[1]), text));
+      continue;
+    }
+    if (/^<(ul|ol)/i.test(fragment)) {
+      const ordered = /^<ol/i.test(fragment);
+      const items = [...fragment.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)]
+        .map((m) => stripTags(m[1]))
+        .filter(Boolean);
+      if (items.length > 0) blocks.push(createList(items, ordered));
+      continue;
+    }
+    if (/^<blockquote/i.test(fragment)) {
+      const text = stripTags(fragment);
+      if (text) blocks.push(createQuote(text));
+      continue;
+    }
+    if (/^<pre/i.test(fragment)) {
+      // 不能用 stripTags——它会把代码换行压成空格
+      const inner = fragment
+        .replace(/^<pre\b[^>]*>/i, "")
+        .replace(/<\/pre>$/i, "")
+        .replace(/^\s*<code\b[^>]*>/i, "")
+        .replace(/<\/code>\s*$/i, "");
+      const code = decodeXml(inner.replace(/<[^>]+>/g, "")).replace(/^\n+|\s+$/g, "");
+      const language = fragment.match(/class="[^"]*language-([\w+-]+)/i)?.[1] || "";
+      if (code) blocks.push(createCodeBlock(code, language));
       continue;
     }
     if (/^<p\b/i.test(fragment)) {
@@ -53,6 +82,7 @@ export function readEpub({ content, title = "epub", fileName = "", format = "epu
   const opfXml = zip.getText(rootfile);
   const titleText = stripTags(opfXml.match(/<dc:title\b[\s\S]*?<\/dc:title>/)?.[0] || "") || title;
   const manifest = parseManifest(opfXml);
+  const warnings = [];
   const blocks = [createHeading(1, titleText)];
   let spineCount = 0;
 
@@ -63,22 +93,36 @@ export function readEpub({ content, title = "epub", fileName = "", format = "epu
     const partPath = resolvePartPath(rootfile, item.href);
     const html = zip.getText(partPath);
     if (!html) continue;
-    blocks.push(...parseXhtmlBlocks(html));
+    const parsed = parseXhtmlBlocks(html);
+    if (parsed.length === 0) {
+      // 无法识别的块级标记（如全 <div> 排版）：兜底拉平为段落并如实登记损失
+      const bodyText = stripTags(html.match(/<body\b[\s\S]*<\/body>/i)?.[0] || html);
+      if (bodyText) {
+        parsed.push(createParagraph(bodyText));
+        warnings.push(createWarning(
+          "lossy",
+          "EPUB_CONTENT_UNRECOGNIZED",
+          `EPUB spine item ${item.href} had no recognizable block markup; text was flattened into a paragraph.`,
+        ));
+      }
+    }
+    blocks.push(...parsed);
     spineCount += 1;
   }
 
   return createDocumentModel({
-    title,
+    // dc:title 优先（issue #95 顺带修复：之前解析了却被丢弃）
+    title: titleText || title,
     sourceFormat: format,
     blocks,
-    metadata: {
+    metadata: withWarnings({
       epub: {
         rootfile,
         spineCount,
         entryCount: zip.list().length,
         fileName,
       },
-    },
+    }, warnings),
   });
 }
 
@@ -121,7 +165,9 @@ function htmlToXhtml(html, namespaces) {
   // 转义 HTML 实体为 XML 实体
   xhtml = xhtml.replace(/&nbsp;/g, "&#160;");
 
-  return xhtml;
+  // issue #96：XML 1.0 非法控制字符会让 EPUB 阅读器拒开；writeHtml 已是 HTML
+  // 实体转义后的纯文本，控制字符必为字面字符，单遍剔除即可
+  return stripIllegalXmlChars(xhtml);
 }
 
 export function writeEpub({ model, title = model.title }) {
