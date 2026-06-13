@@ -21,6 +21,22 @@ function isRoundTripEligible(from, to) {
   return ROUND_TRIP_FORMATS.has(from) && ROUND_TRIP_FORMATS.has(to) && from === to;
 }
 
+function nowMs() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function validatorTaskName(validator, index) {
+  const names = {
+    detectLossyRepairHints: "lossy-warning-scan",
+    detectRouteClassDegradation: "route-class-check",
+    detectOCRLowConfidence: "ocr-low-confidence-scan",
+  };
+  return names[validator?.name] || `validator-${index + 1}`;
+}
+
 export class RepairEngine {
   constructor() {
     this.validators = [];
@@ -162,16 +178,17 @@ export class RepairEngine {
   }
 
   runCycle({ model, output, ctx }) {
+    const start = nowMs();
     const validatorContext = ctx || {};
     const proposed = this.proposeActions(model, validatorContext);
-    const modelReview = {
+    const createModelReview = () => ({
       engine: "rule-based",
       modelVersion: "s2-bootstrap",
-      tasks: ["lossy-warning-scan", "route-class-check"],
+      tasks: this.validators.map(validatorTaskName),
       inferenceMode: "local",
-      runtimeMs: 0,
+      runtimeMs: nowMs() - start,
       device: "cpu",
-    };
+    });
 
     if (proposed.length === 0) {
       const roundTrip = this.reverifyRoundTrip({ output, model, ctx: validatorContext });
@@ -188,7 +205,7 @@ export class RepairEngine {
           roundTripDelta: roundTrip.eligible ? { ok: roundTrip.ok, blockCountDelta: roundTrip.blockCountDelta ?? 0 } : { ok: null, skipped: roundTrip.reason },
           finalDecision: "verified",
         },
-        modelReview,
+        modelReview: createModelReview(),
       };
     }
 
@@ -223,7 +240,7 @@ export class RepairEngine {
         afterQuality: verification.afterQuality,
         finalDecision,
       },
-      modelReview,
+      modelReview: createModelReview(),
     };
   }
 }
