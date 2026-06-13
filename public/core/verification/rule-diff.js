@@ -29,6 +29,10 @@ function firstWords(text, count = 8) {
   return text.trim().split(/\s+/).slice(0, count).join(" ");
 }
 
+function isAuditGeneratedId(id) {
+  return typeof id === "string" && /^block-\d+-[a-z0-9]{8}$/i.test(id);
+}
+
 function blockSnippet(block) {
   if (!block) return "";
   if (typeof block.text === "string") return firstWords(block.text, 12);
@@ -68,6 +72,7 @@ function classifyFieldSeverity(field, beforeValue, afterValue) {
       if (Array.isArray(beforeValue) && Array.isArray(afterValue) && beforeValue.length !== afterValue.length) {
         return "major";
       }
+      return "minor";
     }
     return "major";
   }
@@ -105,9 +110,28 @@ function diffBlockPair(before, after) {
   return fieldsDiffered;
 }
 
+function exactAlignmentKey(block) {
+  if (block && typeof block.id === "string" && block.id.length > 0 && !isAuditGeneratedId(block.id)) {
+    return `id:${block.id}`;
+  }
+  return `content:${JSON.stringify(extractBlockFields(block))}`;
+}
+
+function alignmentHead(block) {
+  if (!block) return "";
+  if (typeof block.text === "string") return firstWords(block.text);
+  if (Array.isArray(block.items) && block.items.length > 0) return firstWords(block.items[0]);
+  if (Array.isArray(block.headers) && block.headers.length > 0) return firstWords(block.headers.join(" "));
+  if (typeof block.code === "string") return firstWords(block.code.split(/\r?\n/)[0] || block.code);
+  if (typeof block.src === "string") return firstWords(block.src);
+  if (typeof block.assetId === "string") return firstWords(block.assetId);
+  if (typeof block.content === "string") return firstWords(block.content);
+  return "";
+}
+
 function buildAlignmentKey(block, index) {
   const fields = extractBlockFields(block);
-  const head = firstWords(typeof block?.text === "string" ? block.text : (Array.isArray(block?.items) ? block.items[0] || "" : ""));
+  const head = alignmentHead(block);
   return `${fields.type || "?"}|${head}|${index}`;
 }
 
@@ -117,13 +141,22 @@ export function diffSemanticDocs(original, readBack) {
 
   const originalKeys = originalBlocks.map((block, index) => getBlockKey(block, index));
   const readBackKeys = readBackBlocks.map((block, index) => getBlockKey(block, index));
+  const originalMatchKeys = originalBlocks.map((block) => exactAlignmentKey(block));
+  const readBackMatchBuckets = new Map();
+  readBackBlocks.forEach((block, index) => {
+    const key = exactAlignmentKey(block);
+    const bucket = readBackMatchBuckets.get(key) || [];
+    bucket.push(index);
+    readBackMatchBuckets.set(key, bucket);
+  });
 
   const matchedOriginalIdx = new Set();
   const matchedReadBackIdx = new Set();
   const changedBlocks = [];
 
   for (let i = 0; i < originalBlocks.length; i += 1) {
-    const j = readBackKeys.indexOf(originalKeys[i]);
+    const bucket = readBackMatchBuckets.get(originalMatchKeys[i]) || [];
+    const j = bucket.find((candidate) => !matchedReadBackIdx.has(candidate)) ?? -1;
     if (j >= 0 && !matchedReadBackIdx.has(j)) {
       matchedOriginalIdx.add(i);
       matchedReadBackIdx.add(j);

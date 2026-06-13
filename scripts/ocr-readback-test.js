@@ -53,6 +53,16 @@ function model(blocks) {
   assert.equal(r.f1, 1);
 }
 
+// 1b. compareText uses code point lengths for astral characters
+{
+  const r = compareText("😀😀", "😀😀");
+  assert.equal(r.recall, 1);
+  assert.equal(r.precision, 1);
+  assert.equal(r.f1, 1);
+  assert.equal(r.originalLength, 2);
+  assert.equal(r.recognizedLength, 2);
+}
+
 // 2. compareText subset -> recall < 1, precision = 1
 {
   const r = compareText("Hello World", "Hello");

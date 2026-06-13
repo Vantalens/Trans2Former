@@ -287,9 +287,11 @@ export async function runVerificationStageAsync({ model, output, ctx, imageSourc
     skipped.push({ layer: "ocr-readback", reason: ocrLayer.reason });
   }
 
+  const eligible = base.eligible || ssimLayer.eligible || ocrLayer.eligible;
+
   return {
-    eligible: base.eligible || ssimLayer.eligible || ocrLayer.eligible,
-    reason: base.reason,
+    eligible,
+    reason: eligible ? "completed" : base.reason,
     layers,
     skipped,
     ruleDiff: base.ruleDiff,
