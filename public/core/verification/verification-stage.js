@@ -33,12 +33,19 @@ function skippedEntry(layer, reason) {
   return { layer, reason };
 }
 
+function syncPipelineSkipped() {
+  return [
+    skippedEntry("ssim", "sync-pipeline"),
+    skippedEntry("ocr-readback", "sync-pipeline"),
+  ];
+}
+
 function buildEmptyEnvelope(reason, runtimeMs) {
   return {
     eligible: false,
     reason,
     layers: [],
-    skipped: [skippedEntry("rule-diff", reason)],
+    skipped: [skippedEntry("rule-diff", reason), ...syncPipelineSkipped()],
     ruleDiff: null,
     warnings: [],
     runtimeMs,
@@ -138,7 +145,7 @@ export function runVerificationStage({ model, output, ctx } = {}) {
       eligible: true,
       reason: "readback-failed",
       layers: [],
-      skipped: [skippedEntry("rule-diff", `readback-failed:${readBackResult.error}`)],
+      skipped: [skippedEntry("rule-diff", `readback-failed:${readBackResult.error}`), ...syncPipelineSkipped()],
       ruleDiff: null,
       warnings: [warning],
       runtimeMs: nowMs() - start,
@@ -168,7 +175,7 @@ export function runVerificationStage({ model, output, ctx } = {}) {
     eligible: true,
     reason: "completed",
     layers: ["rule-diff"],
-    skipped: [],
+    skipped: syncPipelineSkipped(),
     ruleDiff,
     warnings,
     runtimeMs: nowMs() - start,
@@ -268,7 +275,7 @@ export async function runVerificationStageAsync({ model, output, ctx, imageSourc
   }
 
   const layers = [...base.layers];
-  const skipped = [...base.skipped];
+  const skipped = base.skipped.filter((entry) => !["ssim", "ocr-readback"].includes(entry.layer));
   if (ssimLayer.eligible) {
     layers.push("ssim");
   } else {

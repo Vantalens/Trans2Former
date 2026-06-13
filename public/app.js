@@ -1344,10 +1344,10 @@ function releaseConversionResources() {
 
 function convertWithWorker(payload) {
   const fromFmt = String(payload?.from || "").toLowerCase();
-  // OCR 适用输入（图片 / PDF）必须走主线程的异步管线：OCR 需要 canvas 解码图像 +
-  // onnxruntime 推理，这些在转换 Web Worker 里不可用。直接走 convertContentAsync——
-  // 图片与扫描 PDF 触发 OCR；文本 PDF 仍走常规文本路径。
-  if (fromFmt === "png" || fromFmt === "pdf") {
+  const toFmt = String(payload?.to || "").toLowerCase();
+  // OCR/验证适用路径必须走主线程异步管线：OCR、SSIM 和 PDF 回读需要 canvas /
+  // onnxruntime / rasterizer 能力，这些在转换 Web Worker 里不可用。
+  if (fromFmt === "png" || fromFmt === "pdf" || toFmt === "pdf") {
     // 先确保两个 OCR 引擎的状态就位（随包 PP-OCRv5 载入 + tesseract 缓存重建，均幂等），
     // 再跑异步转换/OCR——刷新后立刻转换也能命中重建。两者失败都不得阻塞转换。
     return Promise.allSettled([

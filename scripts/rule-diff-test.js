@@ -122,6 +122,8 @@ function legacyBlockFingerprint(b) {
   assert.equal(result.eligible, true);
   assert.deepEqual(result.layers, ["rule-diff"]);
   assert.equal(result.ruleDiff.identical, true);
+  assert.ok(result.skipped.some((entry) => entry.layer === "ssim" && entry.reason === "sync-pipeline"));
+  assert.ok(result.skipped.some((entry) => entry.layer === "ocr-readback" && entry.reason === "sync-pipeline"));
   assert.equal(result.warnings.length, 0);
 }
 
@@ -154,6 +156,8 @@ function legacyBlockFingerprint(b) {
   assert.deepEqual(result.layers, []);
   assert.equal(result.ruleDiff, null);
   assert.equal(result.skipped[0].layer, "rule-diff");
+  assert.ok(result.skipped.some((entry) => entry.layer === "ssim" && entry.reason === "sync-pipeline"));
+  assert.ok(result.skipped.some((entry) => entry.layer === "ocr-readback" && entry.reason === "sync-pipeline"));
   assert.equal(ROUND_TRIP_FORMATS.has("pptx"), false);
 }
 
@@ -179,6 +183,8 @@ function legacyBlockFingerprint(b) {
   assert.equal(result.quality.qualityReport.ruleDiff, null);
   assert.equal(result.quality.qualityReport.verification.eligible, false);
   assert.equal(result.quality.qualityReport.verification.skipped[0].reason, "writer-not-text-canonical");
+  assert.ok(result.quality.qualityReport.verification.skipped.some((entry) => entry.layer === "ssim" && entry.reason === "sync-pipeline"));
+  assert.ok(result.quality.qualityReport.verification.skipped.some((entry) => entry.layer === "ocr-readback" && entry.reason === "sync-pipeline"));
 
   // shared fingerprint must match legacy implementation byte-for-byte
   const samples = [

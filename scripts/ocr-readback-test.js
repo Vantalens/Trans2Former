@@ -170,6 +170,9 @@ function model(blocks) {
   // md->pdf: rule-diff skipped (pdf not text-canonical), ssim skipped (md not rasterizable),
   // ocr-readback skipped in Node (no engine available)
   assert.ok(env.skipped.some((s) => s.layer === "ocr-readback"));
+  assert.equal(env.skipped.filter((s) => s.layer === "ssim").length, 1);
+  assert.equal(env.skipped.filter((s) => s.layer === "ocr-readback").length, 1);
+  assert.ok(env.skipped.some((s) => s.layer === "ssim" && s.reason === "source-not-rasterizable"));
   assert.equal(env.ocrReadback, null);
 }
 
