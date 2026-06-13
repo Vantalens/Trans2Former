@@ -894,10 +894,7 @@ function renderErrorDetails(errorLike) {
   errorCode.textContent = diagnostics.code || "-";
   errorFormat.textContent = diagnostics.format || "-";
   errorMessageText.textContent = diagnostics.message || "转换失败";
-  errorDebugText.textContent = JSON.stringify({
-    ...diagnostics,
-    details: normalized.details || {},
-  }, null, 2);
+  errorDebugText.textContent = JSON.stringify(diagnostics, null, 2);
 }
 
 async function copyErrorDiagnostics() {

@@ -45,7 +45,7 @@ export function readJson({ content, title = "document", format = "json" }) {
   try {
     parsed = JSON.parse(String(content ?? ""));
   } catch (error) {
-    throw new ConversionError(`JSON 解析失败: ${error.message}`, {
+    throw new ConversionError("JSON 解析失败：输入不是有效的 JSON 文档", {
       category: "parse",
       code: "JSON_PARSE_ERROR",
       format,
