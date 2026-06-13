@@ -468,11 +468,14 @@ async function extractTextWithPdfJs(content) {
         fontSize: item.height,
       }));
       const annotations = await collectPdfJsAnnotations(page);
+      // issue #111: 读取 /Rotate
+      const rotation = (page.rotate || 0) % 360;
       const layoutPage = {
         pageNumber,
         size: viewport ? { width: viewport.width, height: viewport.height, unit: "pt" } : { width: 0, height: 0, unit: "pt" },
         textRuns,
         annotations,
+        rotation,
       };
       if (pageBlocks.length > 0) {
         pages.push({ pageNumber, blocks: pageBlocks, layout: layoutPage });
