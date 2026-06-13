@@ -36,6 +36,7 @@ async function copyIfPresent(source, destination) {
 async function sanitizeVendorBundles(dir) {
   if (!(await pathExists(dir))) return;
   const entries = await readdir(dir);
+  const violations = []; // issue #29: 收集违规文件，避免先写入后检查的竞态
   for (const entry of entries) {
     if (!/\.(js|mjs)$/.test(entry)) continue;
     const filePath = path.join(dir, entry);
@@ -45,14 +46,24 @@ async function sanitizeVendorBundles(dir) {
     const cleaned = original
       .replaceAll("https://cdn.jsdelivr.net", "/vendor")
       .replace(/\n?\/\/[#@]\s*sourceMappingURL=.*$/gm, "");
-    if (cleaned !== original) await writeFile(filePath, cleaned, "utf8");
+
+    // issue #29: 先检查清洗后内容，再决定是否写入
     const leftover = cleaned.match(REMOTE_PROTOCOL_RE);
     if (leftover) {
-      throw new Error(
-        `[sync-tesseract-vendor] ${path.relative(ROOT, filePath).replaceAll("\\", "/")} 清洗后仍含远程协议串 (${leftover[0]}...)；`
-        + `请扩展 sanitizeVendorBundles 的改写规则后再发布。`,
-      );
+      violations.push({ file: path.relative(ROOT, filePath).replaceAll("\\", "/"), sample: leftover[0] });
+      continue; // 不写入违规内容
     }
+
+    if (cleaned !== original) await writeFile(filePath, cleaned, "utf8");
+  }
+
+  // 循环结束后统一报告违规
+  if (violations.length > 0) {
+    console.error(`[sync-tesseract-vendor] ${violations.length} 个文件清洗后仍含远程协议串：`);
+    for (const v of violations) {
+      console.error(`  - ${v.file}: ${v.sample}...`);
+    }
+    throw new Error("清洗门禁失败；请扩展 sanitizeVendorBundles 的改写规则后再发布。");
   }
 }
 
@@ -124,6 +135,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.warn(`[sync-tesseract-vendor] sync failed: ${error?.message || error}`);
-  process.exitCode = 0;
+  console.error(`[sync-tesseract-vendor] 同步异常：${error?.message || error}`);
+  process.exit(1);
 });
