@@ -381,7 +381,7 @@ export function readZipEntries(content) {
         format: "zip",
       });
     }
-    if (uncompressedSize > 0 && compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
+    if (uncompressedSize >= 64 && compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
       throw new ConversionError("ZIP compression ratio exceeds the local processing budget", {
         category: "parse",
         code: "ZIP_COMPRESSION_RATIO_LIMIT",
