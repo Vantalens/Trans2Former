@@ -41,8 +41,8 @@ export function compareText(original, recognized) {
     intersection += Math.min(count, other);
   }
 
-  const originalLength = normOriginal.length;
-  const recognizedLength = normRecognized.length;
+  const originalLength = [...originalCounts.values()].reduce((sum, count) => sum + count, 0);
+  const recognizedLength = [...recognizedCounts.values()].reduce((sum, count) => sum + count, 0);
   const recall = originalLength > 0 ? intersection / originalLength : (recognizedLength === 0 ? 1 : 0);
   const precision = recognizedLength > 0 ? intersection / recognizedLength : (originalLength === 0 ? 1 : 0);
   const f1 = (precision + recall) > 0 ? (2 * precision * recall) / (precision + recall) : 0;

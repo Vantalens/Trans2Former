@@ -151,6 +151,8 @@ function gradientImage(width = 32, height = 32, offset = 0) {
   assert.ok(env.layers.includes("ssim"));
   // png is not text-canonical so rule-diff is skipped
   assert.ok(env.skipped.some((s) => s.layer === "rule-diff"));
+  assert.equal(env.eligible, true);
+  assert.equal(env.reason, "completed");
   assert.notEqual(env.ssim, null);
   resetPageImageSource();
 }

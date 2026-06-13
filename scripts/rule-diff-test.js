@@ -110,6 +110,57 @@ function legacyBlockFingerprint(b) {
   assert.equal(diff.fidelity, "broken");
 }
 
+// 4b. Audit-generated ids do not cause shifted exact blocks to look removed
+{
+  const original = model([
+    block({ id: "block-1-aaaaaaaa", text: "alpha" }),
+    block({ id: "block-2-bbbbbbbb", text: "beta" }),
+  ]);
+  const readBack = model([
+    block({ id: "block-1-cccccccc", text: "inserted" }),
+    block({ id: "block-2-dddddddd", text: "alpha" }),
+    block({ id: "block-3-eeeeeeee", text: "beta" }),
+  ]);
+  const diff = diffSemanticDocs(original, readBack);
+  assert.equal(diff.changedBlocks.length, 0);
+  assert.equal(diff.removedBlocks.length, 0);
+  assert.equal(diff.addedBlocks.length, 1);
+  assert.equal(diff.addedBlocks[0].snippet, "inserted");
+}
+
+// 4c. Heuristic alignment for table/code/image uses real heads, not empty strings
+{
+  const original = model([
+    { type: "table", headers: ["Invoice"], rows: [["A"]] },
+    { type: "code", language: "js", code: "const stable = 1;" },
+    { type: "image", src: "before.png", alt: "Before" },
+  ]);
+  const readBack = model([
+    { type: "table", headers: ["Receipt"], rows: [["B"]] },
+    { type: "code", language: "js", code: "const changed = 2;" },
+    { type: "image", src: "after.png", alt: "After" },
+  ]);
+  const diff = diffSemanticDocs(original, readBack);
+  assert.equal(diff.changedBlocks.length, 0);
+  assert.equal(diff.removedBlocks.length, 3);
+  assert.equal(diff.addedBlocks.length, 3);
+}
+
+// 4d. Equal-length table content edits are minor; row/header count changes remain major
+{
+  const contentEdit = diffSemanticDocs(
+    model([{ id: "t", type: "table", headers: ["A"], rows: [["1"]] }]),
+    model([{ id: "t", type: "table", headers: ["B"], rows: [["2"]] }]),
+  );
+  assert.deepEqual(contentEdit.changedBlocks[0].fieldsDiffered.map((field) => field.severity), ["minor", "minor"]);
+
+  const rowInsert = diffSemanticDocs(
+    model([{ id: "t", type: "table", headers: ["A"], rows: [["1"]] }]),
+    model([{ id: "t", type: "table", headers: ["A"], rows: [["1"], ["2"]] }]),
+  );
+  assert.equal(rowInsert.changedBlocks[0].fieldsDiffered.find((field) => field.field === "rows").severity, "major");
+}
+
 // 5. runVerificationStage with mock ctx.read returning identical model → ruleDiff.identical, no warnings
 {
   const original = model([block({ id: "b1", text: "stable" })]);
