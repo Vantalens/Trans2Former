@@ -441,7 +441,10 @@ async function extractTextWithPdfJs(content) {
     const pages = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
-      const viewport = page.getViewport ? page.getViewport({ scale: 1 }) : null;
+      // issue #111: 显式传 rotation: 0，使 viewport 尺寸与 getTextContent 坐标系一致。
+      // getTextContent 返回的坐标始终基于未旋转的页面坐标系，而默认 getViewport
+      // 会应用 /Rotate 变换，导致坐标系错配。
+      const viewport = page.getViewport ? page.getViewport({ scale: 1, rotation: 0 }) : null;
       const textContent = await page.getTextContent({
         disableNormalization: false,
         includeMarkedContent: false,
