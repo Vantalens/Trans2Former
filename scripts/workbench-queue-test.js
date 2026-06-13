@@ -5,6 +5,7 @@ import {
   retryFailedQueueItemsState,
   selectAllQueueItemsState,
 } from "../public/core/file-queue-ui.js";
+import { writeBlobToDirectory } from "../public/core/output-directory.js";
 
 const firstFile = { name: "example.md", size: 2048 };
 const secondFile = { name: "broken.txt", size: 16 };
@@ -34,5 +35,32 @@ assert.equal(retried.fileQueue[0].status, "complete");
 assert.equal(retried.fileQueue[1].status, "queued");
 assert.equal(retried.fileQueue[1].selected, true);
 assert.equal(retried.fileQueue[1].error, "");
+
+const writes = [];
+const directoryHandle = {
+  name: "Exports",
+  async queryPermission(options) {
+    assert.deepEqual(options, { mode: "readwrite" });
+    return "granted";
+  },
+  async getFileHandle(fileName, options) {
+    assert.equal(fileName, "browser-smoke.html");
+    assert.deepEqual(options, { create: true });
+    return {
+      async createWritable() {
+        return {
+          async write(blob) {
+            writes.push(await blob.text());
+          },
+          async close() {
+            writes.push("closed");
+          },
+        };
+      },
+    };
+  },
+};
+assert.equal(await writeBlobToDirectory(directoryHandle, "browser-smoke.html", new Blob(["<main>ok</main>"], { type: "text/html" })), true);
+assert.deepEqual(writes, ["<main>ok</main>", "closed"]);
 
 console.log("workbench queue tests passed");

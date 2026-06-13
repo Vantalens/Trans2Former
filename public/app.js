@@ -25,6 +25,7 @@ import {
   retryFailedQueueItemsState,
   selectAllQueueItemsState,
 } from "./core/file-queue-ui.js";
+import { writeBlobToDirectory } from "./core/output-directory.js";
 import {
   buildExportFileName as buildWorkbenchExportFileName,
   summarizeQualityReport,
@@ -126,6 +127,8 @@ function greet(name) {
 let currentFileName = "document.md";
 let currentInputContent = sampleMarkdown;
 let currentOutputBlobUrl = "";
+let currentOutputDownloadBlob = null;
+let currentOutputFileName = "";
 let currentPrintHtml = "";
 let previewTimer = null;
 let previewIdleHandle = null;
@@ -139,6 +142,7 @@ let lastErrorDiagnostics = null;
 let fileQueue = [];
 let activeQueueItemId = "";
 let outputDirectoryLabel = "浏览器下载目录";
+let outputDirectoryHandle = null;
 let sessionVersions = [];
 let outputVersionIndex = -1;
 let currentDocumentModel = null;
@@ -266,12 +270,22 @@ function retryFailedQueueItems() {
 async function chooseOutputDirectory() {
   if (window.showDirectoryPicker) {
     const directory = await window.showDirectoryPicker({ mode: "readwrite" });
+    outputDirectoryHandle = directory;
     outputDirectoryLabel = directory.name || "已选择目录";
     setStatus(`输出目录：${outputDirectoryLabel}`, "success");
     return;
   }
+  outputDirectoryHandle = null;
   outputDirectoryLabel = "浏览器默认下载目录";
   setStatus("当前环境不支持目录授权，将使用浏览器下载目录", "info");
+}
+
+async function writeOutputToSelectedDirectory() {
+  const written = await writeBlobToDirectory(outputDirectoryHandle, currentOutputFileName, currentOutputDownloadBlob);
+  if (!written) return false;
+  setOutputMeta(`已写入 ${currentOutputFileName} · ${outputDirectoryLabel}`);
+  setStatus(`已写入输出目录：${currentOutputFileName}`, "success");
+  return true;
 }
 
 function buildExportFileName(extension) {
@@ -732,8 +746,9 @@ function updateOutputDownloadLink(output) {
   }
 
   const outputUrl = createDownloadUrl(output, currentOutputMime || "text/plain");
+  currentOutputFileName = buildExportFileName(getOutputExtension(currentOutputFormat || "txt"));
   downloadOutputButton.href = outputUrl;
-  downloadOutputButton.download = buildExportFileName(getOutputExtension(currentOutputFormat || "txt"));
+  downloadOutputButton.download = currentOutputFileName;
 }
 
 function commitOutputVersion(output, { kind = "edit", forceNew = false } = {}) {
@@ -963,6 +978,8 @@ function revokeOutputUrl() {
     URL.revokeObjectURL(currentOutputBlobUrl);
     currentOutputBlobUrl = "";
   }
+  currentOutputDownloadBlob = null;
+  currentOutputFileName = "";
 }
 
 function resetGeneratedOutput(metaMessage = "尚未生成") {
@@ -1310,7 +1327,8 @@ async function handleFile(file) {
 
 function createDownloadUrl(outputText, mime) {
   revokeOutputUrl();
-  currentOutputBlobUrl = URL.createObjectURL(new Blob([outputText], { type: mime }));
+  currentOutputDownloadBlob = new Blob([outputText], { type: mime });
+  currentOutputBlobUrl = URL.createObjectURL(currentOutputDownloadBlob);
   return currentOutputBlobUrl;
 }
 
@@ -1323,7 +1341,8 @@ function dataUrlToBytes(dataUrl) {
 
 function createBinaryDownloadUrl(dataUrl, mime) {
   revokeOutputUrl();
-  currentOutputBlobUrl = URL.createObjectURL(new Blob([dataUrlToBytes(dataUrl)], { type: mime }));
+  currentOutputDownloadBlob = new Blob([dataUrlToBytes(dataUrl)], { type: mime });
+  currentOutputBlobUrl = URL.createObjectURL(currentOutputDownloadBlob);
   return currentOutputBlobUrl;
 }
 
@@ -1456,8 +1475,9 @@ async function transformContent() {
       clearOutputHistory();
       updateOutputVersionControls();
       const outputUrl = createBinaryDownloadUrl(result.data, result.mime);
+      currentOutputFileName = buildExportFileName(getOutputExtension(result.format));
       downloadOutputButton.href = outputUrl;
-      downloadOutputButton.download = buildExportFileName(getOutputExtension(result.format));
+      downloadOutputButton.download = currentOutputFileName;
       downloadOutputButton.textContent = "下载二进制输出";
       textOutputPreview.textContent = `已生成 ${result.format.toUpperCase()} 二进制输出，可直接下载。`;
       if (result.format === "pdf") {
@@ -1485,8 +1505,9 @@ async function transformContent() {
       const previewUrl = createDownloadUrl(currentPrintHtml, result.mime);
       pdfPreview.src = previewUrl;
 
+      currentOutputFileName = buildExportFileName("print.html");
       downloadOutputButton.href = previewUrl;
-      downloadOutputButton.download = buildExportFileName("print.html");
+      downloadOutputButton.download = currentOutputFileName;
       downloadOutputButton.textContent = "下载打印版 HTML";
 
       updateOutputPreviewVisibility(true);
@@ -1782,6 +1803,13 @@ downloadOutputButton.addEventListener("click", (event) => {
   if (downloadOutputButton.classList.contains("disabled")) {
     event.preventDefault();
     setStatus("请先完成一次转换再下载结果", "info");
+    return;
+  }
+  if (outputDirectoryHandle) {
+    event.preventDefault();
+    writeOutputToSelectedDirectory().catch((error) => {
+      setStatus(`写入输出目录失败：${error.message}`, "error");
+    });
   }
 });
 
