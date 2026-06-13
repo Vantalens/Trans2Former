@@ -1,8 +1,8 @@
 # Resource Budget
 
-版本：v0.2.2
+版本：v0.3.0
 状态：生效
-最后更新：2026-05-09
+最后更新：2026-06-13
 
 ## 目标
 
@@ -37,13 +37,14 @@ format-heavy-core
 
 ## 轻量核心预算
 
-- `public/core`: <= 0.25 MB
+- `public/core`: <= 320 KB（v0.3.0 扩容：OCR 结构识别、Repair Engine 扩展）
 - `public/formats`: <= 0.50 MB
 - `public/workers`: <= 0.10 MB
 - `scripts`: <= 0.50 MB
-- `public` total: <= 2.00 MB
+- `public` total（排除 vendor）: <= 2.00 MB
+- `public/vendor`: <= 96 MB（含 onnxruntime ~25MB + tesseract ~30MB + PP-OCRv5 ~21MB）
 - production dependencies: <= 5 个
-- `pdfjs-dist`: 只能在 `optionalDependencies` 中出现，并由 `scripts/sync-pdfjs-vendor.js` 同步到本地 vendor。
+- `pdfjs-dist`, `tesseract.js`, `onnxruntime-web`: 只能在 `optionalDependencies` 中出现，并由 `scripts/sync-*-vendor.js` 同步到本地 vendor。
 
 这些预算是当前阶段的护栏，不是最终能力上限。未来引入重格式时，应放入核心按需加载目录，并同步调整预算。
 

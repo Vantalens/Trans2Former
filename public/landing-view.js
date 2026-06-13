@@ -84,7 +84,7 @@ function buildHero(host, stats) {
   wrapper.innerHTML = `
     <div class="landing-hero-glow" aria-hidden="true"></div>
     <div class="landing-hero-inner">
-      <span class="landing-hero-eyebrow">v2.2 · local-first 多格式转换工作台</span>
+      <span class="landing-hero-eyebrow">v2.3 · local-first 多格式转换工作台</span>
       <h2 class="landing-hero-title">把文档跨格式转换变成<br/><span class="landing-hero-accent">可验证、可修复、可解释</span>的工程</h2>
       <p class="landing-hero-sub">${stats.inputFormats} 种输入 × ${stats.outputFormats} 种输出 · ${stats.recommendedRoutes} 条推荐路径 · Repair Engine 自动修复 · 处理阶段禁联网</p>
       <div class="landing-hero-actions">
@@ -92,7 +92,7 @@ function buildHero(host, stats) {
         <a href="#formats" class="landing-cta-ghost">查看路径矩阵</a>
       </div>
       <ul class="landing-hero-badges">
-        <li>零上传</li><li>零云端 OCR/AI</li><li>30–80 MB 默认安装包</li><li>OCR 模型按需下载</li>
+        <li>零上传</li><li>零云端 OCR/AI</li><li>30–80 MB 默认安装包</li><li>PP-OCRv5 随包本地 OCR</li>
       </ul>
     </div>
   `;
