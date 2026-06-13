@@ -10,6 +10,7 @@ import {
   validateRepairAction,
 } from "../public/browser-transformer.js";
 import { ConversionError } from "../public/core/conversion-error.js";
+import { ensureDocumentAudit } from "../public/core/document-audit.js";
 
 function buildModel({ text = "Hello old world" } = {}) {
   return {
@@ -133,7 +134,9 @@ function buildCtx(overrides = {}) {
   assert.equal(result.autoRepair.attempted, true);
   assert.equal(result.autoRepair.appliedActions.length, 1);
   assert.equal(result.autoRepair.rejectedActions.length, 0);
-  assert.equal(result.autoRepair.finalDecision, "verified");
+  assert.equal(result.autoRepair.postRepairVerified, false);
+  assert.equal(result.autoRepair.roundTripDelta.skipped, "no-read-hook");
+  assert.equal(result.autoRepair.finalDecision, "degraded");
   assert.equal(result.model.blocks[0].text, "Hello new world");
 }
 
@@ -240,6 +243,9 @@ function buildCtx(overrides = {}) {
     true,
     "md -> pptx should produce at least one fallback recommendation",
   );
+  assert.equal(result.quality.autoRepair.appliedActions.length, 0);
+  assert.equal(result.quality.autoRepair.finalDecision, "degraded");
+  assert.equal(result.quality.qualityReport.repairStatus, "degraded");
   const recommendation = result.quality.autoRepair.recommendations.find((entry) => entry.actionType === "selectFallbackRoute");
   assert.ok(recommendation, "expected a selectFallbackRoute recommendation in md -> pptx");
   assert.notEqual(recommendation.fallbackTo, "pptx");
@@ -300,4 +306,45 @@ function buildCtx(overrides = {}) {
   assert.equal(result.autoRepair.finalDecision, "degraded");
 }
 
-console.log("Repair engine test passed: contract, engine unit, round-trip, fallback recommendation and apply paths covered.");
+// 12. No-proposal path fails when eligible round-trip readback diverges
+{
+  const engine = new RepairEngine();
+  const result = engine.runCycle({
+    model: buildModel({ text: "Hello old world" }),
+    output: { type: "text", format: "md", data: "Hello old world" },
+    ctx: buildCtx({
+      read: () => buildModel({ text: "Hello changed world" }),
+    }),
+  });
+  assert.equal(result.autoRepair.attempted, false);
+  assert.equal(result.autoRepair.postRepairVerified, false);
+  assert.equal(result.autoRepair.roundTripDelta.ok, false);
+  assert.equal(result.autoRepair.finalDecision, "failed-quality-gate");
+}
+
+// 13. Re-running document audit keeps metadata warnings deduped
+{
+  const warning = {
+    severity: "lossy",
+    code: "LOSSY_TEXT",
+    message: "text was degraded",
+    details: {},
+  };
+  let audited = buildModel();
+  audited.metadata.warnings = [warning];
+  for (let index = 0; index < 4; index += 1) {
+    audited = ensureDocumentAudit(audited, {
+      content: "Hello old world",
+      reader: "md",
+      writer: "md",
+      targetFormat: "md",
+      fileName: "test.md",
+      options: {},
+    });
+  }
+  assert.equal(audited.metadata.warnings.length, 1);
+  assert.equal(audited.metadata.qualityReport.warningCount, 1);
+  assert.equal(audited.metadata.qualityReport.downgradeCount, 1);
+}
+
+console.log("Repair engine test passed: contract, engine unit, round-trip, fallback recommendation, failure and dedupe paths covered.");

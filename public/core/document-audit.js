@@ -1,5 +1,3 @@
-import { withWarnings } from "./warnings.js";
-
 function stableHash(value) {
   const text = String(value ?? "");
   let hash = 2166136261;
@@ -129,28 +127,35 @@ export function ensureDocumentAudit(model, {
     },
   }));
 
+  const metadata = {
+    ...(model.metadata || {}),
+    conversion: {
+      ...(model.metadata?.conversion || {}),
+      reader: reader || model.sourceFormat || "",
+      writer,
+      targetFormat,
+      schemaVersion: model.schemaVersion,
+      options,
+    },
+    qualityReport: {
+      structureFidelity: warnings.some((warning) => warning.severity === "lossy") ? "medium" : "high",
+      tableFidelity: blocks.some((block) => block.type === "table") ? "tracked" : "not-applicable",
+      assetFidelity: assets.length > 0 ? "tracked" : "not-applicable",
+      warningCount: warnings.length,
+      warningsBySeverity: warningSummary(warnings),
+      downgradeCount: warnings.filter((warning) => ["lossy", "unsupported"].includes(warning.severity)).length,
+    },
+  };
+  if (warnings.length > 0) {
+    metadata.warnings = warnings;
+  } else {
+    delete metadata.warnings;
+  }
+
   return {
     ...model,
     blocks,
     assets,
-    metadata: withWarnings({
-      ...(model.metadata || {}),
-      conversion: {
-        ...(model.metadata?.conversion || {}),
-        reader: reader || model.sourceFormat || "",
-        writer,
-        targetFormat,
-        schemaVersion: model.schemaVersion,
-        options,
-      },
-      qualityReport: {
-        structureFidelity: warnings.some((warning) => warning.severity === "lossy") ? "medium" : "high",
-        tableFidelity: blocks.some((block) => block.type === "table") ? "tracked" : "not-applicable",
-        assetFidelity: assets.length > 0 ? "tracked" : "not-applicable",
-        warningCount: warnings.length,
-        warningsBySeverity: warningSummary(warnings),
-        downgradeCount: warnings.filter((warning) => ["lossy", "unsupported"].includes(warning.severity)).length,
-      },
-    }, warnings),
+    metadata,
   };
 }
