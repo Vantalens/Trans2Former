@@ -133,6 +133,7 @@ try {
   const appJs = await fetchText(baseUrl, "/app.js");
   const stylesCss = await fetchText(baseUrl, "/styles.css");
   const fileQueueJs = await fetchText(baseUrl, "/core/file-queue-ui.js");
+  const outputDirectoryJs = await fetchText(baseUrl, "/core/output-directory.js");
   const pdfFormatJs = await fetchText(baseUrl, "/formats/pdf.js");
   const pdfJsVendor = await fetchText(baseUrl, "/vendor/pdfjs/pdf.min.mjs");
   assert.equal(appJs.includes("renderErrorDetails"), true, "main app should render structured conversion errors");
@@ -167,6 +168,10 @@ try {
   assert.equal(appJs.includes("renderDocumentModelPanel"), true, "main app should render DocumentModel inspection");
   assert.equal(appJs.includes("renderBottomReports"), true, "main app should render warnings, quality, diff, and versions");
   assert.equal(appJs.includes("chooseOutputDirectory"), true, "main app should expose explicit output directory selection");
+  assert.equal(appJs.includes("outputDirectoryHandle"), true, "output directory selection should keep the directory handle");
+  assert.equal(appJs.includes("writeBlobToDirectory"), true, "main app should write generated output into the selected directory");
+  assert.equal(outputDirectoryJs.includes("getFileHandle"), true, "selected output directories should be used for actual file writes");
+  assert.equal(outputDirectoryJs.includes("createWritable"), true, "selected output directories should write generated output via File System Access API");
   assert.equal(appJs.includes("buildExportFileName"), true, "main app should apply export naming strategy");
   assert.equal(appJs.includes("retryFailedQueueItems"), true, "main app should retry failed queued tasks");
   assert.equal(appJs.includes("showWorkbenchTab"), true, "main app should support narrow-screen workbench tabs");
