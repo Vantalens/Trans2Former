@@ -56,6 +56,7 @@ async function main() {
 
   let synced = 0;
   let skipped = 0;
+  const failures = []; // issue #50: 收集失败文件，循环结束后统一判定
   for (const file of manifest.files || []) {
     const destPath = path.join(TARGET_DIR, file.target);
 
@@ -71,11 +72,12 @@ async function main() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       buffer = Buffer.from(await response.arrayBuffer());
     } catch (error) {
-      // 网络/HTTP 失败：非阻塞退出（与 onnx/tesseract vendor 一致）。
+      // issue #50: 网络/HTTP 失败 fail-closed——记录失败文件但继续尝试后续文件，
+      // 循环结束后若有任一失败则非零退出（阻止 release:prepare 链打包残缺 vendor）。
       console.warn(`[sync-paddleocr-vendor] 下载 ${file.target} 失败（${error?.message || error}）。`);
-      console.warn("[sync-paddleocr-vendor] 离线或源不可达时跳过；高级 OCR 仍可在安全中心手动导入模型。");
       console.warn(`[sync-paddleocr-vendor] 源：${url}`);
-      return;
+      failures.push(file.target);
+      continue;
     }
 
     // 下到字节后做完整性校验：不符则删半成品 + 非零退出（不可静默放行）。
@@ -98,9 +100,16 @@ async function main() {
   console.log(
     `PP-OCRv5 vendor synced to public/vendor/paddleocr/ (downloaded=${synced}, cached=${skipped}; cls optional, not bundled).`,
   );
+
+  // issue #50: 循环结束后检查 failures，任一失败则非零退出
+  if (failures.length > 0) {
+    console.error(`[sync-paddleocr-vendor] ${failures.length} 个文件同步失败：${failures.join(", ")}`);
+    console.error("[sync-paddleocr-vendor] 离线或源不可达时，请在联网环境下运行 npm run vendor:paddle 或手动导入模型。");
+    process.exit(1);
+  }
 }
 
 main().catch((error) => {
-  console.warn(`[sync-paddleocr-vendor] sync failed: ${error?.message || error}`);
-  process.exitCode = 0;
+  console.error(`[sync-paddleocr-vendor] 同步异常：${error?.message || error}`);
+  process.exit(1);
 });
