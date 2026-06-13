@@ -107,6 +107,19 @@ function createDeflateWithInvalidDistanceSymbol() {
   return bytesFromBits(bits);
 }
 
+function createDeflateThatExceedsDeclaredSizeInOneHuffmanBlock() {
+  const literalCodes = fixedLiteralCodes();
+  const distanceCodes = fixedHuffmanCodes(Array(32).fill(5));
+  const bits = [];
+  pushBits(bits, 1, 1);
+  pushBits(bits, 0b01, 2);
+  pushBits(bits, literalCodes[65].bits, literalCodes[65].length);
+  pushBits(bits, literalCodes[285].bits, literalCodes[285].length);
+  pushBits(bits, distanceCodes[0].bits, distanceCodes[0].length);
+  pushBits(bits, literalCodes[256].bits, literalCodes[256].length);
+  return bytesFromBits(bits);
+}
+
 function createZipWithRawDeflate(name, compressedData, uncompressedSize) {
   const nameBytes = encoder.encode(name);
   const localHeader = new Uint8Array([
@@ -129,6 +142,15 @@ assert.throws(
   () => readZipEntries(createZipWithRawDeflate("word/document.xml", createDeflateWithInvalidDistanceSymbol(), 4)),
   (error) => error instanceof ConversionError && error.code === "ZIP_DEFLATE_DISTANCE_ERROR",
   "invalid DEFLATE distance symbols 30/31 must fail closed"
+);
+
+assert.throws(
+  () => readZipEntries(createZipWithRawDeflate("word/oversized-block.bin", createDeflateThatExceedsDeclaredSizeInOneHuffmanBlock(), 16)),
+  (error) => error instanceof ConversionError
+    && error.code === "ZIP_DEFLATE_SIZE_ERROR"
+    && error.details?.declaredBytes === 16
+    && error.details?.outputBytes === 17,
+  "DEFLATE output must be checked while a Huffman block is being decoded"
 );
 
 const compressedZeros = new Uint8Array(deflateRawSync(Buffer.alloc(1024 * 1024)));

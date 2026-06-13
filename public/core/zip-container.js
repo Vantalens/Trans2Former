@@ -100,7 +100,21 @@ function readSymbol(reader, huffman) {
   });
 }
 
-function copyDistance(output, distance, length) {
+function assertDeflateOutputWithinDeclaredSize(output, expectedSize) {
+  if (expectedSize > 0 && output.length > expectedSize) {
+    throw new ConversionError("ZIP deflate output exceeded declared size", {
+      category: "parse",
+      code: "ZIP_DEFLATE_SIZE_ERROR",
+      format: "zip",
+      details: {
+        declaredBytes: expectedSize,
+        outputBytes: output.length,
+      },
+    });
+  }
+}
+
+function copyDistance(output, distance, length, expectedSize) {
   if (!Number.isInteger(distance) || distance <= 0 || distance > output.length) {
     throw new ConversionError("ZIP deflate distance is invalid", {
       category: "parse",
@@ -110,14 +124,16 @@ function copyDistance(output, distance, length) {
   }
   for (let index = 0; index < length; index += 1) {
     output.push(output[output.length - distance]);
+    assertDeflateOutputWithinDeclaredSize(output, expectedSize);
   }
 }
 
-function inflateHuffmanBlock(reader, output, literalTree, distanceTree) {
+function inflateHuffmanBlock(reader, output, literalTree, distanceTree, expectedSize) {
   while (true) {
     const symbol = readSymbol(reader, literalTree);
     if (symbol < 256) {
       output.push(symbol);
+      assertDeflateOutputWithinDeclaredSize(output, expectedSize);
       continue;
     }
     if (symbol === 256) return;
@@ -139,7 +155,7 @@ function inflateHuffmanBlock(reader, output, literalTree, distanceTree) {
       });
     }
     const distance = DIST_BASE[distanceSymbol] + reader.readBits(DIST_EXTRA[distanceSymbol]);
-    copyDistance(output, distance, length);
+    copyDistance(output, distance, length, expectedSize);
   }
 }
 
@@ -205,13 +221,16 @@ function inflateDeflateRaw(bytes, expectedSize) {
           format: "zip",
         });
       }
-      for (let index = 0; index < len; index += 1) output.push(reader.readBits(8));
+      for (let index = 0; index < len; index += 1) {
+        output.push(reader.readBits(8));
+        assertDeflateOutputWithinDeclaredSize(output, expectedSize);
+      }
     } else if (blockType === 1) {
       const { literalTree, distanceTree } = fixedHuffmanTrees();
-      inflateHuffmanBlock(reader, output, literalTree, distanceTree);
+      inflateHuffmanBlock(reader, output, literalTree, distanceTree, expectedSize);
     } else if (blockType === 2) {
       const { literalTree, distanceTree } = dynamicHuffmanTrees(reader);
-      inflateHuffmanBlock(reader, output, literalTree, distanceTree);
+      inflateHuffmanBlock(reader, output, literalTree, distanceTree, expectedSize);
     } else {
       throw new ConversionError("ZIP deflate reserved block type is invalid", {
         category: "parse",
@@ -219,13 +238,7 @@ function inflateDeflateRaw(bytes, expectedSize) {
         format: "zip",
       });
     }
-    if (output.length > expectedSize && expectedSize > 0) {
-      throw new ConversionError("ZIP deflate output exceeded declared size", {
-        category: "parse",
-        code: "ZIP_DEFLATE_SIZE_ERROR",
-        format: "zip",
-      });
-    }
+    assertDeflateOutputWithinDeclaredSize(output, expectedSize);
   }
   if (expectedSize > 0 && output.length !== expectedSize) {
     throw new ConversionError("ZIP deflate output size does not match header", {
