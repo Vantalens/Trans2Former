@@ -5,15 +5,15 @@
 - [ ] `npm install` 可完成依赖安装。
 - [ ] `npm test` 可通过核心转换、浏览器工作台、桌面壳配置、本地安全、资源预算和 release readiness 检查。
 - [ ] `npm run desktop:check` 可通过 Tauri scaffold 和最小权限边界检查。
-- [ ] `npm run release:prepare` 可生成本地 `release/trans2former-2.0.0/`。
-- [ ] `release/trans2former-2.0.0/RELEASE_MANIFEST.json` 已生成并可检查。
+- [ ] `npm run release:prepare` 可生成本地 `release/trans2former-<version>/`。
+- [ ] `release/trans2former-<version>/RELEASE_MANIFEST.json` 已生成并可检查。
 - [ ] `npm start` 可启动 Web 应用。
 - [ ] 浏览器可访问 `http://localhost:3000`。
 - [ ] 浏览器可访问 `http://localhost:3000/smoke-test.html`。
 - [ ] 浏览器端可完成 Markdown / HTML / TXT / JSON / CSV / XML 基础互转，并可导入 PNG 资源。
 - [ ] DOCX input 可本地提取标题、段落、表格、链接、图片、列表、页眉页脚、脚注、批注和 alt text。
 - [ ] XLSX / EPUB / PDF / PPTX input 可通过 P3 smoke fixture，其中 XLSX 覆盖公式/日期/合并单元格，PPTX 覆盖图片/表格/备注。
-- [ ] DOCX / PDF / PNG / JPEG output 可通过 P4 smoke fixture，并按二进制 Blob 下载。
+- [ ] DOCX / PDF / PPTX / XLSX / EPUB output 可通过 smoke fixture，并按二进制 Blob 下载。
 - [ ] 基础格式解析改动已同步 samples、snapshots、warnings 和 [docs/BASIC_FORMAT_QUALITY.md](docs/BASIC_FORMAT_QUALITY.md)。
 - [ ] 错误详情面板显示结构化错误，并且复制诊断不包含用户文档正文、title 或 stack。
 - [ ] 文本输出编辑器、实时预览、undo / redo、checkpoint、version diff、warnings resolved 和本地历史 opt-in 已验证。
