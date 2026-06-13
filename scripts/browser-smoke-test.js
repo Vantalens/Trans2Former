@@ -95,6 +95,7 @@ try {
   assert.equal(indexHtml.includes("class=\"auxiliary-actions\""), true, "modern workbench should group secondary actions away from the primary command path");
   assert.equal(indexHtml.includes("class=\"auxiliary-actions\" hidden"), false, "secondary actions should be reachable from the default workbench");
   assert.equal(indexHtml.includes("class=\"output-settings\""), true, "modern workbench should keep export settings behind disclosure");
+  assert.equal(indexHtml.includes("class=\"output-settings\" hidden"), false, "export settings disclosure should be reachable");
   assert.equal(indexHtml.includes("class=\"viewer-grid single-view\""), true, "modern workbench should show one right-side work view at a time");
   assert.equal(indexHtml.includes("class=\"topbar-progress\""), true, "progress should be embedded in the topbar instead of a separate row");
   assert.equal(indexHtml.includes("data-drawer-tab=\"drawerPluginsGroup\""), false, "drawer should not expose plugin groups after core integration");
