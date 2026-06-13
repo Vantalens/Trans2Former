@@ -105,12 +105,30 @@ export class RoutePlanner {
   // - cold：经过 medium/high-loss mapper 或多步链
   // 返回 null 表示模型上无法到达。
   getRoute(readerInputModels = [], writerAcceptModels = []) {
+    // issue #113 修复：先检查所有 acceptsModels 的直达 hot 路径，
+    // 再按 acceptsModels 顺序进行 BFS，但优先选择有可执行 fn 的路径。
+
+    let bestRoute = null;
+    let bestRouteHasExecutableFn = false;
+    let bestRouteIsHot = false;
+
     for (const acceptedModel of writerAcceptModels) {
+      // 检查直达 hot 路径
       const directModel = readerInputModels.find((model) => model === acceptedModel);
       if (directModel) {
-        return { temperature: "hot", models: [directModel], mappers: [] };
+        const route = { temperature: "hot", models: [directModel], mappers: [] };
+        // Hot 路径优先，但如果已有可执行的 warm/cold 路径到首选模型，保持首选模型优先
+        if (!bestRoute || !bestRouteHasExecutableFn) {
+          return route;
+        }
+        // 如果已有可执行路径到首选模型，但这是 hot 路径，比较是否应该切换
+        if (!bestRouteIsHot) {
+          bestRoute = route;
+          bestRouteIsHot = true;
+        }
       }
 
+      // BFS 查找 mapper 路径
       const visited = new Set(readerInputModels);
       const queue = readerInputModels.map((model) => ({ model, models: [model], mappers: [] }));
       while (queue.length > 0) {
@@ -124,18 +142,49 @@ export class RoutePlanner {
           };
           if (mapper.to === acceptedModel) {
             const warm = route.mappers.length === 1 && route.mappers[0].lossLevel === "low";
-            return {
+            const fullRoute = {
               temperature: warm ? "warm" : "cold",
               models: route.models,
               mappers: route.mappers,
             };
+            const hasExecutableFn = route.mappers.every(m => typeof m.fn === "function");
+
+            // 更新最佳路径的条件：
+            // 1. 还没有路径
+            // 2. 新路径有可执行 fn 而旧路径没有
+            // 3. 都有可执行 fn，但旧路径不是到首选模型（这是第一次遇到的可执行路径）
+            if (!bestRoute) {
+              bestRoute = fullRoute;
+              bestRouteHasExecutableFn = hasExecutableFn;
+            } else if (hasExecutableFn && !bestRouteHasExecutableFn) {
+              // 新路径可执行，旧路径不可执行，切换到可执行路径
+              bestRoute = fullRoute;
+              bestRouteHasExecutableFn = true;
+              bestRouteIsHot = false;
+            } else if (bestRouteHasExecutableFn && hasExecutableFn) {
+              // 都可执行，已经是第一个找到的可执行路径，保持不变
+            } else if (!bestRouteHasExecutableFn && !hasExecutableFn) {
+              // 都不可执行，保持第一个找到的路径
+            }
+
+            // 如果找到可执行路径，立即返回（按 acceptsModels 顺序，第一个可执行路径即为最优）
+            if (hasExecutableFn) {
+              return bestRoute;
+            }
+            break; // 找到当前 acceptedModel 的路径，跳出 BFS
           }
           visited.add(mapper.to);
           queue.push(route);
         }
       }
+
+      // 如果已找到可执行路径或 hot 路径，不再继续查找后续 acceptedModels
+      if (bestRouteHasExecutableFn || bestRouteIsHot) {
+        return bestRoute;
+      }
     }
-    return null;
+
+    return bestRoute;
   }
 
   getRouteTemperature(readerInputModels = [], writerAcceptModels = []) {
