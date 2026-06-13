@@ -4,9 +4,11 @@ import path from "node:path";
 
 import { normalizeConversionError } from "../public/core/conversion-error.js";
 import { convertContent } from "../public/browser-transformer.js";
+import { readJson } from "../public/formats/json.js";
 
 const PUBLIC_ROOT = path.resolve("public");
 const SECURITY_POLICY_PATH = path.resolve("docs", "SECURITY_POLICY.md");
+const APP_PATH = path.resolve("public", "app.js");
 
 const FORBIDDEN_PUBLIC_PATTERNS = [
   { pattern: /\bfetch\s*\(/, reason: "public app must not upload or fetch remote resources by default" },
@@ -202,6 +204,15 @@ async function assertSecurityPolicyIsDocumented() {
   }
 }
 
+async function assertWorkbenchErrorDiagnosticsAreRedacted() {
+  const app = await readFile(APP_PATH, "utf8");
+  assert.equal(
+    app.includes("details: normalized.details"),
+    false,
+    "workbench error debug output should not render raw normalized.details"
+  );
+}
+
 function assertErrorsDoNotSerializeSensitiveInput() {
   const secret = "SECRET_USER_DOCUMENT_9f4e0a";
   const error = normalizeConversionError(new Error("转换失败"), {
@@ -225,10 +236,22 @@ function assertErrorsDoNotSerializeSensitiveInput() {
     },
     "unsupported format diagnostics should avoid serializing title/content"
   );
+
+  assert.throws(
+    () => readJson({ content: `{"apiKey": ${secret}}`, title: "bad-secret.json" }),
+    (conversionError) => {
+      const publicJson = JSON.stringify(normalizeConversionError(conversionError).toJSON());
+      return !publicJson.includes(secret)
+        && !publicJson.includes(secret.slice(0, 10))
+        && publicJson.includes("JSON_PARSE_ERROR");
+    },
+    "JSON parse diagnostics should not include source document snippets"
+  );
 }
 
 await assertPublicAppIsLocalOnly();
 await assertSecurityPolicyIsDocumented();
+await assertWorkbenchErrorDiagnosticsAreRedacted();
 assertErrorsDoNotSerializeSensitiveInput();
 
 console.log("Local security test passed: public app stays local-only and diagnostics avoid sensitive content.");
