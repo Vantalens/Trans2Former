@@ -47,6 +47,14 @@ export function normalizeFormat(value) {
   return FORMAT_ALIASES[normalized] || normalized;
 }
 
+function repairStatusFromDecision(autoRepair) {
+  if (!autoRepair?.attempted) return "not-attempted";
+  if (["verified", "degraded", "failed-quality-gate"].includes(autoRepair.finalDecision)) {
+    return autoRepair.finalDecision;
+  }
+  return "pending";
+}
+
 // RoutePlanner 维护规范模型 + mapper 图。reader 声明 inputModels（自己产出哪些
 // 模型），writer 声明 acceptModels（自己消费哪些模型），mapper 描述模型间的
 // 单向转换。getReachableModels 从 reader 出发 BFS 走 mapper 到所有可达模型，
@@ -520,7 +528,7 @@ export class ConverterRegistry {
     const baseQualityReport = finalModel.metadata?.qualityReport || {};
     const qualityReport = {
       ...baseQualityReport,
-      repairStatus: cycle.autoRepair?.attempted ? "verified" : "not-attempted",
+      repairStatus: repairStatusFromDecision(cycle.autoRepair),
       finalDecision: cycle.autoRepair?.finalDecision || "pending",
       ruleDiff: verification.ruleDiff,
       ssim: verification.ssim ?? null,

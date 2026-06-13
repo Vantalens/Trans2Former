@@ -104,6 +104,7 @@ export class RepairEngine {
         currentModel = result.model || currentModel;
       } else if (result.fallbackRecommended) {
         recommendations.push({ ...summarizeAction(action), fallbackTo: result.fallbackTo, note: result.note || "fallback-recommended" });
+        continue;
       } else {
         currentModel = result.model || currentModel;
       }
@@ -175,6 +176,7 @@ export class RepairEngine {
 
     if (proposed.length === 0) {
       const roundTrip = this.reverifyRoundTrip({ output, model, ctx: validatorContext });
+      const noProposalVerified = !roundTrip.eligible || roundTrip.ok !== false;
       return {
         model,
         output,
@@ -184,9 +186,9 @@ export class RepairEngine {
           rejectedActions: [],
           fallbackUsed: false,
           fallbackTo: null,
-          postRepairVerified: true,
+          postRepairVerified: noProposalVerified,
           roundTripDelta: roundTrip.eligible ? { ok: roundTrip.ok, blockCountDelta: roundTrip.blockCountDelta ?? 0 } : { ok: null, skipped: roundTrip.reason },
-          finalDecision: "verified",
+          finalDecision: noProposalVerified ? "verified" : "failed-quality-gate",
         },
         modelReview,
       };
@@ -196,15 +198,17 @@ export class RepairEngine {
     const fallbackUsed = applyResult.fallbackApplied === true;
     const verification = this.reverifyModel({ before: model, after: applyResult.model, ctx: validatorContext });
     const roundTrip = this.reverifyRoundTrip({ output: applyResult.output, model: verification.refreshed, ctx: validatorContext });
-    const postRepairVerified = verification.verified && (!roundTrip.eligible || roundTrip.ok !== false);
+    const postRepairVerified = verification.verified && roundTrip.eligible && roundTrip.ok !== false;
 
     let finalDecision;
     if (applyResult.applied.length === 0) {
       finalDecision = "degraded";
     } else if (postRepairVerified) {
       finalDecision = "verified";
-    } else {
+    } else if ((roundTrip.eligible && roundTrip.ok === false) || !verification.verified) {
       finalDecision = "failed-quality-gate";
+    } else {
+      finalDecision = "degraded";
     }
 
     return {
