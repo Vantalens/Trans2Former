@@ -411,6 +411,9 @@ function buildPdfBytes(model, title) {
   const allLines = (model.blocks || []).flatMap((block) => blockToLines(block, stats));
   const pages = paginate(allLines);
 
+  // issue #110: 预渲染所有行，避免 O(n²) 重复调用 renderLine
+  const renderedPages = pages.map((lines) => lines.map((line) => renderLine(line)));
+
   let cursor = 3;
   const pageObjectNumbers = [];
   const contentObjectNumbers = [];
@@ -423,10 +426,9 @@ function buildPdfBytes(model, title) {
     annotationsPerPage.push([]);
     annotObjectNumbers.push([]);
   });
-  pages.forEach((lines, pageIdx) => {
-    lines.forEach((line) => {
-      const { annotations } = renderLine(line);
-      annotationsPerPage[pageIdx].push(...annotations);
+  renderedPages.forEach((renderedLines, pageIdx) => {
+    renderedLines.forEach((rendered) => {
+      annotationsPerPage[pageIdx].push(...rendered.annotations);
     });
     annotationsPerPage[pageIdx].forEach(() => {
       annotObjectNumbers[pageIdx].push(cursor++);
@@ -445,11 +447,10 @@ function buildPdfBytes(model, title) {
 
   const annotObjectsToAppend = [];
 
-  pages.forEach((lines, pageIdx) => {
+  renderedPages.forEach((renderedLines, pageIdx) => {
     const opsArray = [];
-    lines.forEach((line) => {
-      const { ops } = renderLine(line);
-      opsArray.push(...ops);
+    renderedLines.forEach((rendered) => {
+      opsArray.push(...rendered.ops);
     });
     const content = opsArray.join("\n");
 
