@@ -139,7 +139,7 @@ Tauri + Web-GUI 是当前最合理的桌面路线。
 ## 当前实现
 
 - 已建立 Tauri v2 scaffold：`src-tauri/tauri.conf.json`、`src-tauri/capabilities/default.json`、Rust entrypoint 和 `npm run desktop:check`。
-- 已声明最小权限边界：主窗口、打开/保存对话框、文件读写能力；不开放 shell、HTTP 或目录级扫描权限。
+- 已声明最小权限边界：当前桌面壳只保留主窗口与 `core:default` 能力；文件选择、下载与预览继续走 Web 前端能力，不默认开放 Tauri dialog、fs、shell、HTTP 或目录级扫描权限。
 - Web-GUI 已建立 P0 工作台骨架：文件队列、任务状态、批量选择、失败重试、输出目录提示、导出命名策略。
 - 主工作区已升级为 Input / DocumentModel / Output 三栏，窄屏使用 tabs。
 - 底部已建立 Warnings、Quality Report、Diff 和 Versions 面板。

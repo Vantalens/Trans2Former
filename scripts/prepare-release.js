@@ -34,6 +34,7 @@ const EXCLUDE_NAMES = new Set([
   "release",
   "releases",
   "artifacts",
+  "generated", // issue #31: 排除 samples/generated (79MB 可再生成语料)
 ]);
 
 async function copyPath(relativePath) {

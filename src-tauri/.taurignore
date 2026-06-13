@@ -1,0 +1,4 @@
+# issue #33: 排除自检页与空目录，不打进生产安装包
+smoke-test.html
+smoke-test.js
+plugin-patches/

@@ -36,10 +36,8 @@ const capability = JSON.parse(await readFile("src-tauri/capabilities/default.jso
 assert.equal(capability.identifier, "default");
 assert.deepEqual(capability.windows, ["main"]);
 assert.equal(capability.permissions.includes("core:default"), true);
-assert.equal(capability.permissions.includes("dialog:allow-open"), true);
-assert.equal(capability.permissions.includes("dialog:allow-save"), true);
-assert.equal(capability.permissions.includes("fs:read-files"), true);
-assert.equal(capability.permissions.includes("fs:write-files"), true);
+assert.equal(capability.permissions.some((permission) => String(permission).startsWith("dialog:")), false);
+assert.equal(capability.permissions.some((permission) => String(permission).startsWith("fs:")), false);
 assert.equal(capability.permissions.some((permission) => String(permission).includes("read-dirs")), false);
 assert.equal(capability.permissions.some((permission) => String(permission).includes("shell:allow-open")), false);
 assert.equal(capability.permissions.some((permission) => String(permission).includes("http:")), false);
