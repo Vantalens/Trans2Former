@@ -296,7 +296,6 @@ async function importTessdata(dialog, button) {
   }
   await new Promise((resolve) => {
     const handler = async () => {
-      fileInput.removeEventListener("change", handler);
       const file = fileInput.files?.[0];
       fileInput.value = "";
       if (!file) {
@@ -328,7 +327,7 @@ async function importTessdata(dialog, button) {
       }
       resolve();
     };
-    fileInput.addEventListener("change", handler);
+    fileInput.addEventListener("change", handler, { once: true });
     fileInput.click();
   });
 }
@@ -362,7 +361,6 @@ async function importPaddleModel(dialog, button) {
   }
   await new Promise((resolve) => {
     const handler = async () => {
-      fileInput.removeEventListener("change", handler);
       const picked = fileInput.files?.[0];
       fileInput.value = "";
       if (!picked) {
@@ -409,7 +407,7 @@ async function importPaddleModel(dialog, button) {
       }
       resolve();
     };
-    fileInput.addEventListener("change", handler);
+    fileInput.addEventListener("change", handler, { once: true });
     fileInput.click();
   });
 }
