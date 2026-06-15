@@ -8,6 +8,8 @@ import {
 } from "../public/core/format-registry.js";
 
 const docs = await readFile("docs/CONVERSION_PATHS.md", "utf8");
+const readme = await readFile("README.md", "utf8");
+const releaseGuide = await readFile("RELEASE_GUIDE.md", "utf8");
 
 const inputNameToFormats = new Map([
   ["Markdown", ["md"]],
@@ -113,6 +115,11 @@ for (const format of documentedRows.keys()) {
     getAllowedOutputFormats(format),
     `docs/CONVERSION_PATHS.md output row for ${format} must match getAllowedOutputFormats(${format})`,
   );
+}
+
+for (const [name, markdown] of [["README.md", readme], ["RELEASE_GUIDE.md", releaseGuide]]) {
+  assert.equal(markdown.includes("14 种输入格式"), true, `${name} must document the current 14 input formats.`);
+  assert.equal(markdown.includes("12 种输入格式"), false, `${name} must not retain the old 12 input format count.`);
 }
 
 console.log("Product matrix docs test passed: CONVERSION_PATHS matches the registry product matrix.");

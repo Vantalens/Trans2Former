@@ -1,12 +1,12 @@
 # Cost And Resource Governance
 
-版本：v0.1.0  
+版本：v0.2.0
 状态：生效  
-最后更新：2026-04-26
+最后更新：2026-06-15
 
 ## 正式开发方向
 
-Trans2Former 采用模块化设计，但基础包必须覆盖热门、轻量、高频格式的免下载转换能力。核心包提供基础文档模型、注册表、热门基础格式、Worker 协议、安全策略和 UI 框架；高级格式和重能力通过模块插件按需下载或加载。
+Trans2Former 采用模块化设计，但基础包必须覆盖热门、轻量、高频格式的免下载转换能力。核心包提供基础文档模型、注册表、热门基础格式、Worker 协议、安全策略、UI 框架以及必要的 OCR/layout/table/verification 代码；大模型和重资源通过 `model-cache` 按需下载或本地导入。
 
 目标：
 
@@ -26,11 +26,11 @@ core
 format-basic
   Markdown / HTML / TXT / JSON / CSV / XML / PNG input / DOCX input/output / PDF input/output
 
-format-plugin
-  PDF input / DOCX / PPTX / XLSX / EPUB / advanced image formats / OFD high-fidelity plugin
+format-enhanced
+  PDF input / DOCX / PPTX / XLSX / EPUB / advanced image formats / OFD L0-L4 capability
 
-optional-plugin
-  local OCR / local layout analysis / local table recovery / local model plugins
+model-cache
+  local OCR / local layout analysis / local table recovery model resources
 ```
 
 ## 基础包热门格式原则
@@ -56,9 +56,9 @@ optional-plugin
 - 不需要默认网络访问
 - 有样例、快照、warnings 和安全测试
 
-DOCX、PPTX、XLSX、PDF input、EPUB 等热门能力可以评估进入基础免下载层，但必须受核心预算和安全边界约束。OFD 归为 P5 战略攻坚格式，通过本地插件推进高保真解析、渲染、质量报告和回归样例，不进入默认核心包。
+DOCX、PPTX、XLSX、PDF input、EPUB 等热门能力可以评估进入基础免下载层，但必须受核心预算和安全边界约束。OFD 已作为核心 reader 登记的早期预览能力推进，高保真解析、渲染、质量报告和回归样例必须继续受资源预算和 warning 门禁约束。
 
-## 插件 manifest 必填字段
+## 模型资源 manifest 必填字段
 
 - `id`
 - `name`
@@ -80,25 +80,25 @@ DOCX、PPTX、XLSX、PDF input、EPUB 等热门能力可以评估进入基础免
 ## 加载规则
 
 - `format-basic` 默认内置，承担热门格式免下载体验。
-- `format-plugin` 默认按需加载。
-- `optional-plugin` 默认关闭，必须用户显式启用。
-- 插件下载必须由用户操作触发，UI 必须说明大小、用途和安全模式。
-- 插件安装模式可以联网下载代码和资源，但不能接触用户文档。
+- `format-enhanced` 可以核心内置，但不得默认拉取重资源。
+- `model-cache` 默认按需下载或本地导入，必须用户显式启用。
+- 模型资源下载必须由用户操作触发，UI 必须说明大小、用途和安全模式。
+- 资源获取模式可以联网下载模型文件，但不能接触用户文档。
 - 文档处理模式可以接触用户文档，但必须禁联网。
-- 插件加载失败不能破坏核心转换流程。
-- 插件更新不能改变已缓存转换结果的含义。
+- 模型资源加载失败不能破坏核心转换流程。
+- 模型资源更新不能改变已缓存转换结果的含义。
 
 ## 性能规则
 
-- 核心包不因新增插件变大。
-- 首屏只加载 `core + format-basic`，不加载 `format-plugin` 或 `optional-plugin`。
-- 插件加载后应可复用，不重复下载。
+- 核心包不因新增模型资源变大。
+- 首屏只加载 `core + format-basic`，不加载 model-cache 重资源。
+- 模型资源加载后应可复用，不重复下载。
 - 大文件转换必须优先走 Worker、分片、流式和动态分块。
 - 插件应复用 `DocumentModel`、`ConversionContext`、`AssetStore` 和统一 warnings。
 
 ## 质量规则
 
-每个插件必须提供：
+每个增强能力或模型资源必须提供：
 
 - 样例文件
 - 快照或 smoke test
@@ -109,11 +109,12 @@ DOCX、PPTX、XLSX、PDF input、EPUB 等热门能力可以评估进入基础免
 
 ## 禁止行为
 
-- 插件绕过 `DocumentModel` 形成私有格式直连。
-- 插件默认上传用户内容。
-- 插件把 PDF/OCR/Office/AI 重依赖带入核心包。
-- 插件无 manifest、无预算、无测试进入主流程。
+- 增强能力绕过 `DocumentModel` / 专属模型契约形成私有格式直连。
+- 模型资源或增强能力默认上传用户内容。
+- PDF/OCR/Office/AI 重依赖进入默认核心路径。
+- 模型资源无 manifest、无预算、无测试进入主流程。
 
 ## 变更记录
 
+- v0.2.0：同步核心内置能力 + model-cache 资源治理方向，移除已取消的插件叙事。
 - v0.1.0：确立模块化插件、热门基础格式免下载、按需下载和资源治理方向。

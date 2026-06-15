@@ -17,8 +17,8 @@
 3. [03_TASK_AND_PROGRESS_RULES.md](03_TASK_AND_PROGRESS_RULES.md)：任务拆分、验收、回滚和 progress 规则。
 4. [04_AI_COLLABORATION_RULES.md](04_AI_COLLABORATION_RULES.md)：AI 协作边界、启动和收尾规则。
 5. [05_QUALITY_GATES.md](05_QUALITY_GATES.md)：测试、安全、资源和发布门禁。
-6. [06_SECURITY_AND_LOCAL_FIRST.md](06_SECURITY_AND_LOCAL_FIRST.md)：用户数据安全、本地优先、零云端处理和插件隔离规则。
-7. [07_COST_AND_RESOURCE_GOVERNANCE.md](07_COST_AND_RESOURCE_GOVERNANCE.md)：依赖、包体积、热门基础格式、模块插件和成本治理规则。
+6. [06_SECURITY_AND_LOCAL_FIRST.md](06_SECURITY_AND_LOCAL_FIRST.md)：用户数据安全、本地优先、零云端处理和模型缓存边界。
+7. [07_COST_AND_RESOURCE_GOVERNANCE.md](07_COST_AND_RESOURCE_GOVERNANCE.md)：依赖、包体积、热门基础格式、核心内置模块和成本治理规则。
 8. [08_TEMPLATES.md](08_TEMPLATES.md)：任务、progress、lessons、变更记录模板。
 
 ## 维护规则
