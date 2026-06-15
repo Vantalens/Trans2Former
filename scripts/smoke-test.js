@@ -732,6 +732,56 @@ test("issue #112 PDF footnote refs do not emit fragment-only URI annotations", (
   assert.match(pdfText, /\/URI \(https:\/\/example\.com\)/, "ordinary external links should still produce URI annotations");
 });
 
+test("issue #109 programmatic PDF renders italic and inline code styles", () => {
+  const markdown = "> Quoted *italic* text and `inline code`.";
+  const output = convertContent({ content: markdown, from: "md", to: "pdf", title: "inline-style.pdf" });
+  assertValidOutput(output, "pdf", "markdown inline styles to pdf");
+
+  const pdfText = new TextDecoder().decode(dataUrlToBytes(output.data));
+  assert.match(pdfText, /1 0 0\.21 1 \d+ \d+ Tm/, "italic text should use a skewed text matrix");
+  assert.match(pdfText, /0\.92 0\.92 0\.92 rg/, "inline code should render a gray background");
+});
+
+test("issue #107 PDF output declares UTF16 CMap and warns on unsupported charset", () => {
+  const extB = String.fromCodePoint(0x20000);
+  const hangul = String.fromCodePoint(0xD55C);
+  const emoji = String.fromCodePoint(0x1F600);
+  const output = convertContent({ content: `ExtB ${extB} Hangul ${hangul} emoji ${emoji}`, from: "md", to: "pdf", title: "charset.pdf" });
+  assertValidOutput(output, "pdf", "markdown charset to pdf");
+
+  const pdfText = new TextDecoder().decode(dataUrlToBytes(output.data));
+  assert.match(pdfText, /\/Encoding \/UniGB-UTF16-H/, "PDF must use a UTF-16 CMap that can address CJK Extension B");
+  assert.match(pdfText, /D840DC00/, "CJK Extension B should be emitted as a UTF-16 surrogate pair");
+  assert.equal((output.warnings || []).some((warning) => warning.code === "PDF_CHARSET_UNSUPPORTED_CHARS"), true);
+});
+
+test("issue #106 high-fidelity PDF reports omitted images, signatures, and substituted fonts", () => {
+  const model = {
+    title: "hf-losses",
+    fixedLayout: {
+      pages: [
+        {
+          size: { width: 612, height: 792 },
+          textRuns: [
+            { text: "Substituted font", bbox: { x: 72, y: 720, w: 120, h: 12 }, fontName: "Helvetica", fontSize: 12 },
+          ],
+          images: [{ assetId: "img-1", bbox: { x: 72, y: 600, w: 64, h: 64 } }],
+          signatures: [{ id: "sig-1", bbox: { x: 72, y: 520, w: 120, h: 40 } }],
+          annotations: [{ type: "Link", bbox: { x: 72, y: 700, w: 80, h: 12 }, target: "https://example.com" }],
+        },
+      ],
+    },
+    blocks: [{ type: "paragraph", text: "unused body" }],
+  };
+
+  const output = writePdfBinary({ model, title: "hf-losses" });
+  const warningCodes = new Set((output.warnings || []).map((warning) => warning.code));
+  assert.equal(warningCodes.has("PDF_HF_IMAGES_DROPPED"), true);
+  assert.equal(warningCodes.has("PDF_HF_SIGNATURES_DROPPED"), true);
+  assert.equal(warningCodes.has("PDF_HF_FONT_SUBSTITUTED"), true);
+  assert.match(new TextDecoder().decode(dataUrlToBytes(output.data)), /\/URI \(https:\/\/example\.com\)/);
+});
+
 test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", () => {
   // 构造一个包含 FixedLayoutModel 的模型
   const layoutPayload = {
