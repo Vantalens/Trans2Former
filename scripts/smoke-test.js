@@ -22,6 +22,7 @@ import { createDocumentModel, createParagraph } from "../public/core/document-mo
 import { assertValidDocumentModel, validateDocumentModel } from "../public/core/document-schema.js";
 import { readZipEntries } from "../public/core/zip-container.js";
 import { parseInlineMarkdown } from "../public/formats/inline-tokens.js";
+import { writePdfBinary } from "../public/formats/pdf-output.js";
 
 const SAMPLE_ROOT = path.resolve("samples");
 const INPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "png", "docx", "doc", "xlsx", "epub", "pptx", "pdf", "ofd"];
@@ -769,6 +770,53 @@ test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", ()
   assert.match(pdfText, /72\.00 760\.00 Tm/, "first text run should use an absolute text matrix");
   assert.match(pdfText, /72\.00 720\.00 Tm/, "new lines should reset to their absolute page coordinates");
   assert.equal(pdfText.includes("72.00 760.00 Td"), false, "absolute coordinates must not be emitted through relative Td moves");
+});
+
+test("issue #108 high-fidelity PDF failure falls back to programmatic output with a degraded warning", () => {
+  const model = {
+    title: "issue-108-fallback",
+    fixedLayout: { pages: [null] },
+    blocks: [{ type: "paragraph", text: "Fallback paragraph content." }],
+  };
+
+  const result = writePdfBinary({ model, title: "issue-108-fallback" });
+
+  assert.equal(result.format, "pdf");
+  assert.equal(result.type, "binary");
+  const bytes = dataUrlToBytes(result.data);
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");
+  const pdfText = new TextDecoder().decode(bytes);
+  assert.equal(pdfText.includes("Trans2Former High-Fidelity"), false, "fallback must not be high-fidelity output");
+
+  assert.ok(Array.isArray(result.warnings) && result.warnings.length > 0, "fallback must surface warnings");
+  const degraded = result.warnings.find((warning) => warning.code === "PDF_HIGH_FIDELITY_DEGRADED");
+  assert.ok(degraded, "fallback must include PDF_HIGH_FIDELITY_DEGRADED warning");
+  assert.equal(degraded.severity, "lossy");
+  assert.match(degraded.message, /fell back to programmatic layout/);
+});
+
+test("issue #108 successful high-fidelity output does not emit a degraded warning", () => {
+  const model = {
+    title: "issue-108-success",
+    fixedLayout: {
+      pages: [
+        {
+          size: { width: 595, height: 842 },
+          textRuns: [
+            { text: "High fidelity success", bbox: { x: 72, y: 760, w: 200, h: 24 }, fontName: "Helvetica", fontSize: 24 },
+          ],
+          annotations: [],
+        },
+      ],
+    },
+    blocks: [{ type: "paragraph", text: "unused programmatic body" }],
+  };
+
+  const result = writePdfBinary({ model, title: "issue-108-success" });
+  const pdfText = new TextDecoder().decode(dataUrlToBytes(result.data));
+  assert.match(pdfText, /Trans2Former High-Fidelity/, "should take the high-fidelity path");
+  const degraded = (result.warnings || []).find((warning) => warning.code === "PDF_HIGH_FIDELITY_DEGRADED");
+  assert.equal(degraded, undefined, "successful high-fidelity output must not report a degraded fallback");
 });
 
 test("placeholder image rendering outputs are not advertised as supported conversions", () => {
