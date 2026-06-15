@@ -136,8 +136,8 @@ function flattenInlinesToSegments(tokens, parentStyle = {}, hrefStack = []) {
       continue;
     }
     if (node.type === "footnoteRef") {
-      // PDF 无原生 sup，用上标括号 [id] 表达
-      segments.push({ text: `[${node.id || ""}]`, style: { ...parentStyle, link: true }, href: `#fn-${node.id || ""}` });
+      // PDF programmatic output has no named destinations for footnotes; keep the visual cue without a fake URI annotation.
+      segments.push({ text: `[${node.id || ""}]`, style: { ...parentStyle, link: true }, href: "" });
       continue;
     }
     if (node.type === "strong") {

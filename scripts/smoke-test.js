@@ -721,6 +721,17 @@ test("P4 programmatic PDF output returns a real PDF data URL instead of print HT
   assert.equal(output.data.includes("@media print"), false);
 });
 
+test("issue #112 PDF footnote refs do not emit fragment-only URI annotations", () => {
+  const markdown = "Footnote[^1] and [site](https://example.com).\n\n[^1]: Footnote body";
+  const output = convertContent({ content: markdown, from: "md", to: "pdf", title: "footnote-link.pdf" });
+  assertValidOutput(output, "pdf", "markdown footnote to pdf");
+
+  const pdfText = new TextDecoder().decode(dataUrlToBytes(output.data));
+  assert.equal(pdfText.includes("/URI (#fn-1)"), false, "footnote refs must not produce unusable fragment URI actions");
+  assert.equal(pdfText.includes("#fn-1"), false, "footnote refs must not leave fragment-only hrefs in the PDF");
+  assert.match(pdfText, /\/URI \(https:\/\/example\.com\)/, "ordinary external links should still produce URI annotations");
+});
+
 test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", () => {
   // 构造一个包含 FixedLayoutModel 的模型
   const layoutPayload = {
