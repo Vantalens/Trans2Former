@@ -102,9 +102,10 @@ function readSymbol(reader, huffman) {
 
 function assertDeflateOutputWithinDeclaredSize(output, expectedSize) {
   if (expectedSize >= 0 && output.length > expectedSize) {
-    throw new ConversionError("ZIP deflate output exceeded declared size", {
+    const declaredEmpty = expectedSize === 0;
+    throw new ConversionError(declaredEmpty ? "ZIP compression ratio cannot be verified for unknown-size deflated entries" : "ZIP deflate output exceeded declared size", {
       category: "parse",
-      code: "ZIP_DEFLATE_SIZE_ERROR",
+      code: declaredEmpty ? "ZIP_COMPRESSION_RATIO_LIMIT" : "ZIP_DEFLATE_SIZE_ERROR",
       format: "zip",
       details: {
         declaredBytes: expectedSize,
