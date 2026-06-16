@@ -8,7 +8,15 @@ const files = {
   budget: await readFile("docs/RESOURCE_BUDGET.md", "utf8"),
   strategy: await readFile("docs/PRODUCT_STRATEGY.md", "utf8"),
   multiModel: await readFile("docs/MULTI_MODEL_ARCHITECTURE.md", "utf8"),
+  developmentStandards: [
+    await readFile("docs/development-standards/00_README.md", "utf8"),
+    await readFile("docs/development-standards/05_QUALITY_GATES.md", "utf8"),
+    await readFile("docs/development-standards/06_SECURITY_AND_LOCAL_FIRST.md", "utf8"),
+    await readFile("docs/development-standards/07_COST_AND_RESOURCE_GOVERNANCE.md", "utf8"),
+  ].join("\n"),
 };
+const developmentStandardsManifestSection = files.developmentStandards
+  .match(/## 模型资源 manifest 必填字段([\s\S]*?)## 加载规则/)?.[1] || "";
 
 function assertIncludes(fileKey, expected) {
   assert.equal(
@@ -170,6 +178,26 @@ assertExcludesPattern(
   "multiModel",
   /external\s+engine[^。\n]{0,30}插件化/i,
   "external-engine plugin drift"
+);
+
+// docs/development-standards must stay aligned with the post-plugin direction.
+assertIncludes("developmentStandards", "model-cache");
+assertIncludes("developmentStandards", "核心内置");
+assertIncludes("developmentStandards", "大模型和重资源不得进入默认安装包");
+assertIncludes("developmentStandards", "trans2former.model-manifest.v1");
+assertIncludes("developmentStandards", "manifestId");
+assertIncludes("developmentStandards", "checksums.digest");
+assertIncludes("developmentStandards", "validateModelManifest");
+assertExcludes("developmentStandards", "手动安装、手动启用");
+assertExcludes("developmentStandards", "插件安装模式");
+assertExcludes("developmentStandards", "OFD 归为 P5 战略攻坚格式，通过本地插件");
+assert.equal(developmentStandardsManifestSection.includes("`formats`"), false, "model-resource manifest field list should not use plugin formats schema");
+assert.equal(developmentStandardsManifestSection.includes("`canRead`"), false, "model-resource manifest field list should not use plugin canRead schema");
+assert.equal(developmentStandardsManifestSection.includes("`entry`"), false, "model-resource manifest field list should not use plugin entry schema");
+assertExcludesPattern(
+  "developmentStandards",
+  /插件[^。\n]{0,30}文档处理主线/,
+  "plugin document-processing mainline drift"
 );
 
 console.log("Local model direction test passed: active docs match lightweight-default-bundle + on-demand OCR direction.");
