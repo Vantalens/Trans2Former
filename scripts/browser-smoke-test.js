@@ -160,6 +160,8 @@ try {
   assert.equal(appJs.includes("toConversionDocumentModel"), true, "quality panel should render the routed model with conversion-loss warnings");
   assert.equal(appJs.includes("currentInputContent"), true, "binary uploads should keep raw conversion payload separate from editor display text");
   assert.equal(appJs.includes("getActiveInputContent"), true, "conversion and preview should read the active raw payload, not textarea display text");
+  assert.equal(appJs.includes("currentPrintHtml"), false, "unreachable print-output state should stay removed");
+  assert.equal(appJs.includes('result.type === "print"'), false, "unreachable print-output branch should stay removed");
   assert.equal(appJs.includes("fitInputEditorHeight"), true, "short source text should not leave a full-height empty editor area");
   assert.equal(appJs.includes("createReadableInputDisplay"), true, "binary uploads should render extracted readable text instead of base64 data URLs");
   assert.equal(appJs.includes("inputContent.readOnly = binary"), true, "binary upload previews should be read-only to avoid editing extracted display text as raw binary");
@@ -183,6 +185,7 @@ try {
   assert.equal(pdfFormatJs.includes("PDFJS_TEXT_START"), true, "PDF.js extraction should feed structured text into the existing conversion pipeline");
   assert.equal(pdfJsVendor.includes("getDocument"), true, "vendored PDF.js runtime should be served locally");
   assert.equal(stylesCss.includes(".source-pane.is-binary-input"), true, "binary input mode should have an explicit layout rule");
+  assert.equal(stylesCss.includes("var(--sans)"), false, "binary input font should use a defined design token");
   assert.equal(/(^|\n)\s{2}height:\s*100vh;/.test(stylesCss), false, "app shell should not lock the workbench to a viewport-height canvas");
   assert.equal(stylesCss.includes("align-items: stretch;"), true, "workspace grid should stretch the source and result panes to fill the available height");
   assert.equal(stylesCss.includes("min-height: 620px;"), false, "result pane should not reserve a large empty preview area on short documents");
@@ -205,6 +208,7 @@ try {
 
   const previewJs = await fetchText(baseUrl, "/preview.js");
   assert.equal(previewJs.includes("readPreviewPayload"), true, "preview page should read payload via router helper");
+  assert.equal(previewJs.includes("printHtml"), false, "standalone preview should not keep unreachable print-output handling");
   assert.equal(previewJs.includes("renderPreviewHtml"), true, "preview page should render text-like outputs via existing transformer");
   assert.equal(previewJs.includes("toDocumentModel"), true, "preview page should fall back to reader-based HTML for binary formats");
 

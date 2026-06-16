@@ -129,7 +129,6 @@ let currentInputContent = sampleMarkdown;
 let currentOutputBlobUrl = "";
 let currentOutputDownloadBlob = null;
 let currentOutputFileName = "";
-let currentPrintHtml = "";
 let previewTimer = null;
 let previewIdleHandle = null;
 let lastRenderedPayload = "";
@@ -703,8 +702,6 @@ function updateOutputVersionControls() {
   if (!editable) {
     if (currentOutputType === "binary") {
       outputDraftMeta.textContent = "二进制输出不提供文本编辑器";
-    } else if (currentOutputType === "print") {
-      outputDraftMeta.textContent = "打印 HTML 仅提供预览";
     } else {
       outputDraftMeta.textContent = "等待转换";
     }
@@ -845,7 +842,7 @@ function initializeOutputDraft(result) {
   if (outputEditor) {
     outputEditor.value = "";
   }
-  updateOutputPreviewVisibility(result.type === "print");
+  updateOutputPreviewVisibility(false);
   updateOutputVersionControls();
 }
 
@@ -981,7 +978,6 @@ function revokeOutputUrl() {
 
 function resetGeneratedOutput(metaMessage = "尚未生成") {
   releaseConversionResources();
-  currentPrintHtml = "";
   currentOutputMime = "";
   currentOutputFormat = "";
   currentOutputType = "none";
@@ -1049,7 +1045,6 @@ function openCurrentOutputInPreview() {
       mime: currentOutputMime || "",
       text: outputEditor?.value || textOutputPreview?.textContent || "",
       blobUrl: currentOutputBlobUrl || "",
-      printHtml: currentPrintHtml || "",
       isPdf: Boolean(lastOutputIsPdf),
     },
     meta: { generatedAt: Date.now() },
@@ -1492,31 +1487,6 @@ async function transformContent() {
       return;
     }
 
-    if (result.type === "print") {
-      currentOutputType = "print";
-      currentOutputFormat = result.format;
-      currentOutputMime = result.mime;
-      clearOutputHistory();
-      updateOutputVersionControls();
-      currentPrintHtml = result.data;
-      const previewUrl = createDownloadUrl(currentPrintHtml, result.mime);
-      pdfPreview.src = previewUrl;
-
-      currentOutputFileName = buildExportFileName("print.html");
-      downloadOutputButton.href = previewUrl;
-      downloadOutputButton.download = currentOutputFileName;
-      downloadOutputButton.textContent = "下载打印版 HTML";
-
-      updateOutputPreviewVisibility(true);
-      showWorkbenchTab("outputPreviewPanel");
-      updateDownloadState(true);
-      setOutputMeta(`已生成浏览器打印页面 · ${outputDirectoryLabel}`);
-      updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
-      updateActiveQueueItem({ status: "done" });
-      setStatus("已生成打印页面，可用浏览器另存为 PDF", "success");
-      return;
-    }
-
     currentOutputType = "text";
     currentOutputFormat = result.format;
     currentOutputMime = result.mime;
@@ -1545,27 +1515,11 @@ async function transformContent() {
 }
 
 function printCurrentPdf() {
-  if (!currentPrintHtml && currentOutputBlobUrl) {
+  if (currentOutputBlobUrl) {
     window.open(currentOutputBlobUrl, "_blank");
     return;
   }
-  if (!currentPrintHtml) {
-    setStatus("当前没有可打印内容", "error");
-    return;
-  }
-
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    setStatus("浏览器阻止了打印窗口，请允许弹窗后重试", "error");
-    return;
-  }
-  printWindow.document.open();
-  printWindow.document.write(currentPrintHtml);
-  printWindow.document.close();
-  printWindow.addEventListener("load", () => {
-    printWindow.focus();
-    printWindow.print();
-  }, { once: true });
+  setStatus("当前没有可预览的 PDF", "error");
 }
 
 fileInput.addEventListener("change", (event) => {
@@ -1697,9 +1651,6 @@ selectAllQueueButton.addEventListener("click", selectAllQueueItems);
 retryFailedButton.addEventListener("click", retryFailedQueueItems);
 outputDirectoryButton.addEventListener("click", () => {
   chooseOutputDirectory().catch((error) => setStatus(error.message, "error"));
-});
-securityCenterButton.addEventListener("click", () => {
-  setStatus("local-only · 所有内置转换在浏览器本地执行，不上传用户文档", "success");
 });
 document.getElementById("bottomReportPanel")?.addEventListener("click", (event) => {
   const drawerTab = event.target.closest("[data-drawer-tab]");
