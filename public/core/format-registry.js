@@ -64,8 +64,8 @@ function repairStatusFromDecision(autoRepair) {
 
 // RoutePlanner 维护规范模型 + mapper 图。reader 声明 inputModels（自己产出哪些
 // 模型），writer 声明 acceptModels（自己消费哪些模型），mapper 描述模型间的
-// 单向转换。getReachableModels 从 reader 出发 BFS 走 mapper 到所有可达模型，
-// canReachWriter 判断 writer 是否能消费其中一个。详见 docs/CONVERSION_ROUTING.md。
+// 单向转换。getRoute 返回 reader 到 writer 的可执行模型路线和温度。
+// 详见 docs/CONVERSION_ROUTING.md。
 //
 export class RoutePlanner {
   constructor() {
@@ -82,21 +82,6 @@ export class RoutePlanner {
       lossLevel: String(lossLevel),
       forcedWarnings: forcedWarnings.map((w) => String(w)),
     });
-  }
-
-  getReachableModels(seedModels) {
-    const reachable = new Set(seedModels);
-    const queue = [...seedModels];
-    while (queue.length > 0) {
-      const current = queue.shift();
-      for (const mapper of this.mappers) {
-        if (mapper.from === current && !reachable.has(mapper.to)) {
-          reachable.add(mapper.to);
-          queue.push(mapper.to);
-        }
-      }
-    }
-    return reachable;
   }
 
   // 计算 reader → writer 的路径温度：
@@ -143,9 +128,8 @@ export class RoutePlanner {
   }
 }
 
-// P8-M1：产品矩阵 + Planner 双跑。当前阶段所有 reader/writer 默认走 SemanticDoc，
-// P8-M3/M4 拆出 WorkbookModel/SlideModel/FixedLayoutModel 后逐步迁移并打开
-// canReachWriter 校验。
+// P8-M1：产品矩阵 + Planner 双跑。reader/writer 声明规范模型，RoutePlanner
+// 用 mapper 图计算真实 route 温度。
 export function getAllowedOutputFormats(from) {
   return [...(PRODUCT_MATRIX_BY_INPUT[normalizeFormat(from)] || [])];
 }
