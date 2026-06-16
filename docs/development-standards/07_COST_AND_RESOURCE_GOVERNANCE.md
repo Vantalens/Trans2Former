@@ -60,22 +60,27 @@ DOCX、PPTX、XLSX、PDF input、EPUB 等热门能力可以评估进入基础免
 
 ## 模型资源 manifest 必填字段
 
-- `id`
-- `name`
-- `version`
-- `formats`
-- `canRead`
-- `canWrite`
-- `sizeBudgetKb`
-- `dependencies`
-- `localOnly`
-- `networkRequired`
-- `remoteCapable`
-- `defaultEnabled`
-- `loadMode`: `bundled` / `on-demand` / `external`
-- `entry`
-- `integrity`
-- `warnings`
+- `schemaVersion`: 必须为 `trans2former.model-manifest.v1`
+- `manifestId`
+- `task`: `ocr-text` / `ocr-layout` / `ocr-table` / `quality-reviewer`
+- `engine`: `tesseract` / `paddleocr` / `fixed-layout-stub` / `quality-reviewer-rules`
+- `modelVersion`
+- `bundleSize`: 模型资源总字节数，必须为正数
+- `quantization`: `none` / `int8` / `int4` / `fp16`
+- `minMemoryMB`: 非负数
+- `sources`: 每个来源必须声明 `kind` 和 `path`
+- `checksums.algorithm`: 必须为 `SHA-256`
+- `checksums.digest`: 非空 SHA-256 hex
+- `checksums.perFile`: 分文件 SHA-256 映射
+- `fallback.onFailure`: `skip-task` / `use-placeholder` / `block-conversion`
+- `fallback.message`
+- `ui.label`
+- `ui.description`
+- `ui.enableHint`
+
+模型资源 manifest 必须通过 `public/core/model-cache/manifest.js`
+中的 `validateModelManifest` 校验；不得复用已取消插件体系的
+读写能力、入口文件和插件完整性字段作为模型资源契约。
 
 ## 加载规则
 
