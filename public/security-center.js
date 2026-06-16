@@ -24,6 +24,8 @@ const ORIGIN = location.origin;
 const externalRequests = [];
 let interceptMode = "off";
 const listeners = new Set();
+let modelImportAbortController = null;
+let pendingModelFileSelection = null;
 
 function isExternal(url) {
   try {
@@ -286,6 +288,28 @@ function setStatusMessage(dialog, text, level = "info") {
   target.dataset.level = level;
 }
 
+function beginModelFileSelection(fileInput, handler, resolve) {
+  if (pendingModelFileSelection) {
+    pendingModelFileSelection.controller.abort();
+    pendingModelFileSelection.resolve();
+  }
+  const controller = new AbortController();
+  modelImportAbortController = controller;
+  pendingModelFileSelection = { controller, resolve };
+  fileInput.addEventListener("change", handler, { once: true, signal: controller.signal });
+  fileInput.click();
+  return controller;
+}
+
+function finishModelFileSelection(controller) {
+  if (modelImportAbortController === controller) {
+    modelImportAbortController = null;
+  }
+  if (pendingModelFileSelection?.controller === controller) {
+    pendingModelFileSelection = null;
+  }
+}
+
 async function importTessdata(dialog, button) {
   const language = button.dataset.language || "chi_sim";
   const manifestId = button.dataset.manifestId;
@@ -295,10 +319,11 @@ async function importTessdata(dialog, button) {
     return;
   }
   await new Promise((resolve) => {
+    let controller = null;
     const handler = async () => {
-      fileInput.removeEventListener("change", handler);
       const file = fileInput.files?.[0];
       fileInput.value = "";
+      finishModelFileSelection(controller);
       if (!file) {
         resolve();
         return;
@@ -328,8 +353,7 @@ async function importTessdata(dialog, button) {
       }
       resolve();
     };
-    fileInput.addEventListener("change", handler);
-    fileInput.click();
+    controller = beginModelFileSelection(fileInput, handler, resolve);
   });
 }
 
@@ -361,10 +385,11 @@ async function importPaddleModel(dialog, button) {
     return;
   }
   await new Promise((resolve) => {
+    let controller = null;
     const handler = async () => {
-      fileInput.removeEventListener("change", handler);
       const picked = fileInput.files?.[0];
       fileInput.value = "";
+      finishModelFileSelection(controller);
       if (!picked) {
         resolve();
         return;
@@ -409,8 +434,7 @@ async function importPaddleModel(dialog, button) {
       }
       resolve();
     };
-    fileInput.addEventListener("change", handler);
-    fileInput.click();
+    controller = beginModelFileSelection(fileInput, handler, resolve);
   });
 }
 

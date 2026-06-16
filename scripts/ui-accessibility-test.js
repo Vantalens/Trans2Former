@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const securityCenter = readFileSync(new URL("../public/security-center.js", import.meta.url), "utf8");
 
 assert.match(html, /id="downloadOutputButton"[^>]*aria-disabled="true"[^>]*tabindex="-1"/);
 assert.match(html, /id="dropZone"[^>]*role="button"[^>]*tabindex="0"[^>]*aria-describedby="fileMeta"/);
@@ -19,6 +20,8 @@ assert.match(app, /button\.setAttribute\("aria-selected"/);
 assert.match(app, /downloadOutputButton\.setAttribute\("aria-disabled", "true"\)/);
 assert.match(app, /downloadOutputButton\.removeAttribute\("aria-disabled"\)/);
 assert.match(app, /querySelectorAll\("\.auxiliary-actions\[open\], \.output-settings\[open\]"\)/);
+assert.match(securityCenter, /pendingModelFileSelection\.controller\.abort\(\)/);
+assert.match(securityCenter, /addEventListener\("change", handler, \{ once: true, signal: controller\.signal \}\)/);
 
 assert.match(css, /\.mini-button\s*\{[^}]*min-height:\s*44px/s);
 assert.match(css, /\.tab-button\s*\{[^}]*min-height:\s*44px/s);
