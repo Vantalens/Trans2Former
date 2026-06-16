@@ -101,10 +101,11 @@ function readSymbol(reader, huffman) {
 }
 
 function assertDeflateOutputWithinDeclaredSize(output, expectedSize) {
-  if (expectedSize > 0 && output.length > expectedSize) {
-    throw new ConversionError("ZIP deflate output exceeded declared size", {
+  if (expectedSize >= 0 && output.length > expectedSize) {
+    const declaredEmpty = expectedSize === 0;
+    throw new ConversionError(declaredEmpty ? "ZIP compression ratio cannot be verified for unknown-size deflated entries" : "ZIP deflate output exceeded declared size", {
       category: "parse",
-      code: "ZIP_DEFLATE_SIZE_ERROR",
+      code: declaredEmpty ? "ZIP_COMPRESSION_RATIO_LIMIT" : "ZIP_DEFLATE_SIZE_ERROR",
       format: "zip",
       details: {
         declaredBytes: expectedSize,
@@ -240,7 +241,7 @@ function inflateDeflateRaw(bytes, expectedSize) {
     }
     assertDeflateOutputWithinDeclaredSize(output, expectedSize);
   }
-  if (expectedSize > 0 && output.length !== expectedSize) {
+  if (expectedSize >= 0 && output.length !== expectedSize) {
     throw new ConversionError("ZIP deflate output size does not match header", {
       category: "parse",
       code: "ZIP_DEFLATE_SIZE_ERROR",
@@ -374,14 +375,7 @@ export function readZipEntries(content) {
         format: "zip",
       });
     }
-    if (method === 8 && compressedSize > 0 && uncompressedSize === 0) {
-      throw new ConversionError("ZIP compression ratio cannot be verified for unknown-size deflated entries", {
-        category: "parse",
-        code: "ZIP_COMPRESSION_RATIO_LIMIT",
-        format: "zip",
-      });
-    }
-    if (uncompressedSize > 0 && compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
+    if (uncompressedSize >= 64 && compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
       throw new ConversionError("ZIP compression ratio exceeds the local processing budget", {
         category: "parse",
         code: "ZIP_COMPRESSION_RATIO_LIMIT",
