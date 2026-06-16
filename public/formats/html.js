@@ -541,13 +541,3 @@ export function writeHtml({ model, title = model.title }) {
     mime: "text/html;charset=utf-8",
   };
 }
-
-export function writePdfPrintHtml({ model, title = model.title }) {
-  const html = writeHtml({ model, title });
-  return {
-    type: "print",
-    format: "pdf",
-    data: html.data,
-    mime: "text/html;charset=utf-8",
-  };
-}

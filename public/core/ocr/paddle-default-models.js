@@ -134,9 +134,6 @@ export async function ensurePaddleDefaultModels() {
             ? "checksum-mismatch"
             : `error:${error?.message || error}`,
       };
-    } finally {
-      // 允许后续重试（例如首次 vendor 还没就位）。
-      if (inflight) inflight = inflight;
     }
   })();
   const result = await inflight;

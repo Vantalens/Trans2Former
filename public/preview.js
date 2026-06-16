@@ -120,16 +120,6 @@ function renderPdf(blobUrl) {
   updateZoomLevel();
 }
 
-function renderPrintHtml(htmlString) {
-  clearStage();
-  const frame = document.createElement("iframe");
-  frame.className = "preview-iframe";
-  frame.title = "HTML 预览";
-  const blob = new Blob([htmlString], { type: "text/html" });
-  frame.src = trackBlobUrl(URL.createObjectURL(blob));
-  stage.appendChild(frame);
-}
-
 function renderImage(blobUrl) {
   clearStage();
   const host = document.createElement("div");
@@ -283,14 +273,6 @@ function dispatchRender(payload) {
   const format = output.format || "";
   setTitle(payload?.source?.fileName || "独立预览", `${(format || "").toUpperCase()} · ${output.mime || ""}`);
 
-  if (output.printHtml && (!format || format === "pdf" || format === "html")) {
-    if (PDF_FORMATS.has(format) && output.blobUrl) {
-      renderPdf(output.blobUrl);
-      return;
-    }
-    renderPrintHtml(output.printHtml);
-    return;
-  }
   if (PDF_FORMATS.has(format)) {
     const url = output.blobUrl || ensureBlobUrl(output.text, "application/pdf");
     if (url) renderPdf(url);

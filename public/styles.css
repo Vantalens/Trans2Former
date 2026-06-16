@@ -824,7 +824,7 @@ button:disabled {
   min-height: 118px;
   border-bottom: 1px solid var(--border);
   background: #fbfdfd;
-  font-family: var(--sans);
+  font-family: var(--font-ui);
   font-size: 0.88rem;
 }
 
