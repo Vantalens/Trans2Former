@@ -374,6 +374,8 @@ test("ZIP/OOXML container reader exposes stored entries and text payloads", () =
 test("ZIP/OOXML container reader inflates deflated entries and rejects unsafe paths", () => {
   const zip = readZipEntries(createDeflatedZip({ "word/document.xml": "<root>deflated</root>" }));
   assert.equal(zip.getText("word/document.xml"), "<root>deflated</root>");
+  const emptyZip = readZipEntries(createDeflatedZip({ "word/empty.xml": "" }));
+  assert.equal(emptyZip.getBytes("word/empty.xml").byteLength, 0);
   assert.equal(readZipEntries(createCentralZip({ "word/document.xml": "<root>central</root>" })).getText("word/document.xml"), "<root>central</root>");
 
   assert.throws(
