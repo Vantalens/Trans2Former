@@ -18,6 +18,7 @@ export function createFixedLayoutModel({
 export function createPage({
   pageNumber = 0,
   size = { width: 0, height: 0, unit: "pt" },
+  rotation = 0,
   textRuns = [],
   annotations = [],
   signatures = [],
@@ -31,6 +32,7 @@ export function createPage({
       height: Number(size?.height) || 0,
       unit: String(size?.unit || "pt"),
     },
+    rotation: Number(rotation) || 0,
     textRuns: textRuns.map((run) => createTextRun(run)),
     annotations: annotations.map((annotation) => createAnnotation(annotation)),
     signatures: signatures.map((signature) => ({

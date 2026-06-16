@@ -580,6 +580,7 @@ test("PDF reader consumes pdfjs-layout payload with structured blocks", () => {
         layout: {
           pageNumber: 1,
           size: { width: 595, height: 842, unit: "pt" },
+          rotation: 90,
           textRuns: [
             { text: "线性代数复习讲义", bbox: { x: 80, y: 760, w: 350, h: 28 }, fontName: "STSong", fontSize: 28 },
             { text: "向量空间的定义和基本性质。", bbox: { x: 80, y: 600, w: 350, h: 12 }, fontName: "STSong", fontSize: 12 },
@@ -796,6 +797,7 @@ test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", ()
         layout: {
           pageNumber: 1,
           size: { width: 595, height: 842, unit: "pt" },
+          rotation: 90,
           textRuns: [
             { text: "高保真 PDF 标题", bbox: { x: 72, y: 760, w: 200, h: 24 }, fontName: "STSong", fontSize: 24, fontWeight: "bold" },
             { text: "这是一段测试文本。", bbox: { x: 72, y: 720, w: 180, h: 12 }, fontName: "STSong", fontSize: 12, fontWeight: "regular" },
@@ -818,6 +820,7 @@ test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", ()
   assert.equal(model.fixedLayout.pages[0].textRuns.length, 2);
   assert.equal(model.fixedLayout.pages[0].textRuns[0].fontSize, 24);
   assert.equal(model.fixedLayout.pages[0].annotations.length, 1);
+  assert.equal(model.fixedLayout.pages[0].rotation, 90);
 
   // 转换为 PDF，应该使用高保真路径
   const output = convertContent({ content: fakePdfWithLayout, from: "pdf", to: "pdf", title: "high-fidelity.pdf" });
@@ -828,6 +831,7 @@ test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", ()
   // 验证输出包含 "High-Fidelity" producer 标记
   const pdfText = new TextDecoder().decode(bytes);
   assert.match(pdfText, /Trans2Former High-Fidelity/);
+  assert.match(pdfText, /\/Rotate 90/, "high-fidelity PDF should preserve page rotation");
   assert.match(pdfText, /72\.00 760\.00 Tm/, "first text run should use an absolute text matrix");
   assert.match(pdfText, /72\.00 720\.00 Tm/, "new lines should reset to their absolute page coordinates");
   assert.equal(pdfText.includes("72.00 760.00 Td"), false, "absolute coordinates must not be emitted through relative Td moves");
