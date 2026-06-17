@@ -8,6 +8,5 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# 修复 issue #30: 移除未使用的 fs/dialog 插件（前端走浏览器 File API）
 tauri = { version = "2", features = [] }
-tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
