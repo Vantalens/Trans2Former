@@ -23,6 +23,7 @@
       "structureFidelity": "high",
       "tableFidelity": "not-applicable",
       "assetFidelity": "not-applicable",
+      "textFidelity": "high",
       "warningCount": 0,
       "warningsBySeverity": {},
       "downgradeCount": 0
