@@ -18,13 +18,22 @@ function escapePdfTextLiteral(value) {
   return String(value ?? "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-const PAGE_WIDTH = 612;
-const PAGE_HEIGHT = 792;
+// 纸张尺寸定义（单位：点，1英寸=72点）
+const PAPER_SIZES = {
+  A4: { width: 595, height: 842 },      // 210mm × 297mm
+  Letter: { width: 612, height: 792 },  // 8.5in × 11in
+};
+
+const DEFAULT_PAPER = "Letter";
+
+function getPaperSize(paperFormat) {
+  return PAPER_SIZES[paperFormat] || PAPER_SIZES[DEFAULT_PAPER];
+}
+
 const MARGIN_LEFT = 72;
 const MARGIN_RIGHT = 72;
 const MARGIN_TOP = 60;
 const MARGIN_BOTTOM = 60;
-const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 
 // 每字符约占 fontSize * factor 的水平空间（issue #105/#107）。
 // 用 charWidthFactor 统一查表，与字体对象的 /W 和 DW 一致。
@@ -406,13 +415,206 @@ function renderLine(line) {
   return { ops, annotations };
 }
 
-function buildPdfBytes(model, title) {
+function buildPdfBytes(model, title, paperSize) {
+  // 根据纸张尺寸设置页面参数
+  const PAGE_WIDTH = paperSize.width;
+  const PAGE_HEIGHT = paperSize.height;
+  const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
+
   const stats = { dropped: new Map() }; // issue #107: 收集降级字符
-  const allLines = (model.blocks || []).flatMap((block) => blockToLines(block, stats));
-  const pages = paginate(allLines);
+
+  // 内部函数使用闭包访问 PAGE_WIDTH, PAGE_HEIGHT, CONTENT_WIDTH
+  function blockToLinesLocal(block, stats) {
+    const layout = blockLayout(block);
+    const maxWidth = CONTENT_WIDTH - layout.indent;
+
+    if (block.type === "code") {
+      const text = String(block.code ?? "");
+      const { text: sanitized, dropped } = sanitizeGb1Text(text);
+      if (stats && dropped.size > 0) {
+        for (const [char, count] of dropped) {
+          stats.dropped.set(char, (stats.dropped.get(char) || 0) + count);
+        }
+      }
+      const codeSegments = sanitized.split("\n").map((line) => [{ text: line, style: { code: true }, href: "" }]);
+      return codeSegments.map((segments, i) => ({
+        segments,
+        indent: layout.indent,
+        fontSize: layout.fontSize,
+        leading: layout.leading,
+        marginAfter: i === codeSegments.length - 1 ? layout.marginBottom : 0,
+      }));
+    }
+
+    if (block.type === "list") {
+      const lines = [];
+      (block.items || []).forEach((item, index) => {
+        const meta = block.itemMeta?.[index] || {};
+        const depth = Math.max(0, Number(meta.depth) || 0);
+        const marker = block.ordered ? `${index + 1}. ` : "• ";
+        const inlineTokens = Array.isArray(block.itemInlines) ? block.itemInlines[index] : null;
+        const segments = inlineTokens && inlineTokens.length > 0
+          ? flattenInlinesToSegments(inlineTokens)
+          : flattenInlinesToSegments(getInlineTokens({ text: item }));
+        const prefixed = [{ text: marker, style: {}, href: "" }, ...segments];
+        const indent = layout.indent + depth * 16;
+        const wrapped = wrapSegments(prefixed, layout.fontSize, CONTENT_WIDTH - indent, stats);
+        wrapped.forEach((lineSegments, idx) => {
+          lines.push({
+            segments: lineSegments,
+            indent,
+            fontSize: layout.fontSize,
+            leading: layout.leading,
+            marginAfter: idx === wrapped.length - 1 && index === (block.items || []).length - 1 ? layout.marginBottom : 0,
+          });
+        });
+      });
+      return lines;
+    }
+
+    if (block.type === "table") {
+      const lines = [];
+      const rows = Array.isArray(block.rows) ? block.rows : [];
+      const fontSize = 11;
+      const leading = 15;
+      const cols = rows.length > 0 ? rows[0].length : 0;
+      const colWidth = cols > 0 ? Math.floor(CONTENT_WIDTH / cols) : CONTENT_WIDTH;
+      rows.forEach((row, rowIndex) => {
+        const cellLines = row.map((cell) => {
+          const inlines = getCellInlineTokens(cell);
+          const segments = flattenInlinesToSegments(inlines);
+          return wrapSegments(segments, fontSize, colWidth - 8, stats);
+        });
+        const maxLines = Math.max(...cellLines.map((lines) => lines.length), 1);
+        for (let lineIdx = 0; lineIdx < maxLines; lineIdx += 1) {
+          const mergedSegments = [];
+          cellLines.forEach((lines, colIdx) => {
+            const lineSegments = lines[lineIdx] || [];
+            const usedWidth = lineSegments.reduce((sum, seg) => sum + seg.width, 0);
+            if (lineSegments.length > 0) {
+              mergedSegments.push(...lineSegments.map((seg) => ({ ...seg, columnStart: colIdx * colWidth })));
+            }
+            const pad = Math.max(0, colWidth - usedWidth);
+            if (colIdx < cellLines.length - 1) {
+              mergedSegments.push({ text: " ".repeat(Math.max(1, Math.floor(pad / (fontSize * 0.5)))), style: {}, href: "", width: pad });
+            }
+          });
+          lines.push({
+            segments: mergedSegments,
+            indent: 0,
+            fontSize,
+            leading,
+            marginAfter: lineIdx === maxLines - 1 && rowIndex === rows.length - 1 ? 8 : 0,
+          });
+        }
+        if (rowIndex === 0) {
+          const separatorChar = "─";
+          const separatorAdvance = charAdvance(separatorChar, fontSize);
+          const repeatCount = Math.floor(CONTENT_WIDTH / separatorAdvance);
+          lines.push({
+            segments: [{ text: separatorChar.repeat(repeatCount), style: {}, href: "", width: CONTENT_WIDTH }],
+            indent: 0,
+            fontSize,
+            leading: 6,
+            marginAfter: 2,
+          });
+        }
+      });
+      return lines;
+    }
+
+    const inlineTokens = getInlineTokens(block);
+    let segments = flattenInlinesToSegments(inlineTokens);
+    if (layout.forceBold) segments = segments.map((seg) => ({ ...seg, style: { ...(seg.style || {}), bold: true } }));
+    if (layout.forceItalic) segments = segments.map((seg) => ({ ...seg, style: { ...(seg.style || {}), italic: true } }));
+    segments = autoLinkifySegments(segments);
+    const wrapped = wrapSegments(segments, layout.fontSize, maxWidth, stats);
+    return wrapped.map((lineSegments, idx) => ({
+      segments: lineSegments,
+      indent: layout.indent,
+      fontSize: layout.fontSize,
+      leading: layout.leading,
+      marginAfter: idx === wrapped.length - 1 ? layout.marginBottom : 0,
+    }));
+  }
+
+  function paginateLocal(allLines) {
+    const pages = [];
+    let current = [];
+    let yCursor = PAGE_HEIGHT - MARGIN_TOP;
+
+    for (const line of allLines) {
+      const needed = line.leading + (line.marginAfter || 0);
+      if (yCursor - needed < MARGIN_BOTTOM && current.length > 0) {
+        pages.push(current);
+        current = [];
+        yCursor = PAGE_HEIGHT - MARGIN_TOP;
+      }
+      yCursor -= line.leading;
+      current.push({ ...line, y: yCursor });
+      yCursor -= line.marginAfter || 0;
+    }
+    if (current.length > 0) pages.push(current);
+    if (pages.length === 0) pages.push([]);
+    return pages;
+  }
+
+  function renderLineLocal(line) {
+    const ops = [];
+    const annotations = [];
+    let cursorX = MARGIN_LEFT + (line.indent || 0);
+
+    for (const seg of line.segments) {
+      if (!seg.text) continue;
+      const segWidth = seg.width != null ? seg.width : seg.text.length * line.fontSize * 0.5;
+      const style = seg.style || {};
+
+      ops.push("q");
+
+      if (style.link) ops.push("0.05 0.4 0.85 rg 0.05 0.4 0.85 RG");
+      else ops.push("0 0 0 rg 0 0 0 RG");
+
+      if (style.code) {
+        ops.push("0.92 0.92 0.92 rg");
+        ops.push(`${cursorX - 1} ${line.y - 2} ${segWidth + 2} ${line.fontSize + 2} re f`);
+        ops.push("0 0 0 rg");
+      }
+
+      if (style.bold) ops.push("2 Tr 0.4 w");
+      else ops.push("0 Tr");
+
+      if (style.italic && !style.code) {
+        ops.push(`BT /F1 ${line.fontSize} Tf 1 0 0.21 1 ${cursorX} ${line.y} Tm <${utf16BeHex(seg.text)}> Tj ET`);
+      } else {
+        ops.push(`BT /F1 ${line.fontSize} Tf ${cursorX} ${line.y} Td <${utf16BeHex(seg.text)}> Tj ET`);
+      }
+
+      if (style.link) {
+        ops.push(`${cursorX} ${line.y - 2} ${segWidth} 0.6 re f`);
+      }
+      if (style.strike) {
+        ops.push(`${cursorX} ${line.y + line.fontSize * 0.4} ${segWidth} 0.4 re f`);
+      }
+
+      ops.push("Q");
+
+      if (style.link && seg.href) {
+        annotations.push({
+          href: seg.href,
+          rect: [cursorX, line.y - 2, cursorX + segWidth, line.y + line.fontSize],
+        });
+      }
+
+      cursorX += segWidth;
+    }
+    return { ops, annotations };
+  }
+
+  const allLines = (model.blocks || []).flatMap((block) => blockToLinesLocal(block, stats));
+  const pages = paginateLocal(allLines);
 
   // issue #110: 预渲染所有行，避免 O(n²) 重复调用 renderLine
-  const renderedPages = pages.map((lines) => lines.map((line) => renderLine(line)));
+  const renderedPages = pages.map((lines) => lines.map((line) => renderLineLocal(line)));
 
   let cursor = 3;
   const pageObjectNumbers = [];
@@ -503,11 +705,14 @@ function buildPdfBytes(model, title) {
 
 // PDF 输出双路：优先使用高保真路径（FixedLayoutModel），回落到程序化路径（SemanticDoc）
 // issue #108: 高保真失败时 warning，双路 warnings 合并透传
-export function writePdfBinary({ model, title = model.title }) {
+export function writePdfBinary({ model, title = model.title, options = {} }) {
   const warnings = [];
+  const paperFormat = options?.paperFormat || DEFAULT_PAPER;
+  const paperSize = getPaperSize(paperFormat);
 
   if (model.fixedLayout && model.fixedLayout.pages && model.fixedLayout.pages.length > 0) {
     try {
+      // 注意：高保真输出目前尚未支持自定义纸张尺寸，始终使用源PDF尺寸
       const hfResult = writePdfHighFidelity({ model, title });
       if (hfResult.warnings) warnings.push(...hfResult.warnings);
       return {
@@ -520,7 +725,7 @@ export function writePdfBinary({ model, title = model.title }) {
     }
   }
 
-  const { bytes, warnings: buildWarnings } = buildPdfBytes(model, title);
+  const { bytes, warnings: buildWarnings } = buildPdfBytes(model, title, paperSize);
   if (buildWarnings) warnings.push(...buildWarnings);
 
   return {

@@ -1537,7 +1537,16 @@ async function transformContent() {
 
   try {
     const title = getBaseName(currentFileName);
-    const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName, options: { profile: markdownOutputProfile } });
+    const options = {
+      profile: markdownOutputProfile,
+    };
+
+    // 如果输出为 PDF，读取纸张格式选项
+    if (to === "pdf" && paperFormatSelect) {
+      options.paperFormat = paperFormatSelect.value;
+    }
+
+    const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName, options });
 
     // 注意：不在主线程重复调用 toConversionDocumentModel，因为 worker/convertAsync
     // 内部已经完整执行了 prepareConversionModel（包含 read + mappers + audit）。
