@@ -1538,10 +1538,19 @@ async function transformContent() {
   try {
     const title = getBaseName(currentFileName);
     const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName, options: { profile: markdownOutputProfile } });
-    const model = toConversionDocumentModel(content, from, to, currentFileName, currentFileName);
-    currentDocumentModel = model;
+
+    // 注意：不在主线程重复调用 toConversionDocumentModel，因为 worker/convertAsync
+    // 内部已经完整执行了 prepareConversionModel（包含 read + mappers + audit）。
+    // 重复解析会导致：
+    // 1. 双倍解析开销（大文件时主线程阻塞数秒）
+    // 2. 主线程解析的 model 未经过 OCR stage，与实际输出 model 不一致
+    //
+    // currentDocumentModel 主要用于 renderBottomReports 和 renderDocumentModelPanel，
+    // 但这两个面板的 DOM 元素已被移除（issue #34, #39），函数会立即 early return。
+    // 因此暂时设为 null，等待未来如果需要展示 model 时，让 worker 返回序列化的 model。
+    currentDocumentModel = null;
     currentConversionQuality = result.quality || null;
-    renderDocumentModelPanel(model);
+    renderDocumentModelPanel(null);
     currentOutputType = result.type;
     currentOutputFormat = result.format;
     currentOutputMime = result.mime;
