@@ -73,7 +73,7 @@ try {
   assert.equal(indexHtml.includes("id=\"outputDirectoryButton\""), true, "P0 workbench should expose output directory chooser");
   assert.equal(indexHtml.includes("id=\"exportNamingInput\""), true, "P0 workbench should expose export naming strategy");
   assert.equal(indexHtml.includes("id=\"inputPreviewPanel\""), true, "P0 workbench should expose input preview pane");
-  assert.equal(indexHtml.includes("id=\"documentModelPanel\""), true, "P0 workbench should expose DocumentModel pane");
+  // 修复 issue #39: documentModelPanel 已删除（无 tab 入口，永远不可达）
   assert.equal(indexHtml.includes("id=\"outputPreviewPanel\""), true, "P0 workbench should expose output preview pane");
   assert.equal(indexHtml.includes("id=\"verificationReportPanel\""), true, "P9-C.4 workbench should expose post-conversion verification report panel");
   assert.equal(indexHtml.includes("id=\"verificationOcrRecognition\""), true, "verification report should expose the OCR recognition quality row");

@@ -486,9 +486,7 @@ button:disabled {
   color: var(--muted-strong);
 }
 
-.progress-bar {
-  display: none;
-}
+/* 修复 issue #36: 删除死CSS选择器 .progress-bar (实际容器是 .topbar-progress) */
 
 .topbar-progress {
   display: grid;
@@ -537,7 +535,22 @@ button:disabled {
 }
 
 .progress-stage {
-  display: none;
+  /* 修复 issue #36: 移除 display:none，让阶段文案可见 */
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* 修复 issue #37: 使用 CSS data-type 控制状态颜色，替代 JS 内联样式 */
+.status-chip[data-type="error"] {
+  color: var(--danger);
+}
+
+.status-chip[data-type="success"] {
+  color: var(--accent-strong);
+}
+
+.status-chip[data-type="info"] {
+  color: var(--muted-strong);
 }
 
 .status-chip,
@@ -569,11 +582,12 @@ button:disabled {
   transition: width 0.18s ease;
 }
 
-.progress-bar[data-state="error"] .progress-fill {
+/* 修复 issue #36: 改为使用实际容器 .topbar-progress 而非不存在的 .progress-bar */
+.topbar-progress[data-state="error"] .progress-fill {
   background: var(--danger);
 }
 
-.progress-bar[data-state="canceled"] .progress-fill {
+.topbar-progress[data-state="canceled"] .progress-fill {
   background: #8c96a1;
 }
 
