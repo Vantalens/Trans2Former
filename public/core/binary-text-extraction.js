@@ -159,7 +159,21 @@ export function extractReadableTextFromBinary(content, { fileName = "", mime = "
     .filter((item) => item.score > -Infinity)
     .sort((a, b) => b.score - a.score || b.text.length - a.text.length);
 
-  const best = scored[0] || { text: normalizeCandidateText(decoded.text), score: scoreCandidateText(decoded.text) };
+  // 修复 issue #87: 添加最低质量阈值，拒绝纯乱码候选
+  // 要求至少 10% readable 字符，否则返回空文本
+  const MINIMUM_SCORE_THRESHOLD = -500; // 允许少量noise，但不能是纯乱码
+  const best = scored.find(item => item.score >= MINIMUM_SCORE_THRESHOLD) || null;
+
+  if (!best || !best.text) {
+    // 所有候选都低于阈值，返回空文本表示无法提取可读内容
+    return {
+      text: "",
+      source: "corrupted-binary",
+      byteLength: bytes.length,
+      candidateCount: scored.length,
+    };
+  }
+
   return {
     text: best.text,
     source: best.text === normalizeCandidateText(decoded.text) ? decoded.encoding || format : "binary-runs",
