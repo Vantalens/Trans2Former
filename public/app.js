@@ -1094,8 +1094,19 @@ function updateDownloadState(enabled) {
   }
 }
 
-function openCurrentOutputInPreview() {
+async function openCurrentOutputInPreview() {
   if (!currentOutputType || currentOutputType === "none") return;
+
+  // 修复 issue #63: 对于二进制输出，从 Blob 生成 data URL 而非传递会失效的 blob URL
+  let dataUrl = "";
+  if (currentOutputType === "binary" && currentOutputDownloadBlob) {
+    try {
+      dataUrl = await blobToDataUrl(currentOutputDownloadBlob);
+    } catch (error) {
+      console.warn("[app] Failed to convert blob to data URL:", error);
+    }
+  }
+
   const payload = {
     source: {
       format: fromFormatSelect?.value || "",
@@ -1106,7 +1117,8 @@ function openCurrentOutputInPreview() {
       format: currentOutputFormat || "",
       mime: currentOutputMime || "",
       text: outputEditor?.value || textOutputPreview?.textContent || "",
-      blobUrl: currentOutputBlobUrl || "",
+      // 传递 data URL 而非 blob URL，避免源页面转换后失效
+      dataUrl,
       isPdf: Boolean(lastOutputIsPdf),
     },
     meta: { generatedAt: Date.now() },
@@ -1116,6 +1128,16 @@ function openCurrentOutputInPreview() {
   } catch (error) {
     setStatus(`无法打开独立预览：${error?.message || error}`, "error");
   }
+}
+
+// 将 Blob 异步转换为 data URL（用于独立预览传递，issue #63）
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 function updateOutputPreviewVisibility(isPdf) {
