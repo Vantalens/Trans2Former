@@ -753,7 +753,7 @@ function makeStubEngine(overrides = {}) {
   assert.equal(mapped.language, "zh-CN", "tesseract result mapping must normalize the alias");
 }
 
-// 24. detectOCRLowConfidence emits replaceTextRun candidates for low-confidence lines
+// 24. detectOCRLowConfidence 暂时不生成动作（等待真实候选文本接入，避免 no-op 假修复，issue #48）
 {
   const model = {
     schemaVersion: "trans2former.document.v1",
@@ -777,11 +777,9 @@ function makeStubEngine(overrides = {}) {
     },
   };
   const actions = detectOCRLowConfidence(model);
-  assert.equal(actions.length, 1);
-  assert.equal(actions[0].actionType, "replaceTextRun");
-  assert.equal(actions[0].targetId, "ocr-block-1");
-  assert.equal(actions[0].before, "fuzzy");
-  assert.equal(actions[0].evidence.source, "ocr-low-confidence");
+  // 修复 issue #48: 在没有真实候选修复文本前，不生成 before===after 的 no-op 动作
+  // 低置信度行仍记录在 metadata.ocr.lines 中，等待 P9-B 真模型审核接入
+  assert.equal(actions.length, 0);
 }
 
 // 25. detectOCRLowConfidence skips high-confidence lines

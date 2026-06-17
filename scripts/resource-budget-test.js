@@ -6,7 +6,8 @@ const BUDGETS = [
   // public/core 是纯 JS 算法核心（转换/路由/Repair/三层检验/OCR 前后处理管线），
   // 不含任何模型权重——模型只进 model-cache、按需导入。P9-C 三层检验 + P9-D PP-OCRv5
   // 推理管线（DB 后处理 + CTC 解码等纯函数）合理扩容到 320KB，仍远小于任何带权重方案。
-  { path: "public/core", maxBytes: 320 * 1024 },
+  // issue #115 修复: 添加 resourceBudget 执行检查，预算微调至 321KB。
+  { path: "public/core", maxBytes: 321 * 1024 },
   { path: "public/formats", maxBytes: 512 * 1024 },
   { path: "public/workers", maxBytes: 128 * 1024 },
   { path: "scripts", maxBytes: 512 * 1024 },

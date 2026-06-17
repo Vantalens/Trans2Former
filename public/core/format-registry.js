@@ -620,9 +620,18 @@ export class ConverterRegistry {
     }, { content, reader: fromFormat, writer: toFormat, targetFormat: toFormat, fileName, options });
   }
 
+  // 修复 issue #115: 检查输入是否超过资源预算
+  _checkResourceBudget(c, f) {
+    const m = this.getCapabilities(f)?.resourceBudget?.maxInputBytes;
+    if (!m) return;
+    const s = typeof c === "string" ? new Blob([c]).size : (c?.byteLength || c?.size || 0);
+    if (s > m) throw new ConversionError(`输入过大（${s / 1e6 | 0}MB），超限（${m / 1e6 | 0}MB）`, "convert", "INPUT_BUDGET_EXCEEDED");
+  }
+
   convert({ content, from, to, title = "document", fileName = "", options = {} }) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
+    this._checkResourceBudget(content, fromFormat);
     const model = this.prepareConversionModel({ content, from, to, title, fileName, options });
     const output = this.write({ model, to, title, options });
     if (options?.repair === false) {
@@ -636,29 +645,43 @@ export class ConverterRegistry {
   async convertAsync({ content, from, to, title = "document", fileName = "", options = {} }) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
+    const signal = options?.signal;
+    this._checkResourceBudget(content, fromFormat);
+
+    // 检查初始取消状态
+    if (signal?.aborted) {
+      throw new Error("转换已取消");
+    }
+
     let model = this.prepareConversionModel({ content, from, to, title, fileName, options });
 
     if (options?.ocr?.enabled !== false && fromFormat === "png") {
+      if (signal?.aborted) throw new Error("转换已取消");
       const stage = await import("./ocr/ocr-stage.js");
       model = await stage.runOCRStage(model, {
         options,
         from: fromFormat,
         to: toFormat,
+        signal,
       });
     } else if (options?.ocr?.enabled !== false && fromFormat === "pdf") {
+      if (signal?.aborted) throw new Error("转换已取消");
       const { isScannedPdf } = await import("./ocr/pdf-rasterizer.js");
       const detection = await isScannedPdf(content, options?.ocr || {});
       if (detection.scanned) {
+        if (signal?.aborted) throw new Error("转换已取消");
         const stage = await import("./ocr/scan-pdf-stage.js");
         model = await stage.runScannedPdfOCRStage(model, {
           content,
           options,
           from: fromFormat,
           to: toFormat,
+          signal,
         });
       }
     }
 
+    if (signal?.aborted) throw new Error("转换已取消");
     const output = this.write({ model, to, title, options });
     if (options?.repair === false) {
       return output;

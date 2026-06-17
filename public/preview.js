@@ -199,8 +199,10 @@ function attachZoomHandlers() {
 function renderBinaryViaReader(output) {
   const format = output?.format || "";
   if (!READER_FALLBACK_FORMATS.has(format)) return false;
-  if (!output?.blobUrl) return false;
-  return fetch(output.blobUrl)
+  // 修复 issue #63: 优先使用 dataUrl，如果没有才尝试 blobUrl（但可能已失效）
+  const sourceUrl = output?.dataUrl || output?.blobUrl;
+  if (!sourceUrl) return false;
+  return fetch(sourceUrl)
     .then((response) => response.arrayBuffer())
     .then((buffer) => {
       const dataUrl = bufferToDataUrl(buffer, output.mime || "application/octet-stream");
@@ -245,7 +247,11 @@ function attachDownload(output) {
   let downloadName = "";
   const baseName = payload?.source?.fileName?.replace(/\.[^.]+$/, "") || "trans2former-output";
   const ext = output?.format ? `.${output.format}` : "";
-  if (output?.blobUrl) {
+  // 修复 issue #63: 优先使用持久的 dataUrl
+  if (output?.dataUrl) {
+    downloadHref = output.dataUrl;
+    downloadName = `${baseName}${ext}`;
+  } else if (output?.blobUrl) {
     downloadHref = output.blobUrl;
     downloadName = `${baseName}${ext}`;
   } else if (output?.text) {
@@ -273,14 +279,15 @@ function dispatchRender(payload) {
   const format = output.format || "";
   setTitle(payload?.source?.fileName || "独立预览", `${(format || "").toUpperCase()} · ${output.mime || ""}`);
 
+  // 修复 issue #63: 优先使用持久的 dataUrl，避免依赖可能已失效的 blobUrl
   if (PDF_FORMATS.has(format)) {
-    const url = output.blobUrl || ensureBlobUrl(output.text, "application/pdf");
+    const url = output.dataUrl || output.blobUrl || ensureBlobUrl(output.text, "application/pdf");
     if (url) renderPdf(url);
     else renderFallback(format);
     return;
   }
   if (IMAGE_FORMATS.has(format)) {
-    const url = output.blobUrl || ensureBlobUrl(output.text, output.mime || "image/png");
+    const url = output.dataUrl || output.blobUrl || ensureBlobUrl(output.text, output.mime || "image/png");
     if (url) renderImage(url);
     else renderFallback(format);
     return;
@@ -289,7 +296,7 @@ function dispatchRender(payload) {
     renderTextLike(output.text || "", format);
     return;
   }
-  if (READER_FALLBACK_FORMATS.has(format) && output.blobUrl) {
+  if (READER_FALLBACK_FORMATS.has(format) && (output.dataUrl || output.blobUrl)) {
     renderBinaryViaReader(output);
     return;
   }
