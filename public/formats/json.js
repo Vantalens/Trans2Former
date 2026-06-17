@@ -54,6 +54,53 @@ export function readJson({ content, title = "document", format = "json" }) {
   }
 
   if (parsed && parsed.schemaVersion === "trans2former.document.v1" && Array.isArray(parsed.blocks)) {
+    // 修复 issue #56: 验证基本 schema（block type 和必填字段）
+    // 注意：不调用 assertValidDocumentModel，因为 id/sourceSpan/warnings 由 ensureDocumentAudit 后续补充
+    const VALID_BLOCK_TYPES = new Set(["heading", "paragraph", "list", "code", "table", "quote", "image", "asset", "raw"]);
+    for (let i = 0; i < parsed.blocks.length; i++) {
+      const block = parsed.blocks[i];
+      if (!block || typeof block !== "object") {
+        throw new ConversionError({
+          message: `blocks[${i}] 必须是对象`,
+          category: "validation",
+          code: "DOCUMENT_MODEL_SCHEMA_ERROR",
+          format,
+        });
+      }
+      if (!VALID_BLOCK_TYPES.has(block.type)) {
+        throw new ConversionError({
+          message: `blocks[${i}].type 无效: ${block.type}`,
+          category: "validation",
+          code: "DOCUMENT_MODEL_SCHEMA_ERROR",
+          format,
+        });
+      }
+      // 验证必填字段
+      if (block.type === "list" && !Array.isArray(block.items)) {
+        throw new ConversionError({
+          message: `blocks[${i}].items 必须是数组（list 类型必填）`,
+          category: "validation",
+          code: "DOCUMENT_MODEL_SCHEMA_ERROR",
+          format,
+        });
+      }
+      if (block.type === "table" && (!Array.isArray(block.headers) || !Array.isArray(block.rows))) {
+        throw new ConversionError({
+          message: `blocks[${i}] 缺少 headers 或 rows（table 类型必填）`,
+          category: "validation",
+          code: "DOCUMENT_MODEL_SCHEMA_ERROR",
+          format,
+        });
+      }
+      if (block.type === "code" && typeof block.code !== "string") {
+        throw new ConversionError({
+          message: `blocks[${i}].code 必须是字符串（code 类型必填）`,
+          category: "validation",
+          code: "DOCUMENT_MODEL_SCHEMA_ERROR",
+          format,
+        });
+      }
+    }
     return createDocumentModel({
       title: parsed.title || title,
       sourceFormat: parsed.sourceFormat || format,
