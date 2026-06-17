@@ -465,9 +465,10 @@ function readBlocksFromEvents(events) {
 
 function extractBodyHtml(source) {
   let text = String(source ?? "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "");
+    // 修复 issue #58: 处理未闭合的 script/style/noscript 标签
+    .replace(/<script\b[^>]*>([\s\S]*?)(?:<\/script>|$)/gi, "")
+    .replace(/<style\b[^>]*>([\s\S]*?)(?:<\/style>|$)/gi, "")
+    .replace(/<noscript\b[^>]*>([\s\S]*?)(?:<\/noscript>|$)/gi, "");
   const bodyMatch = text.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
   if (bodyMatch) return bodyMatch[1];
   text = text.replace(/<!doctype[^>]*>/gi, "").replace(/<\/?html\b[^>]*>/gi, "").replace(/<head[\s\S]*?<\/head>/gi, "");
