@@ -5,9 +5,9 @@
   "identifier": "com.vantalens.trans2former",
   "build": {
     "beforeDevCommand": "npm start",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "node scripts/prepare-desktop-dist.js",
     "devUrl": "http://localhost:3000",
-    "frontendDist": "../public"
+    "frontendDist": "../desktop-dist"
   },
   "app": {
     "security": {
