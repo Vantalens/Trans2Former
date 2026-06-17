@@ -10,6 +10,7 @@ export function createQueueItem(file, detectedFormat = "") {
     status: "queued",
     attempts: 0,
     error: "",
+    file: file, // 保留File对象引用以便后续处理
   };
 }
 

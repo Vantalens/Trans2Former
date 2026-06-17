@@ -75,6 +75,7 @@ const progressStage = document.getElementById("progressStage");
 const progressPercent = document.getElementById("progressPercent");
 const progressFill = document.getElementById("progressFill");
 const loadSampleButton = document.getElementById("loadSampleButton");
+const fileQueuePanel = document.getElementById("fileQueuePanel");
 const fileQueueList = document.getElementById("fileQueueList");
 const selectAllQueueButton = document.getElementById("selectAllQueueButton");
 const retryFailedButton = document.getElementById("retryFailedButton");
@@ -241,9 +242,21 @@ function renderFileQueue() {
     activeQueueItemId,
     onActivate: (id) => {
       activeQueueItemId = id;
+      const item = fileQueue.find((i) => i.id === id);
+      if (item?.file && item.status !== "processing") {
+        // 点击队列项时加载该文件
+        handleFile(item.file).catch((error) => {
+          setStatus(`加载文件失败: ${error.message}`, "error");
+        });
+      }
       renderFileQueue();
     },
   });
+
+  // 当队列中有多个文件时，自动显示队列面板
+  if (fileQueuePanel && fileQueue.length > 1) {
+    fileQueuePanel.hidden = false;
+  }
 }
 
 function registerQueuedFile(file, detectedFormat) {
@@ -263,7 +276,56 @@ function retryFailedQueueItems() {
   const result = retryFailedQueueItemsState(fileQueue);
   fileQueue = result.fileQueue;
   renderFileQueue();
-  setStatus(result.retries ? `已将 ${result.retries} 个失败任务放回队列` : "没有失败任务可重试", result.retries ? "success" : "info");
+  if (result.retries > 0) {
+    setStatus(`已将 ${result.retries} 个失败任务放回队列`, "success");
+    // 实际重新处理失败的文件
+    processQueuedFiles().catch((error) => {
+      setStatus(`处理队列失败: ${error.message}`, "error");
+    });
+  } else {
+    setStatus("没有失败任务可重试", "info");
+  }
+}
+
+// 处理队列中的文件
+async function processQueuedFiles() {
+  const queuedItems = fileQueue.filter((item) => item.status === "queued" && item.selected && item.file);
+
+  if (queuedItems.length === 0) {
+    return;
+  }
+
+  setStatus(`开始处理 ${queuedItems.length} 个队列文件`, "info");
+
+  for (const item of queuedItems) {
+    try {
+      // 更新状态为处理中
+      const itemRef = fileQueue.find((i) => i.id === item.id);
+      if (itemRef) {
+        itemRef.status = "processing";
+        renderFileQueue();
+      }
+
+      // 处理文件
+      await handleFile(item.file);
+
+      // 标记为完成
+      if (itemRef) {
+        itemRef.status = "completed";
+        renderFileQueue();
+      }
+    } catch (error) {
+      // 标记为失败
+      const itemRef = fileQueue.find((i) => i.id === item.id);
+      if (itemRef) {
+        itemRef.status = "failed";
+        itemRef.error = error.message;
+        renderFileQueue();
+      }
+    }
+  }
+
+  setStatus(`队列处理完成`, "info");
 }
 
 async function chooseOutputDirectory() {
@@ -1552,13 +1614,27 @@ function printCurrentPdf() {
 
 fileInput.addEventListener("change", (event) => {
   const files = [...event.target.files || []];
+  if (files.length === 0) {
+    return;
+  }
+
+  // 将所有文件加入队列
   files.forEach((file, index) => {
-    if (index === 0) {
-      handleFile(file);
-      return;
+    const detectedFormat = detectFormatFromName(file.name);
+    if (detectedFormat) {
+      registerQueuedFile(file, detectedFormat);
     }
-    registerQueuedFile(file, detectFormatFromName(file.name));
   });
+
+  // 处理第一个文件
+  if (files[0]) {
+    handleFile(files[0]);
+  }
+
+  // 如果有多个文件，提示用户可以批量处理
+  if (files.length > 1) {
+    setStatus(`已加载 ${files.length} 个文件到队列，点击队列项可切换文件`, "info");
+  }
 });
 
 inputContent.addEventListener("input", () => {
@@ -1657,13 +1733,27 @@ dropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   dropZone.classList.remove("is-active");
   const files = [...event.dataTransfer.files || []];
-  files.forEach((file, index) => {
-    if (index === 0) {
-      handleFile(file);
-      return;
+  if (files.length === 0) {
+    return;
+  }
+
+  // 将所有文件加入队列
+  files.forEach((file) => {
+    const detectedFormat = detectFormatFromName(file.name);
+    if (detectedFormat) {
+      registerQueuedFile(file, detectedFormat);
     }
-    registerQueuedFile(file, detectFormatFromName(file.name));
   });
+
+  // 处理第一个文件
+  if (files[0]) {
+    handleFile(files[0]);
+  }
+
+  // 如果有多个文件，提示用户可以批量处理
+  if (files.length > 1) {
+    setStatus(`已加载 ${files.length} 个文件到队列，点击队列项可切换文件`, "info");
+  }
 });
 
 dropZone.addEventListener("keydown", (event) => {
