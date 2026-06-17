@@ -56,13 +56,21 @@ export async function isScannedPdf(content, options = {}) {
       };
     }
     const extractedChars = countModelText(model);
-    const pageCount = Array.isArray(model?.metadata?.pages) ? model.metadata.pages.length : 0;
+    // 修复：从 metadata.pdf.pageCount 读取页数（而非不存在的 metadata.pages）
+    const pageCount = model?.metadata?.pdf?.pageCount || 0;
+
+    // 修复：按页归一化阈值，避免多页扫描件因累计水印文字超过固定300阈值而被误判为文本PDF
+    // 使用每页阈值：如果平均每页提取字符数 < 每页阈值，则判定为扫描件
+    const perPageThreshold = threshold;
+    const avgCharsPerPage = pageCount > 0 ? extractedChars / pageCount : extractedChars;
+    const isScanned = avgCharsPerPage < perPageThreshold;
+
     return {
-      scanned: extractedChars < threshold,
+      scanned: isScanned,
       extractedChars,
       pageCount,
       threshold,
-      reason: extractedChars < threshold ? "low-extracted-text" : "text-pdf",
+      reason: isScanned ? "low-extracted-text" : "text-pdf",
     };
   } catch (error) {
     return {
