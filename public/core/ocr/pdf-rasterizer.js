@@ -9,6 +9,8 @@ const DEFAULT_DPI = 144;
 
 function textOfBlock(block) {
   if (!block || typeof block !== "object") return "";
+  // 修复 issue #99: 跳过 raw 块（如嵌入的 base64 PDF）不计入文本统计
+  if (block.type === "raw") return "";
   if (typeof block.text === "string") return block.text;
   if (Array.isArray(block.items)) return block.items.join(" ");
   if (Array.isArray(block.rows)) return block.rows.flat().join(" ");
