@@ -126,9 +126,16 @@ function assertNoForbiddenPublicApis(filePath, content) {
   }
 
   for (const { pattern, reason } of FORBIDDEN_PUBLIC_PATTERNS) {
-    if ((pattern.source.includes("localStorage") || pattern.source.includes("indexedDB")) && /persistHistoryCheckbox|HISTORY_PREFERENCE_KEY|output-history|manifest/i.test(content)) {
+    // 修复 issue #71: 精确豁免 app.js 的历史持久化功能，移除裸词 manifest 导致的过宽豁免
+    // 只豁免 app.js 中明确的历史持久化相关代码
+    const isHistoryPersistence = normalizedPath === path.normalize("public/app.js") &&
+      (pattern.source.includes("localStorage") || pattern.source.includes("indexedDB")) &&
+      /persistHistoryCheckbox|HISTORY_PREFERENCE_KEY|output-history/i.test(content);
+
+    if (isHistoryPersistence) {
       continue;
     }
+
     assert.equal(
       pattern.test(content),
       false,
@@ -138,6 +145,10 @@ function assertNoForbiddenPublicApis(filePath, content) {
 }
 
 const STRICT_LOCAL_ONLY_FILES = new Set([
+  // 修复 issue #71: 添加 ALLOWED 但无 STRICT 的文件，确保它们不能引入远程URL
+  path.normalize("public/smoke-test.html"),
+  path.normalize("public/smoke-test.js"),
+  path.normalize("public/security-center.js"),
   path.normalize("public/router.js"),
   path.normalize("public/preview.js"),
   path.normalize("public/core/ocr/tesseract-engine.js"),
