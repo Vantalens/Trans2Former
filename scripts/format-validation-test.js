@@ -250,8 +250,14 @@ for (const format of oomlFormats) {
       assert.ok(presentXml.includes("<p:sldIdLst"), "pptx: Invalid presentation structure");
     }
 
+    // 修复 issue #74: 测试2成功时计入统计
+    stats.total++;
+    stats.passed++;
     console.log(`✅ ${format.toUpperCase()}: OOXML 结构完整`);
   } catch (err) {
+    // 修复 issue #74: 测试2失败时计入统计
+    stats.total++;
+    stats.failed++;
     console.log(`❌ ${format.toUpperCase()}: ${err.message}`);
     stats.errors.push({
       test: `OOXML检查: ${format}`,
@@ -291,8 +297,14 @@ for (const format of textFormats) {
       // (DOCX/XLSX/PPTX 在格式2中已检查)
     }
 
+    // 修复 issue #74: 测试3成功时计入统计
+    stats.total++;
+    stats.passed++;
     console.log(`✅ ${format.toUpperCase()}: 中文正确保留`);
   } catch (err) {
+    // 修复 issue #74: 测试3失败时计入统计
+    stats.total++;
+    stats.failed++;
     console.log(`❌ ${format.toUpperCase()}: ${err.message}`);
     stats.errors.push({
       test: `编码保留: ${format}`,
@@ -311,16 +323,22 @@ try {
     content: testCases.csv,
     title: "test.csv",
   });
-  
+
   assert.ok(csvModel.blocks && csvModel.blocks.length > 0, "CSV: No blocks generated");
-  
+
   const table = csvModel.blocks.find(b => b.type === "table");
   assert.ok(table, "CSV: No table block found");
   assert.ok(table.headers && table.headers.length > 0, "CSV: No headers");
   assert.ok(table.rows && table.rows.length > 0, "CSV: No rows");
-  
+
+  // 修复 issue #74: 测试4成功时计入统计
+  stats.total++;
+  stats.passed++;
   console.log(`✅ CSV: 正确解析为 ${table.rows.length} 行数据`);
 } catch (err) {
+  // 修复 issue #74: 测试4失败时计入统计
+  stats.total++;
+  stats.failed++;
   console.log(`❌ CSV: ${err.message}`);
   stats.errors.push({
     test: "CSV 解析",
@@ -450,11 +468,17 @@ console.log("输入格式：" + formats.input.join(", "));
 console.log("输出格式：" + formats.output.join(", "));
 
 // 最终判断
+// 修复 issue #74: errors非空时应失败，跳过的测试不计入失败
 const passRate = stats.total > 0 ? (stats.passed / stats.total) : 0;
-if (passRate >= 0.95) {
+const effectivePassRate = (stats.passed + stats.skipped) / (stats.total + stats.skipped);
+if (effectivePassRate >= 0.98 && stats.errors.length === 0) {
   console.log("\n✅ 格式转换验证通过：所有主要格式正常工作\n");
   process.exit(0);
 } else {
-  console.log("\n⚠️  格式转换存在问题，需要进一步调查\n");
+  console.log(`\n⚠️  格式转换存在问题：通过率 ${(passRate * 100).toFixed(1)}%, ${stats.errors.length} 个错误\n`);
+  if (stats.errors.length > 0) {
+    console.log("错误详情:");
+    stats.errors.forEach(e => console.log(`  - ${e.test}: ${e.error}`));
+  }
   process.exit(1);
 }
