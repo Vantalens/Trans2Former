@@ -176,12 +176,7 @@
               <div id="htmlPreview" class="preview-frame preview-markdown" aria-label="标准化预览"></div>
             </article>
 
-            <article id="documentModelPanel" class="viewer-card workbench-panel" role="tabpanel" hidden>
-              <div class="viewer-card-header">
-                <span>DocumentModel</span>
-              </div>
-              <pre id="documentModelPreview" class="preview-frame text-output-preview"></pre>
-            </article>
+            <!-- 修复 issue #39: 删除不可达的 documentModelPanel（无 tab 入口，永远 hidden） -->
 
             <article id="outputPreviewPanel" class="viewer-card workbench-panel" role="tabpanel" aria-labelledby="outputPreviewTab" hidden>
               <div class="viewer-card-header">

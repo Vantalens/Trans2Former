@@ -81,7 +81,7 @@ const selectAllQueueButton = document.getElementById("selectAllQueueButton");
 const retryFailedButton = document.getElementById("retryFailedButton");
 const outputDirectoryButton = document.getElementById("outputDirectoryButton");
 const exportNamingInput = document.getElementById("exportNamingInput");
-const documentModelPreview = document.getElementById("documentModelPreview");
+// 修复 issue #39: 删除 documentModelPreview（面板已移除）
 const warningsList = document.getElementById("warningsList");
 const resolveWarningsButton = document.getElementById("resolveWarningsButton");
 const clearResolvedWarningsButton = document.getElementById("clearResolvedWarningsButton");
@@ -557,25 +557,8 @@ function clearWarningsResolved() {
 }
 
 function renderDocumentModelPanel(model = null) {
+  // 修复 issue #39: 简化为只保留状态赋值（面板已删除，但此状态被其他功能依赖）
   currentDocumentModel = model;
-  if (!documentModelPreview) {
-    return;
-  }
-  if (!model) {
-    documentModelPreview.textContent = "等待输入结构";
-    return;
-  }
-  const blocks = Array.isArray(model.blocks) ? model.blocks : [];
-  const virtualized = blocks.length > VIRTUAL_LIST_ITEM_LIMIT;
-  documentModelPreview.dataset.virtualized = virtualized ? "true" : "false";
-  documentModelPreview.textContent = JSON.stringify({
-    schemaVersion: model.schemaVersion,
-    title: model.title,
-    blocks: virtualized ? blocks.slice(0, VIRTUAL_LIST_ITEM_LIMIT) : blocks,
-    omittedBlocks: virtualized ? blocks.length - VIRTUAL_LIST_ITEM_LIMIT : 0,
-    assets: model.assets,
-    metadata: model.metadata,
-  }, null, 2);
 }
 
 function renderVirtualTextList(target, rows, emptyText) {
