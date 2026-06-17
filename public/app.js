@@ -1363,6 +1363,9 @@ function releaseConversionResources() {
   if (activeConversion?.worker) {
     activeConversion.worker.terminate();
     activeConversion = null;
+  } else if (activeConversion?.abortController) {
+    activeConversion.abortController.abort();
+    activeConversion = null;
   }
 }
 
@@ -1374,10 +1377,35 @@ function convertWithWorker(payload) {
   if (fromFmt === "png" || fromFmt === "pdf" || toFmt === "pdf") {
     // 先确保两个 OCR 引擎的状态就位（随包 PP-OCRv5 载入 + tesseract 缓存重建，均幂等），
     // 再跑异步转换/OCR——刷新后立刻转换也能命中重建。两者失败都不得阻塞转换。
-    return Promise.allSettled([
+    const abortController = new AbortController();
+    const asyncPromise = Promise.allSettled([
       ensurePaddleDefaultModels(),
       rehydrateTesseractAvailability(),
-    ]).then(() => convertInBrowserAsync(payload));
+    ]).then(() => {
+      // 在OCR引擎就绪后检查是否已取消
+      if (abortController.signal.aborted) {
+        throw new Error("转换已取消");
+      }
+      return convertInBrowserAsync({ ...payload, signal: abortController.signal });
+    });
+
+    // 为异步主线程路径注册可取消句柄
+    const id = `async-convert-${Date.now()}-${++convertJobSeq}`;
+    activeConversion = {
+      id,
+      isAsync: true,
+      abortController,
+      reject: (error) => {
+        abortController.abort();
+        throw error;
+      }
+    };
+
+    return asyncPromise.finally(() => {
+      if (activeConversion?.id === id) {
+        activeConversion = null;
+      }
+    });
   }
   const worker = createConvertWorker();
   if (!worker) {
@@ -1710,6 +1738,7 @@ clearResolvedWarningsButton?.addEventListener("click", () => {
 });
 cancelTransformButton.addEventListener("click", () => {
   if (!activeConversion) {
+    setStatus("没有正在进行的转换", "info");
     return;
   }
   const { reject } = activeConversion;

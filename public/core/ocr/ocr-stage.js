@@ -10,11 +10,22 @@ function shouldSkip(ctx) {
 
 export async function runOCRStage(model, ctx = {}) {
   if (shouldSkip(ctx)) return model;
+
+  // 检查是否已取消
+  if (ctx?.signal?.aborted) {
+    throw new Error("OCR已取消");
+  }
+
   const registry = ctx.ocrRegistry || defaultOCRRegistry;
   const engine = ctx.ocrEngine || registry.pickForTask("ocr-text");
   if (!engine) return model;
   try {
-    const enhanced = await enhanceWithOCR(model, { engine, registry, language: getDefaultOCRLanguage(ctx) });
+    const enhanced = await enhanceWithOCR(model, {
+      engine,
+      registry,
+      language: getDefaultOCRLanguage(ctx),
+      signal: ctx.signal
+    });
     return enhanced;
   } catch (error) {
     return {

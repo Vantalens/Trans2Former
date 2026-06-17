@@ -110,6 +110,11 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
   let modelVersion = "";
 
   for (let pageIndex = 0; pageIndex < effectivePages; pageIndex += 1) {
+    // 检查是否已取消
+    if (ctx?.signal?.aborted) {
+      throw new Error("OCR已取消");
+    }
+
     let pageResult;
     try {
       const rendered = await rasterizer.rasterize({ content: ctx.content, pageIndex, dpi });
