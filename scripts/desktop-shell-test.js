@@ -23,7 +23,9 @@ const tauriConfig = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8
 assert.equal(tauriConfig.productName, "Trans2Former");
 assert.equal(tauriConfig.version, packageJson.version, "Tauri bundle version must match the JavaScript release version");
 assert.equal(tauriConfig.identifier, "com.vantalens.trans2former");
-assert.equal(tauriConfig.build.frontendDist, "../public");
+// 修复 issue #33: 使用过滤后的 desktop-dist，排除开发自检页
+assert.equal(tauriConfig.build.frontendDist, "../desktop-dist");
+assert.equal(tauriConfig.build.beforeBuildCommand, "node scripts/prepare-desktop-dist.js");
 assert.equal(tauriConfig.app.security.csp.includes("connect-src 'self'"), true);
 assert.equal(tauriConfig.app.windows[0].title, "Trans2Former Desktop");
 assert.deepEqual(tauriConfig.bundle.icon, ["icons/icon.ico"], "Windows bundles must declare the checked-in ICO asset");
