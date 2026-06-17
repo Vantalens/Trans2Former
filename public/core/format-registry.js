@@ -620,9 +620,18 @@ export class ConverterRegistry {
     }, { content, reader: fromFormat, writer: toFormat, targetFormat: toFormat, fileName, options });
   }
 
+  // 修复 issue #115: 检查输入是否超过资源预算
+  _checkResourceBudget(c, f) {
+    const m = this.getCapabilities(f)?.resourceBudget?.maxInputBytes;
+    if (!m) return;
+    const s = typeof c === "string" ? new Blob([c]).size : (c?.byteLength || c?.size || 0);
+    if (s > m) throw new ConversionError(`输入过大（${s / 1e6 | 0}MB），超限（${m / 1e6 | 0}MB）`, "convert", "INPUT_BUDGET_EXCEEDED");
+  }
+
   convert({ content, from, to, title = "document", fileName = "", options = {} }) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
+    this._checkResourceBudget(content, fromFormat);
     const model = this.prepareConversionModel({ content, from, to, title, fileName, options });
     const output = this.write({ model, to, title, options });
     if (options?.repair === false) {
@@ -637,6 +646,7 @@ export class ConverterRegistry {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
     const signal = options?.signal;
+    this._checkResourceBudget(content, fromFormat);
 
     // 检查初始取消状态
     if (signal?.aborted) {
