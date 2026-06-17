@@ -154,6 +154,7 @@ let outputDraftCommitTimer = null;
 let markdownOutputProfile = "ai-ready";
 let currentResolvedWarnings = new Set();
 let historyPersistenceEnabled = false;
+let cachedHistoryKey = null; // 缓存历史存储键，避免每次提交重新计算（issue #65）
 
 const PREVIEW_DEBOUNCE_MS = 300;
 const LARGE_DOC_THRESHOLD = 12000;
@@ -426,9 +427,15 @@ function writePersistentHistory() {
     return;
   }
   try {
+    // 修复 issue #65: 只持久化最近的几个版本，避免大文档时 localStorage 配额耗尽
+    const MAX_PERSISTENT_VERSIONS = 10;
+    const versionsToStore = sessionVersions.length > MAX_PERSISTENT_VERSIONS
+      ? sessionVersions.slice(-MAX_PERSISTENT_VERSIONS)
+      : sessionVersions;
+
     window.localStorage.setItem(getHistoryStorageKey(), JSON.stringify({
-      sessionVersions,
-      outputVersionIndex,
+      sessionVersions: versionsToStore,
+      outputVersionIndex: Math.min(outputVersionIndex, versionsToStore.length - 1),
       currentResolvedWarnings: [...currentResolvedWarnings],
       markdownOutputProfile,
     }));
@@ -832,6 +839,33 @@ function commitOutputVersion(output, { kind = "edit", forceNew = false } = {}) {
     };
     sessionVersions.push(version);
     outputVersionIndex = sessionVersions.length - 1;
+
+    // 修复 issue #65: 限制版本栈容量，防止内存无界增长
+    const MAX_VERSIONS = 50;
+    if (sessionVersions.length > MAX_VERSIONS) {
+      // 保留所有 checkpoint 版本和最近的普通版本
+      const checkpoints = [];
+      const edits = [];
+      for (let i = 0; i < sessionVersions.length; i++) {
+        const v = sessionVersions[i];
+        if (v.kind === "checkpoint") {
+          checkpoints.push({ version: v, index: i });
+        } else {
+          edits.push({ version: v, index: i });
+        }
+      }
+
+      // 保留所有 checkpoint + 最新的 (MAX_VERSIONS - checkpoints数量) 个编辑版本
+      const keepEditCount = Math.max(10, MAX_VERSIONS - checkpoints.length);
+      const keepEdits = edits.slice(-keepEditCount);
+      const keepAll = [...checkpoints, ...keepEdits].sort((a, b) => a.index - b.index);
+
+      sessionVersions = keepAll.map(item => item.version);
+      // 重新计算标签
+      sessionVersions.forEach((v, i) => { v.label = `v${i}`; });
+      // 调整当前索引到新数组末尾
+      outputVersionIndex = sessionVersions.length - 1;
+    }
   }
   renderBottomReports(currentDocumentModel, normalized);
   updateOutputVersionControls();
