@@ -53,10 +53,18 @@ export function parseInlineMarkdown(text) {
     if (source[index] !== marker) return null;
     let cursor = index + 1;
     while (cursor < source.length) {
-      if (source[cursor] === marker && source[cursor - 1] !== "\\") {
-        const inner = source.slice(index + 1, cursor);
-        if (!inner || inner.includes("\n")) return null;
-        return { inner, next: cursor + 1 };
+      // 修复 issue #54: 检查奇数个连续反斜杠才是转义
+      if (source[cursor] === marker) {
+        let backslashes = 0;
+        while (cursor - 1 - backslashes >= 0 && source[cursor - 1 - backslashes] === "\\") {
+          backslashes += 1;
+        }
+        if (backslashes % 2 === 0) {
+          // 偶数个反斜杠（包括0个）：标记未转义
+          const inner = source.slice(index + 1, cursor);
+          if (!inner || inner.includes("\n")) return null;
+          return { inner, next: cursor + 1 };
+        }
       }
       cursor += 1;
     }
