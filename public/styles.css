@@ -540,6 +540,19 @@ button:disabled {
   color: var(--muted);
 }
 
+/* 修复 issue #37: 使用 CSS data-type 控制状态颜色，替代 JS 内联样式 */
+.status-chip[data-type="error"] {
+  color: var(--danger);
+}
+
+.status-chip[data-type="success"] {
+  color: var(--accent-strong);
+}
+
+.status-chip[data-type="info"] {
+  color: var(--muted-strong);
+}
+
 .status-chip,
 .format-note,
 .result-title span,

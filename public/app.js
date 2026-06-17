@@ -204,15 +204,9 @@ function cancelIdleTask(handle) {
 }
 
 function setStatus(message, type = "info") {
+  // 修复 issue #37: 只设置 data-type，颜色由 CSS 控制
   statusText.textContent = message;
   statusText.dataset.type = type;
-  if (type === "error") {
-    statusText.style.color = "#b23a48";
-  } else if (type === "success") {
-    statusText.style.color = "#0f6d5f";
-  } else {
-    statusText.style.color = "#5d6875";
-  }
 }
 
 function setFileMeta(message) {
