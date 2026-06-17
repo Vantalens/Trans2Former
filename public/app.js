@@ -75,6 +75,7 @@ const progressStage = document.getElementById("progressStage");
 const progressPercent = document.getElementById("progressPercent");
 const progressFill = document.getElementById("progressFill");
 const loadSampleButton = document.getElementById("loadSampleButton");
+const fileQueuePanel = document.getElementById("fileQueuePanel");
 const fileQueueList = document.getElementById("fileQueueList");
 const selectAllQueueButton = document.getElementById("selectAllQueueButton");
 const retryFailedButton = document.getElementById("retryFailedButton");
@@ -241,9 +242,21 @@ function renderFileQueue() {
     activeQueueItemId,
     onActivate: (id) => {
       activeQueueItemId = id;
+      const item = fileQueue.find((i) => i.id === id);
+      if (item?.file && item.status !== "processing") {
+        // 点击队列项时加载该文件
+        handleFile(item.file).catch((error) => {
+          setStatus(`加载文件失败: ${error.message}`, "error");
+        });
+      }
       renderFileQueue();
     },
   });
+
+  // 当队列中有多个文件时，自动显示队列面板
+  if (fileQueuePanel && fileQueue.length > 1) {
+    fileQueuePanel.hidden = false;
+  }
 }
 
 function registerQueuedFile(file, detectedFormat) {
@@ -263,7 +276,56 @@ function retryFailedQueueItems() {
   const result = retryFailedQueueItemsState(fileQueue);
   fileQueue = result.fileQueue;
   renderFileQueue();
-  setStatus(result.retries ? `已将 ${result.retries} 个失败任务放回队列` : "没有失败任务可重试", result.retries ? "success" : "info");
+  if (result.retries > 0) {
+    setStatus(`已将 ${result.retries} 个失败任务放回队列`, "success");
+    // 实际重新处理失败的文件
+    processQueuedFiles().catch((error) => {
+      setStatus(`处理队列失败: ${error.message}`, "error");
+    });
+  } else {
+    setStatus("没有失败任务可重试", "info");
+  }
+}
+
+// 处理队列中的文件
+async function processQueuedFiles() {
+  const queuedItems = fileQueue.filter((item) => item.status === "queued" && item.selected && item.file);
+
+  if (queuedItems.length === 0) {
+    return;
+  }
+
+  setStatus(`开始处理 ${queuedItems.length} 个队列文件`, "info");
+
+  for (const item of queuedItems) {
+    try {
+      // 更新状态为处理中
+      const itemRef = fileQueue.find((i) => i.id === item.id);
+      if (itemRef) {
+        itemRef.status = "processing";
+        renderFileQueue();
+      }
+
+      // 处理文件
+      await handleFile(item.file);
+
+      // 标记为完成
+      if (itemRef) {
+        itemRef.status = "completed";
+        renderFileQueue();
+      }
+    } catch (error) {
+      // 标记为失败
+      const itemRef = fileQueue.find((i) => i.id === item.id);
+      if (itemRef) {
+        itemRef.status = "failed";
+        itemRef.error = error.message;
+        renderFileQueue();
+      }
+    }
+  }
+
+  setStatus(`队列处理完成`, "info");
 }
 
 async function chooseOutputDirectory() {
@@ -1032,8 +1094,19 @@ function updateDownloadState(enabled) {
   }
 }
 
-function openCurrentOutputInPreview() {
+async function openCurrentOutputInPreview() {
   if (!currentOutputType || currentOutputType === "none") return;
+
+  // 修复 issue #63: 对于二进制输出，从 Blob 生成 data URL 而非传递会失效的 blob URL
+  let dataUrl = "";
+  if (currentOutputType === "binary" && currentOutputDownloadBlob) {
+    try {
+      dataUrl = await blobToDataUrl(currentOutputDownloadBlob);
+    } catch (error) {
+      console.warn("[app] Failed to convert blob to data URL:", error);
+    }
+  }
+
   const payload = {
     source: {
       format: fromFormatSelect?.value || "",
@@ -1044,7 +1117,8 @@ function openCurrentOutputInPreview() {
       format: currentOutputFormat || "",
       mime: currentOutputMime || "",
       text: outputEditor?.value || textOutputPreview?.textContent || "",
-      blobUrl: currentOutputBlobUrl || "",
+      // 传递 data URL 而非 blob URL，避免源页面转换后失效
+      dataUrl,
       isPdf: Boolean(lastOutputIsPdf),
     },
     meta: { generatedAt: Date.now() },
@@ -1054,6 +1128,16 @@ function openCurrentOutputInPreview() {
   } catch (error) {
     setStatus(`无法打开独立预览：${error?.message || error}`, "error");
   }
+}
+
+// 将 Blob 异步转换为 data URL（用于独立预览传递，issue #63）
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 function updateOutputPreviewVisibility(isPdf) {
@@ -1363,6 +1447,9 @@ function releaseConversionResources() {
   if (activeConversion?.worker) {
     activeConversion.worker.terminate();
     activeConversion = null;
+  } else if (activeConversion?.abortController) {
+    activeConversion.abortController.abort();
+    activeConversion = null;
   }
 }
 
@@ -1374,10 +1461,35 @@ function convertWithWorker(payload) {
   if (fromFmt === "png" || fromFmt === "pdf" || toFmt === "pdf") {
     // 先确保两个 OCR 引擎的状态就位（随包 PP-OCRv5 载入 + tesseract 缓存重建，均幂等），
     // 再跑异步转换/OCR——刷新后立刻转换也能命中重建。两者失败都不得阻塞转换。
-    return Promise.allSettled([
+    const abortController = new AbortController();
+    const asyncPromise = Promise.allSettled([
       ensurePaddleDefaultModels(),
       rehydrateTesseractAvailability(),
-    ]).then(() => convertInBrowserAsync(payload));
+    ]).then(() => {
+      // 在OCR引擎就绪后检查是否已取消
+      if (abortController.signal.aborted) {
+        throw new Error("转换已取消");
+      }
+      return convertInBrowserAsync({ ...payload, signal: abortController.signal });
+    });
+
+    // 为异步主线程路径注册可取消句柄
+    const id = `async-convert-${Date.now()}-${++convertJobSeq}`;
+    activeConversion = {
+      id,
+      isAsync: true,
+      abortController,
+      reject: (error) => {
+        abortController.abort();
+        throw error;
+      }
+    };
+
+    return asyncPromise.finally(() => {
+      if (activeConversion?.id === id) {
+        activeConversion = null;
+      }
+    });
   }
   const worker = createConvertWorker();
   if (!worker) {
@@ -1447,11 +1559,29 @@ async function transformContent() {
 
   try {
     const title = getBaseName(currentFileName);
-    const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName, options: { profile: markdownOutputProfile } });
-    const model = toConversionDocumentModel(content, from, to, currentFileName, currentFileName);
-    currentDocumentModel = model;
+    const options = {
+      profile: markdownOutputProfile,
+    };
+
+    // 如果输出为 PDF，读取纸张格式选项
+    if (to === "pdf" && paperFormatSelect) {
+      options.paperFormat = paperFormatSelect.value;
+    }
+
+    const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName, options });
+
+    // 注意：不在主线程重复调用 toConversionDocumentModel，因为 worker/convertAsync
+    // 内部已经完整执行了 prepareConversionModel（包含 read + mappers + audit）。
+    // 重复解析会导致：
+    // 1. 双倍解析开销（大文件时主线程阻塞数秒）
+    // 2. 主线程解析的 model 未经过 OCR stage，与实际输出 model 不一致
+    //
+    // currentDocumentModel 主要用于 renderBottomReports 和 renderDocumentModelPanel，
+    // 但这两个面板的 DOM 元素已被移除（issue #34, #39），函数会立即 early return。
+    // 因此暂时设为 null，等待未来如果需要展示 model 时，让 worker 返回序列化的 model。
+    currentDocumentModel = null;
     currentConversionQuality = result.quality || null;
-    renderDocumentModelPanel(model);
+    renderDocumentModelPanel(null);
     currentOutputType = result.type;
     currentOutputFormat = result.format;
     currentOutputMime = result.mime;
@@ -1524,13 +1654,27 @@ function printCurrentPdf() {
 
 fileInput.addEventListener("change", (event) => {
   const files = [...event.target.files || []];
+  if (files.length === 0) {
+    return;
+  }
+
+  // 将所有文件加入队列
   files.forEach((file, index) => {
-    if (index === 0) {
-      handleFile(file);
-      return;
+    const detectedFormat = detectFormatFromName(file.name);
+    if (detectedFormat) {
+      registerQueuedFile(file, detectedFormat);
     }
-    registerQueuedFile(file, detectFormatFromName(file.name));
   });
+
+  // 处理第一个文件
+  if (files[0]) {
+    handleFile(files[0]);
+  }
+
+  // 如果有多个文件，提示用户可以批量处理
+  if (files.length > 1) {
+    setStatus(`已加载 ${files.length} 个文件到队列，点击队列项可切换文件`, "info");
+  }
 });
 
 inputContent.addEventListener("input", () => {
@@ -1629,13 +1773,27 @@ dropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   dropZone.classList.remove("is-active");
   const files = [...event.dataTransfer.files || []];
-  files.forEach((file, index) => {
-    if (index === 0) {
-      handleFile(file);
-      return;
+  if (files.length === 0) {
+    return;
+  }
+
+  // 将所有文件加入队列
+  files.forEach((file) => {
+    const detectedFormat = detectFormatFromName(file.name);
+    if (detectedFormat) {
+      registerQueuedFile(file, detectedFormat);
     }
-    registerQueuedFile(file, detectFormatFromName(file.name));
   });
+
+  // 处理第一个文件
+  if (files[0]) {
+    handleFile(files[0]);
+  }
+
+  // 如果有多个文件，提示用户可以批量处理
+  if (files.length > 1) {
+    setStatus(`已加载 ${files.length} 个文件到队列，点击队列项可切换文件`, "info");
+  }
 });
 
 dropZone.addEventListener("keydown", (event) => {
@@ -1710,6 +1868,7 @@ clearResolvedWarningsButton?.addEventListener("click", () => {
 });
 cancelTransformButton.addEventListener("click", () => {
   if (!activeConversion) {
+    setStatus("没有正在进行的转换", "info");
     return;
   }
   const { reject } = activeConversion;

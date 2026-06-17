@@ -96,12 +96,62 @@ function tryStorageSet(storage, key, value) {
 }
 
 export function writePreviewPayload(payload) {
+  // 写入前清理过期/超量的预览 payload，防止 localStorage 累积耗尽配额（issue #63）
+  cleanupStalePreviewPayloads();
+
   const taskId = payload?.taskId || generateTaskId();
   const enveloped = JSON.stringify({ ...payload, taskId, createdAt: Date.now() });
   const key = `${PREVIEW_PAYLOAD_PREFIX}${taskId}`;
   if (tryStorageSet(window.localStorage, key, enveloped)) return taskId;
   if (tryStorageSet(window.sessionStorage, key, enveloped)) return taskId;
   throw new Error("Unable to persist preview payload: localStorage and sessionStorage both rejected the write (likely quota exceeded).");
+}
+
+// 清理过期和超量的预览 payload（issue #63）
+function cleanupStalePreviewPayloads() {
+  const now = Date.now();
+  const storages = [window.localStorage, window.sessionStorage];
+  const MAX_PAYLOADS = 5; // 最多保留5个最新的 payload
+
+  for (const storage of storages) {
+    try {
+      const entries = [];
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i);
+        if (key && key.startsWith(PREVIEW_PAYLOAD_PREFIX)) {
+          try {
+            const raw = storage.getItem(key);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const createdAt = parsed?.createdAt || 0;
+            entries.push({ key, createdAt });
+          } catch (error) {
+            // 损坏的条目直接删除
+            storage.removeItem(key);
+          }
+        }
+      }
+
+      // 删除过期条目
+      for (const entry of entries) {
+        if (now - entry.createdAt > PREVIEW_PAYLOAD_TTL_MS) {
+          storage.removeItem(entry.key);
+        }
+      }
+
+      // 如果还有太多条目，只保留最新的 MAX_PAYLOADS 个
+      const remaining = entries.filter(e => now - e.createdAt <= PREVIEW_PAYLOAD_TTL_MS);
+      if (remaining.length > MAX_PAYLOADS) {
+        remaining.sort((a, b) => a.createdAt - b.createdAt); // 旧的在前
+        const toDelete = remaining.slice(0, remaining.length - MAX_PAYLOADS);
+        for (const entry of toDelete) {
+          storage.removeItem(entry.key);
+        }
+      }
+    } catch (error) {
+      // 扫描失败不影响后续写入尝试
+      console.warn("[router] Failed to cleanup stale preview payloads:", error);
+    }
+  }
 }
 
 export function readPreviewPayload(taskId) {

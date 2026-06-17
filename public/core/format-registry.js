@@ -636,29 +636,42 @@ export class ConverterRegistry {
   async convertAsync({ content, from, to, title = "document", fileName = "", options = {} }) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
+    const signal = options?.signal;
+
+    // 检查初始取消状态
+    if (signal?.aborted) {
+      throw new Error("转换已取消");
+    }
+
     let model = this.prepareConversionModel({ content, from, to, title, fileName, options });
 
     if (options?.ocr?.enabled !== false && fromFormat === "png") {
+      if (signal?.aborted) throw new Error("转换已取消");
       const stage = await import("./ocr/ocr-stage.js");
       model = await stage.runOCRStage(model, {
         options,
         from: fromFormat,
         to: toFormat,
+        signal,
       });
     } else if (options?.ocr?.enabled !== false && fromFormat === "pdf") {
+      if (signal?.aborted) throw new Error("转换已取消");
       const { isScannedPdf } = await import("./ocr/pdf-rasterizer.js");
       const detection = await isScannedPdf(content, options?.ocr || {});
       if (detection.scanned) {
+        if (signal?.aborted) throw new Error("转换已取消");
         const stage = await import("./ocr/scan-pdf-stage.js");
         model = await stage.runScannedPdfOCRStage(model, {
           content,
           options,
           from: fromFormat,
           to: toFormat,
+          signal,
         });
       }
     }
 
+    if (signal?.aborted) throw new Error("转换已取消");
     const output = this.write({ model, to, title, options });
     if (options?.repair === false) {
       return output;
