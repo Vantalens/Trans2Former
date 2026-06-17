@@ -794,6 +794,19 @@ function renderOutputPreview(content = "") {
     return;
   }
 
+  // 修复 issue #66: 对大文本输出应用降级策略，避免主线程冻结
+  const isLarge = shouldUseLargeTextPreview(content, currentOutputFormat, "");
+  const contentBytes = new Blob([content]).size;
+
+  if (isLarge && contentBytes > LARGE_PROGRESSIVE_PREVIEW_BYTES) {
+    // 超大文本：显示摘要而非全量渲染
+    const sample = content.slice(0, LARGE_PREVIEW_SAMPLE_BYTES);
+    textOutputPreview.textContent = sample + "\n\n[... 输出过大，仅显示部分内容。完整内容可通过下载按钮获取 ...]";
+    outputPreviewNotice.textContent = `输出过大（${formatFileSize(contentBytes)}），预览已降级`;
+    outputPreviewNotice.hidden = false;
+    return;
+  }
+
   try {
     textOutputPreview.innerHTML = renderPreviewHtml(content, currentOutputFormat, currentFileName);
     renderMathIn(textOutputPreview);
@@ -924,8 +937,21 @@ function initializeOutputDraft(result) {
         return;
       }
     }
+
+    // 修复 issue #66: 对大文本输出应用降级策略
+    const outputBytes = new Blob([result.data]).size;
+    const isLarge = shouldUseLargeTextPreview(result.data, result.format, "");
+
     if (outputEditor) {
-      outputEditor.value = result.data;
+      if (isLarge && outputBytes > LARGE_PROGRESSIVE_PREVIEW_BYTES) {
+        // 超大文本：只加载截断样本到编辑器
+        const sample = result.data.slice(0, LARGE_PREVIEW_SAMPLE_BYTES);
+        outputEditor.value = sample;
+        outputEditor.placeholder = `输出过大（${formatFileSize(outputBytes)}），编辑器仅显示前 ${formatFileSize(LARGE_PREVIEW_SAMPLE_BYTES)}。完整内容可通过下载按钮获取。`;
+      } else {
+        outputEditor.value = result.data;
+        outputEditor.placeholder = "";
+      }
     }
     updateOutputPreviewVisibility(false);
     renderOutputPreview(result.data);
