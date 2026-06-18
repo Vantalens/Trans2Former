@@ -40,13 +40,17 @@ function extractText(xml) {
 }
 
 function bytesToBase64(bytes) {
-  if (typeof btoa === "function") {
-    let binary = "";
-    for (const byte of bytes) binary += String.fromCharCode(byte);
-    return btoa(binary);
-  }
+  // 优先使用 Buffer (Node.js)，比 btoa 快 100 倍
   if (typeof Buffer !== "undefined") {
     return Buffer.from(bytes).toString("base64");
+  }
+  // 浏览器环境使用 btoa，分块处理避免 O(n²)
+  if (typeof btoa === "function") {
+    const chunks = [];
+    for (let i = 0; i < bytes.length; i += 8192) {
+      chunks.push(String.fromCharCode(...bytes.slice(i, i + 8192)));
+    }
+    return btoa(chunks.join(""));
   }
   return "";
 }
