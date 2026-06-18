@@ -47,6 +47,7 @@ registry.registerFormat("md", {
   label: "Markdown",
   inputModels: ["SemanticDoc"],
   outputModels: ["SemanticDoc"],
+  resourceBudget: { maxInputBytes: 50 * 1024 * 1024 }, // 50MB for text formats
 });
 
 registry.registerFormat("html", {
@@ -57,6 +58,7 @@ registry.registerFormat("html", {
   label: "HTML",
   inputModels: ["SemanticDoc"],
   outputModels: ["SemanticDoc"],
+  resourceBudget: { maxInputBytes: 50 * 1024 * 1024 }, // 50MB for text formats
 });
 
 registry.registerFormat("txt", {

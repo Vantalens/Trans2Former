@@ -622,7 +622,8 @@ export class ConverterRegistry {
 
   // 修复 issue #115: 检查输入是否超过资源预算
   _checkResourceBudget(c, f) {
-    const m = this.getCapabilities(f)?.resourceBudget?.maxInputBytes;
+    const caps = this.getCapabilities(f);
+    const m = (Array.isArray(caps) && caps.length > 0) ? caps[0]?.resourceBudget?.maxInputBytes : undefined;
     if (!m) return;
     const s = typeof c === "string" ? new Blob([c]).size : (c?.byteLength || c?.size || 0);
     if (s > m) {
