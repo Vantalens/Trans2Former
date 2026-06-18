@@ -331,6 +331,67 @@ ${rowXml}
 </worksheet>`;
 }
 
+// 优化版本：在生成 XML 的同时构建字符串索引（issue #165）
+// 避免双重遍历所有单元格
+function sheetXmlWithStringIndexing(rows, stringIndex, stringArray, getStringIndex, { workbookSheet = null } = {}) {
+  const NS = "http" + "://schemas.openxmlformats.org";
+  const formulaByRef = new Map();
+  const mergeRefs = [];
+  let sharedStringCount = 0;
+
+  if (workbookSheet) {
+    for (const formula of workbookSheet.formulas || []) {
+      if (formula.ref && formula.expression) {
+        formulaByRef.set(String(formula.ref).toUpperCase(), formula);
+      }
+    }
+    for (const merge of workbookSheet.merges || []) {
+      const ref = merge.from && merge.to && merge.from !== merge.to
+        ? `${merge.from}:${merge.to}`
+        : merge.from;
+      if (ref) mergeRefs.push(ref);
+    }
+  }
+
+  const rowXml = rows.map((row, rowIndex) => {
+    const cells = row.map((cell, columnIndexValue) => {
+      const ref = `${columnName(columnIndexValue)}${rowIndex + 1}`;
+      const formula = formulaByRef.get(ref.toUpperCase());
+
+      if (formula) {
+        const cachedValue = String(formula.cachedValue ?? cell ?? "").trim();
+        const typeAttr = cachedValue && !isNumericCellText(cachedValue) ? ' t="str"' : "";
+        const valueXml = cachedValue ? `<v>${escapeXmlText(cachedValue)}</v>` : "";
+        return `        <c r="${ref}"${typeAttr}><f>${escapeXmlText(formula.expression)}</f>${valueXml}</c>`;
+      }
+
+      const text = stripMarkdownInlineSyntax(cell);
+      if (isNumericCellText(text)) {
+        return `        <c r="${ref}"><v>${text}</v></c>`;
+      }
+
+      // 在生成 XML 时构建字符串索引
+      const strIdx = getStringIndex(text);
+      sharedStringCount += 1;
+      return `        <c r="${ref}" t="s"><v>${strIdx}</v></c>`;
+    }).join("\n");
+    return `      <row r="${rowIndex + 1}">\n${cells}\n      </row>`;
+  }).join("\n");
+
+  const mergeXml = mergeRefs.length > 0
+    ? `\n  <mergeCells count="${mergeRefs.length}">\n${mergeRefs.map((ref) => `    <mergeCell ref="${escapeXmlText(ref)}"/>`).join("\n")}\n  </mergeCells>`
+    : "";
+
+  const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="${NS}/spreadsheetml/2006/main">
+  <sheetData>
+${rowXml}
+  </sheetData>${mergeXml}
+</worksheet>`;
+
+  return { xml, sharedStringCount };
+}
+
 export function writeXlsx({ model, title = model.title }) {
   const NS = "http" + "://schemas.openxmlformats.org";
   const DC_NS = "http" + "://purl.org/dc/elements/1.1/";
@@ -350,9 +411,12 @@ export function writeXlsx({ model, title = model.title }) {
     usedNames.add(candidate.toLowerCase());
   });
 
-  // 构建字符串表（所有 sheet 共享）
+  // 优化 issue #165: 合并两次遍历为一次
+  // 在生成 sheet XML 时同时构建字符串索引
   const stringIndex = new Map();
   const stringArray = [];
+  let sharedCellCount = 0;
+
   function getStringIndex(str) {
     const strStr = String(str || "");
     if (!stringIndex.has(strStr)) {
@@ -362,27 +426,8 @@ export function writeXlsx({ model, title = model.title }) {
     return stringIndex.get(strStr);
   }
 
-  // 预扫描与 sheetXml 的数值判定必须用同一 helper（isNumericCellText），否则
-  // stringIndex.get 会返回 undefined 写出 <v>undefined</v>。数值格不进 sst。
-  let sharedCellCount = 0;
-  const sheetRowsList = sheets.map((sheet) => {
-    const rows = [sheet.headers, ...(sheet.rows || [])];
-    rows.forEach(row => {
-      row.forEach(cell => {
-        const text = stripMarkdownInlineSyntax(cell);
-        if (!isNumericCellText(text)) {
-          getStringIndex(text);
-          sharedCellCount += 1;
-        }
-      });
-    });
-    return rows;
-  });
-
-  const sharedStringsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<sst xmlns="${NS}/spreadsheetml/2006/main" count="${sharedCellCount}" uniqueCount="${stringArray.length}">
-${stringArray.map(str => `  <si><t xml:space="preserve">${escapeXmlText(str)}</t></si>`).join('\n')}
-</sst>`;
+  // 先准备 sheetRowsList（不遍历单元格）
+  const sheetRowsList = sheets.map((sheet) => [sheet.headers, ...(sheet.rows || [])]);
 
   const sheetEntries = sheets.map((sheet, index) => ({
     sheetNumber: index + 1,
@@ -391,6 +436,24 @@ ${stringArray.map(str => `  <si><t xml:space="preserve">${escapeXmlText(str)}</t
     rows: sheetRowsList[index],
     workbookSheet: sheet,
   }));
+
+  // 一次遍历：生成 sheet XML 的同时构建字符串索引
+  const sheetXmlResults = sheetEntries.map((entry) => {
+    const xmlResult = sheetXmlWithStringIndexing(
+      entry.rows,
+      stringIndex,
+      stringArray,
+      getStringIndex,
+      { workbookSheet: entry.workbookSheet }
+    );
+    sharedCellCount += xmlResult.sharedStringCount;
+    return xmlResult.xml;
+  });
+
+  const sharedStringsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="${NS}/spreadsheetml/2006/main" count="${sharedCellCount}" uniqueCount="${stringArray.length}">
+${stringArray.map(str => `  <si><t xml:space="preserve">${escapeXmlText(str)}</t></si>`).join('\n')}
+</sst>`;
 
   const workbookSheetsXml = sheetEntries
     .map((entry) => `<sheet name="${escapeXmlText(entry.name)}" sheetId="${entry.sheetNumber}" r:id="${entry.relId}"/>`)
@@ -443,9 +506,9 @@ ${workbookRelsXml}
     },
     { name: "xl/sharedStrings.xml", data: sharedStringsXml },
     { name: "xl/styles.xml", data: generateStylesXml() },
-    ...sheetEntries.map((entry) => ({
+    ...sheetEntries.map((entry, index) => ({
       name: `xl/worksheets/sheet${entry.sheetNumber}.xml`,
-      data: sheetXml(entry.rows, stringIndex, { workbookSheet: entry.workbookSheet }),
+      data: sheetXmlResults[index],
     })),
   ];
 
