@@ -8,6 +8,7 @@ const BUDGETS = [
   // 推理管线（DB 后处理 + CTC 解码等纯函数）合理扩容到 320KB，仍远小于任何带权重方案。
   // issue #115 修复: 添加 resourceBudget 执行检查，预算微调至 321KB。
   // issue #161 #166: ConversionError 正确调用 + null 防护，预算微调至 322KB。
+  // issue #163 修复: Tesseract Worker 资源清理逻辑，预算保持 322KB。
   { path: "public/core", maxBytes: 322 * 1024 },
   { path: "public/formats", maxBytes: 512 * 1024 },
   { path: "public/workers", maxBytes: 128 * 1024 },

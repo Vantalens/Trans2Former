@@ -177,20 +177,29 @@ export async function createTesseractWorker({
   // tesseract.js 5.x 的 loadLanguage/initialize 失败在某些路径上不会让 createWorker
   // reject（内部 .catch 吞掉），表现为永不 settle 的 promise——超时背板把静默挂死
   // 转成可见、可清理的错误。
+  // issue #163 修复：超时路径下需要清理可能已启动的 worker，避免资源泄漏。
   let timeoutId = null;
+  let workerPromise = null;
+  let timedOut = false;
+
   try {
+    workerPromise = namespace.createWorker(language, undefined, {
+      corePath: vendorPaths.corePath,
+      workerPath: vendorPaths.workerPath,
+      langPath: vendorPaths.langPath || TESSERACT_VENDOR_PATHS.langPath,
+      cachePath: TESSDATA_CACHE_PATH,
+      cacheMethod: "readOnly",
+      logger: () => {},
+    });
+
     const worker = await Promise.race([
-      namespace.createWorker(language, undefined, {
-        corePath: vendorPaths.corePath,
-        workerPath: vendorPaths.workerPath,
-        langPath: vendorPaths.langPath || TESSERACT_VENDOR_PATHS.langPath,
-        cachePath: TESSDATA_CACHE_PATH,
-        cacheMethod: "readOnly",
-        logger: () => {},
-      }),
+      workerPromise,
       new Promise((_, reject) => {
         timeoutId = setTimeout(
-          () => reject(new Error(`Tesseract worker 初始化超过 ${WORKER_INIT_TIMEOUT_MS / 1000}s 未完成（多为 tessdata 缓存未命中且 langPath 兜底不可用）`)),
+          () => {
+            timedOut = true;
+            reject(new Error(`Tesseract worker 初始化超过 ${WORKER_INIT_TIMEOUT_MS / 1000}s 未完成（多为 tessdata 缓存未命中且 langPath 兜底不可用）`));
+          },
           WORKER_INIT_TIMEOUT_MS,
         );
       }),
@@ -198,6 +207,20 @@ export async function createTesseractWorker({
     worker.__t2fTessdataLanguage = language;
     return worker;
   } catch (error) {
+    // 如果超时，worker 可能仍在后台创建中，需要异步清理
+    if (timedOut && workerPromise) {
+      workerPromise.then(
+        (worker) => {
+          // Worker 最终创建成功但已超时，清理它
+          if (worker && typeof worker.terminate === "function") {
+            worker.terminate().catch(() => {});
+          }
+        },
+        () => {
+          // Worker 创建失败，无需清理
+        }
+      );
+    }
     await clearSeededTessdata(language);
     throw new ConversionError(`Tesseract worker 初始化失败：${error?.message || error}`, {
       category: "convert",
