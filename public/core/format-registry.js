@@ -625,7 +625,16 @@ export class ConverterRegistry {
     const m = this.getCapabilities(f)?.resourceBudget?.maxInputBytes;
     if (!m) return;
     const s = typeof c === "string" ? new Blob([c]).size : (c?.byteLength || c?.size || 0);
-    if (s > m) throw new ConversionError(`输入过大（${s / 1e6 | 0}MB），超限（${m / 1e6 | 0}MB）`, "convert", "INPUT_BUDGET_EXCEEDED");
+    if (s > m) {
+      const aMB = (s / 1048576).toFixed(1);
+      const lMB = (m / 1048576).toFixed(1);
+      throw new ConversionError(`输入文件大小 ${aMB} MB 超过格式 ${f} 的限制 ${lMB} MB`, {
+        category: "convert",
+        code: "INPUT_BUDGET_EXCEEDED",
+        format: f,
+        details: { inputBytes: s, maxInputBytes: m, inputMB: aMB, limitMB: lMB }
+      });
+    }
   }
 
   convert({ content, from, to, title = "document", fileName = "", options = {} }) {
