@@ -24,13 +24,13 @@ function createSourceContext(source) {
 }
 
 function blockSearchText(block) {
-  if (block.type === "heading" || block.type === "paragraph" || block.type === "quote") return block.text;
-  if (block.type === "code") return block.code;
-  if (block.type === "list") return block.items.join("\n");
-  if (block.type === "table") return [block.headers.join(" "), ...block.rows.map((row) => row.join(" "))].join("\n");
-  if (block.type === "image") return block.alt || block.title || block.src;
-  if (block.type === "asset") return block.alt || block.title || block.assetId;
-  if (block.type === "raw") return block.content.slice(0, 80);
+  if (block.type === "heading" || block.type === "paragraph" || block.type === "quote") return block.text ?? "";
+  if (block.type === "code") return block.code ?? "";
+  if (block.type === "list") return (block.items ?? []).join("\n");
+  if (block.type === "table") return [(block.headers ?? []).join(" "), ...(block.rows ?? []).map((r) => (r ?? []).join(" "))].join("\n");
+  if (block.type === "image") return block.alt || block.title || block.src || "";
+  if (block.type === "asset") return block.alt || block.title || block.assetId || "";
+  if (block.type === "raw") return (block.content ?? "").slice(0, 80);
   return "";
 }
 
