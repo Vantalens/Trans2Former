@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // 本项目 local-only 安全门禁（scripts/local-security-test.js）禁止 public/vendor/ 下任何
@@ -90,48 +90,61 @@ async function main() {
     return;
   }
 
-  await mkdir(TARGET_CORE_DIR, { recursive: true });
-  await mkdir(TARGET_WORKER_DIR, { recursive: true });
+  // issue #29 修复：创建目标目录后记录状态，失败时清理
+  let targetCreated = false;
+  try {
+    await mkdir(TARGET_CORE_DIR, { recursive: true });
+    await mkdir(TARGET_WORKER_DIR, { recursive: true });
+    targetCreated = true;
 
-  const distEntries = await readdir(TESSERACT_DIST);
-  let mainCopied = false;
-  let workerCopied = false;
-  for (const entry of distEntries) {
-    if (!/\.(js|mjs)$/.test(entry)) continue;
-    if (entry.endsWith(".d.ts")) continue;
-    const source = path.join(TESSERACT_DIST, entry);
-    if (entry.startsWith("worker")) {
-      await copyFile(source, path.join(TARGET_WORKER_DIR, entry));
-      workerCopied = true;
-    } else {
-      await copyFile(source, path.join(TARGET_CORE_DIR, entry));
-      mainCopied = true;
+    const distEntries = await readdir(TESSERACT_DIST);
+    let mainCopied = false;
+    let workerCopied = false;
+    for (const entry of distEntries) {
+      if (!/\.(js|mjs)$/.test(entry)) continue;
+      if (entry.endsWith(".d.ts")) continue;
+      const source = path.join(TESSERACT_DIST, entry);
+      if (entry.startsWith("worker")) {
+        await copyFile(source, path.join(TARGET_WORKER_DIR, entry));
+        workerCopied = true;
+      } else {
+        await copyFile(source, path.join(TARGET_CORE_DIR, entry));
+        mainCopied = true;
+      }
     }
-  }
 
-  if (!mainCopied) {
-    console.warn("[sync-tesseract-vendor] Could not locate tesseract.js main bundle in dist/. Skipping.");
-    return;
-  }
-
-  const coreFiles = await copyDistEntries(TESSERACT_CORE, TARGET_CORE_DIR);
-  let coreBundleCopied = coreFiles.length > 0;
-  if (!coreBundleCopied) {
-    const nestedDist = path.join(TESSERACT_CORE, "dist");
-    if (await pathExists(nestedDist)) {
-      const nested = await copyDistEntries(nestedDist, TARGET_CORE_DIR);
-      if (nested.length > 0) coreBundleCopied = true;
+    if (!mainCopied) {
+      console.warn("[sync-tesseract-vendor] Could not locate tesseract.js main bundle in dist/. Skipping.");
+      return;
     }
+
+    const coreFiles = await copyDistEntries(TESSERACT_CORE, TARGET_CORE_DIR);
+    let coreBundleCopied = coreFiles.length > 0;
+    if (!coreBundleCopied) {
+      const nestedDist = path.join(TESSERACT_CORE, "dist");
+      if (await pathExists(nestedDist)) {
+        const nested = await copyDistEntries(nestedDist, TARGET_CORE_DIR);
+        if (nested.length > 0) coreBundleCopied = true;
+      }
+    }
+
+    if (!coreBundleCopied) {
+      console.warn("[sync-tesseract-vendor] tesseract.js-core not found; wasm runtime missing. OCR will stay unavailable until installed.");
+    }
+
+    // 清洗和检查（会 throw）—— 放在 try 块内，失败时触发清理
+    await sanitizeVendorBundles(TARGET_CORE_DIR);
+    await sanitizeVendorBundles(TARGET_WORKER_DIR);
+
+    console.log(`Tesseract.js vendor synced to public/vendor/tesseract/ (worker=${workerCopied}, core=${coreBundleCopied}); remote URLs sanitized.`);
+  } catch (error) {
+    // issue #29 修复：清洗门禁失败时清理已创建的目标目录
+    if (targetCreated && error?.message?.includes('清洗门禁失败')) {
+      await rm(TARGET_DIR, { recursive: true, force: true });
+      console.error('[sync-tesseract-vendor] 检测到远程协议残留，已回滚目标目录');
+    }
+    throw error; // 重新抛出，确保 exit(1)
   }
-
-  if (!coreBundleCopied) {
-    console.warn("[sync-tesseract-vendor] tesseract.js-core not found; wasm runtime missing. OCR will stay unavailable until installed.");
-  }
-
-  await sanitizeVendorBundles(TARGET_CORE_DIR);
-  await sanitizeVendorBundles(TARGET_WORKER_DIR);
-
-  console.log(`Tesseract.js vendor synced to public/vendor/tesseract/ (worker=${workerCopied}, core=${coreBundleCopied}); remote URLs sanitized.`);
 }
 
 main().catch((error) => {
