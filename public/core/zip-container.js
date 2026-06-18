@@ -2,7 +2,8 @@ import { ConversionError } from "./conversion-error.js";
 
 const decoder = new TextDecoder("utf-8");
 const MAX_ENTRY_COUNT = 10000;
-const MAX_TOTAL_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024;
+// 降低浏览器环境总限制从 1GB 到 256MB，更适合客户端内存约束
+const MAX_TOTAL_UNCOMPRESSED_BYTES = 256 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO = 200;
 
 const LENGTH_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
@@ -375,7 +376,8 @@ export function readZipEntries(content) {
         format: "zip",
       });
     }
-    if (uncompressedSize >= 64 && compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
+    // 移除 64 字节阈值，所有文件都检查压缩比，防止小文件绕过限制
+    if (compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
       throw new ConversionError("ZIP compression ratio exceeds the local processing budget", {
         category: "parse",
         code: "ZIP_COMPRESSION_RATIO_LIMIT",
