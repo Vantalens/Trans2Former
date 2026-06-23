@@ -22,6 +22,8 @@
   --radius: 10px;
   --radius-sm: 6px;
   --radius-lg: 14px;
+  /* 按钮渐变 token（统一品牌视觉） */
+  --btn-gradient-primary: linear-gradient(180deg, var(--accent), var(--accent-strong));
 }
 
 @supports (font-variation-settings: normal) {
@@ -412,6 +414,32 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
 
 .primary-button:active:not(:disabled) {
   transform: translateY(1px);
+}
+
+/* 渐变变体（Landing 和 Preview 页面使用） */
+.primary-button.btn-gradient {
+  background: var(--btn-gradient-primary);
+  border-color: var(--accent);
+}
+
+.primary-button.btn-gradient:hover:not(:disabled) {
+  background: var(--btn-gradient-primary);
+  filter: brightness(1.05);
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(13, 148, 136, 0.36), 0 8px 20px rgba(13, 148, 136, 0.26);
+}
+
+/* 大尺寸变体（Hero CTA） */
+.primary-button.btn-lg {
+  padding: 14px 26px;
+  font-size: 15px;
+  border-radius: var(--radius-lg);
+}
+
+/* 中等尺寸变体（独立预览返回按钮） */
+.primary-button.btn-md {
+  padding: 10px 20px;
+  border-radius: 12px;
 }
 
 .ghost-button,

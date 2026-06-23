@@ -142,10 +142,10 @@
   align-items: center;
   gap: 8px;
   padding: 14px 26px;
-  background: linear-gradient(180deg, #0d9488 0%, #0f766e 100%);
+  background: var(--btn-gradient-primary);
   color: #fff;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
