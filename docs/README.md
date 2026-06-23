@@ -36,12 +36,13 @@
 | [TESTING_GUIDE.md](development/TESTING_GUIDE.md) | 测试指南 |
 | [DEVELOPMENT_TASKS.md](development/DEVELOPMENT_TASKS.md) | 开发任务清单 |
 
-### [architecture/](architecture/) - 架构设计（1 个）
+### [architecture/](architecture/) - 架构设计（2 个）
 核心架构设计文档。
 
 | 文档 | 说明 |
 |------|------|
-| [MULTI_MODEL_ARCHITECTURE.md](architecture/MULTI_MODEL_ARCHITECTURE.md) | 🎯 v2 多域模型目标架构 |
+| [MULTI_DOMAIN_MODEL_DESIGN.md](architecture/MULTI_DOMAIN_MODEL_DESIGN.md) | 🎯 v2 多域模型详细设计文档（Phase 5，设计阶段） |
+| [MULTI_MODEL_ARCHITECTURE.md](architecture/MULTI_MODEL_ARCHITECTURE.md) | 多模型架构概述（待更新为 v2） |
 
 ### 质量与基准
 性能基准和质量标准文档。
@@ -49,6 +50,7 @@
 | 文档 | 说明 |
 |------|------|
 | [BENCHMARK.md](BENCHMARK.md) | 📊 基准测试报告（转换正确性、性能、OCR 准确率） |
+| [V2_MULTI_DOMAIN_MODELS.md](V2_MULTI_DOMAIN_MODELS.md) | 📖 v2 多域模型参考手册（用户指南） |
 
 ### 测试样例
 测试样例库和 fixture 索引。
@@ -58,12 +60,13 @@
 | [samples/corpus/README.md](../samples/corpus/README.md) | 📦 样例库索引（basic/complex/edge-cases/real-world/benchmark 五层结构） |
 | [samples/fixtures/README.md](../samples/fixtures/README.md) | 🔧 P4 Fixture 分层索引（程序化生成样例） |
 
-### [formats/](formats/) - 格式规范（1 个）
+### [formats/](formats/) - 格式规范（2 个）
 文档格式和数据模型规范。
 
 | 文档 | 说明 |
 |------|------|
-| [DOCUMENT_MODEL_SCHEMA.md](formats/DOCUMENT_MODEL_SCHEMA.md) | ✅ v1 单一模型当前实现 |
+| [v1-document-model.md](formats/v1-document-model.md) | 📦 v1 单一模型当前实现（已归档） |
+| [CONVERSION_POLICY.md](product/CONVERSION_POLICY.md) | 📋 转换策略（含 v2 投影规则） |
 
 ### [release/](release/) - 发布文档（4 个）
 版本发布相关的文档和发布说明。
@@ -198,23 +201,24 @@
 ## 📊 文档统计
 
 - **根目录文档**: 6 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE, THIRD_PARTY_NOTICES.md）
-- **docs/ 文档**: 32 个
+- **docs/ 文档**: 35 个
   - development: 10 个
-  - architecture: 1 个
-  - formats: 1 个
+  - architecture: 2 个（新增 MULTI_DOMAIN_MODEL_DESIGN.md）
+  - formats: 1 个（v1-document-model.md，归档）
+  - product: 1 个（CONVERSION_POLICY.md）
   - release: 4 个
   - checklists: 2 个
   - reports: 2 个
   - setup: 1 个
   - i18n: 9 个
-  - quality: 1 个（BENCHMARK.md）
+  - quality: 2 个（BENCHMARK.md, V2_MULTI_DOMAIN_MODELS.md）
   - README.md: 1 个
 - **samples/ 文档**: 4 个（corpus/README.md, fixtures/README.md, ofd/README.md, png/README.md）
 
-**总计**: 42 个文档（清晰分类，易于查找）
+**总计**: 45 个文档（清晰分类，易于查找）
 
 ---
 
-**文档版本**: v1.0.0  
+**文档版本**: v1.1.0  
 **最后更新**: 2026-06-23  
 **维护者**: Trans2Former Team
