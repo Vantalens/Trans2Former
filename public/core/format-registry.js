@@ -623,7 +623,8 @@ export class ConverterRegistry {
 
   // 修复 issue #115: 检查输入是否超过资源预算
   _checkResourceBudget(c, f) {
-    const m = this.getCapabilities(f)?.resourceBudget?.maxInputBytes;
+    const capabilities = this.capabilityDetails?.get(f);
+    const m = capabilities?.resourceBudget?.maxInputBytes;
     if (!m) return;
     const s = typeof c === "string" ? new Blob([c]).size : (c?.byteLength || c?.size || 0);
     if (s > m) {
