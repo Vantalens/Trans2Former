@@ -23,14 +23,43 @@ export function pdfUnicodeString(value) {
 // /W [1 95 500] 把 Adobe-GB1 半角 Latin CID 区段（U+0020-U+007E）声明为 500/1000em；
 // /Encoding UniGB-UTF16-H（Adobe CMap，4 字节 codespace 含代理对，BMP 区向后兼容 UCS-2）；
 // /Supplement 5 对应 Adobe-GB1-5（含 CJK Ext-B）。
-export function buildCidFontObjects({ cidFontRef, descriptorRef }) {
-  const type0 = `<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UTF16-H /DescendantFonts [${cidFontRef} 0 R] >>`;
+//
+// 修复：添加 ToUnicode CMap 以支持文本复制和显示（issue #XXX）
+export function buildCidFontObjects({ cidFontRef, descriptorRef, toUnicodeRef }) {
+  const type0 = toUnicodeRef
+    ? `<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UTF16-H /DescendantFonts [${cidFontRef}] /ToUnicode ${toUnicodeRef} >>`
+    : `<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UTF16-H /DescendantFonts [${cidFontRef}] >>`;
 
-  const cidFont = `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 5 >> /FontDescriptor ${descriptorRef} 0 R /DW 1000 /W [1 95 500] >>`;
+  const cidFont = `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 5 >> /FontDescriptor ${descriptorRef} /DW 1000 /W [1 95 500] >>`;
 
   const descriptor = `<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [-160 -249 1015 1000] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 737 /StemV 58 >>`;
 
   return { type0, cidFont, descriptor };
+}
+
+// 生成 ToUnicode CMap stream（Identity-H 映射）
+// 这个 CMap 告诉 PDF 阅读器如何将 CID 字符代码映射到 Unicode
+export function buildToUnicodeCMap() {
+  return `/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo
+<< /Registry (Adobe)
+/Ordering (Identity)
+/Supplement 0
+>> def
+/CMapName /Adobe-Identity-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+1 beginbfrange
+<0000> <FFFF> <0000>
+endbfrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end`;
 }
 
 // 字符宽度系数（配合 /W 与 DW）：ASCII 半角 0.5（对齐 500/1000），其他全角 1.0（DW=1000）。
