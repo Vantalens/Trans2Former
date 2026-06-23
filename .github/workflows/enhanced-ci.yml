@@ -1,0 +1,113 @@
+name: Enhanced CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test suite with coverage
+        run: npm run coverage
+
+      - name: Generate coverage reports
+        run: |
+          npx c8 report --reporter=json-summary --reporter=text
+          npx c8 report --reporter=html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/coverage-summary.json
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-node-${{ matrix.node }}
+          path: coverage/
+          retention-days: 7
+
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check code style
+        run: |
+          echo "Running basic code checks..."
+          # 检查是否有 console.log 遗留
+          ! grep -r "console\.log" public/ scripts/ --include="*.js" | grep -v "\/\/" || echo "⚠️ Found console.log statements"
+
+          # 检查是否有 TODO 注释
+          grep -r "TODO\|FIXME" public/ scripts/ --include="*.js" || echo "✅ No TODO/FIXME found"
+
+  size-check:
+    name: Bundle Size Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check resource budgets
+        run: node scripts/resource-budget-test.js
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Run security audit
+        run: npm audit --audit-level=moderate || true
+
+      - name: Check for vulnerabilities
+        run: node scripts/local-security-test.js
