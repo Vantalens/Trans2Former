@@ -59,8 +59,16 @@ function readStyleFormats(zip) {
 function excelSerialDateToIso(serial) {
   const days = Number(serial);
   if (!Number.isFinite(days)) return String(serial ?? "");
-  const epoch = Date.UTC(1899, 11, 30);
-  const date = new Date(epoch + days * 86400000);
+
+  // 修正 Excel 1900 闰年 bug (issue #182)
+  // Excel 错误地将 1900 年视为闰年，序列号 60 代表不存在的 1900-02-29
+  // 对于序列号 > 60 的日期，需要减去 1 天以补偿
+  let adjustedDays = days;
+  if (days > 60) adjustedDays -= 1;
+
+  // 使用正确的 epoch：1899-12-31（Excel 序列号 1 = 1900-01-01）
+  const epoch = Date.UTC(1899, 11, 31);
+  const date = new Date(epoch + adjustedDays * 86400000);
   return date.toISOString().slice(0, 10);
 }
 
