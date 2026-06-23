@@ -269,6 +269,7 @@ function validateCentralDirectory(bytes, offset, entries) {
     return false;
   }
   const centralNames = new Set();
+  const centralEntries = new Map();
   let cursor = offset;
   while (cursor + 46 <= bytes.length) {
     const signature = readUint32(bytes, cursor);
@@ -280,12 +281,15 @@ function validateCentralDirectory(bytes, offset, entries) {
         format: "zip",
       });
     }
+    const compressedSize = readUint32(bytes, cursor + 20);
+    const uncompressedSize = readUint32(bytes, cursor + 24);
     const fileNameLength = readUint16(bytes, cursor + 28);
     const extraLength = readUint16(bytes, cursor + 30);
     const commentLength = readUint16(bytes, cursor + 32);
     const nameStart = cursor + 46;
     const name = normalizeEntryPath(decoder.decode(bytes.slice(nameStart, nameStart + fileNameLength)));
     centralNames.add(name);
+    centralEntries.set(name, { compressedSize, uncompressedSize });
     cursor = nameStart + fileNameLength + extraLength + commentLength;
   }
 
@@ -296,7 +300,7 @@ function validateCentralDirectory(bytes, offset, entries) {
       format: "zip",
     });
   }
-  return true;
+  return { exists: true, entries: centralEntries };
 }
 
 function base64ToBytes(base64) {
@@ -347,21 +351,16 @@ export function readZipEntries(content) {
 
     const flags = readUint16(bytes, offset + 6);
     const method = readUint16(bytes, offset + 8);
-    const compressedSize = readUint32(bytes, offset + 18);
-    const uncompressedSize = readUint32(bytes, offset + 22);
+    let compressedSize = readUint32(bytes, offset + 18);
+    let uncompressedSize = readUint32(bytes, offset + 22);
     const fileNameLength = readUint16(bytes, offset + 26);
     const extraLength = readUint16(bytes, offset + 28);
     const nameStart = offset + 30;
     const dataStart = nameStart + fileNameLength + extraLength;
     const name = normalizeEntryPath(decoder.decode(bytes.slice(nameStart, nameStart + fileNameLength)));
 
-    if ((flags & 0x08) !== 0) {
-      throw new ConversionError("ZIP data descriptor 暂未支持；请使用标准 OOXML 包或后续核心增强路径", {
-        category: "parse",
-        code: "ZIP_DATA_DESCRIPTOR_UNSUPPORTED",
-        format: "zip",
-      });
-    }
+    const hasDataDescriptor = (flags & 0x08) !== 0;
+
     if (method !== 0 && method !== 8) {
       throw new ConversionError(`ZIP compression method ${method} 暂未支持`, {
         category: "parse",
@@ -376,6 +375,40 @@ export function readZipEntries(content) {
         format: "zip",
       });
     }
+
+    // 如果使用 data descriptor，大小为 0，需要从 Central Directory 获取或扫描
+    if (hasDataDescriptor && (compressedSize === 0 || uncompressedSize === 0)) {
+      // 标记为需要从 Central Directory 交叉验证
+      entries.set(name, {
+        name,
+        method,
+        compressedSize: null,  // 待从 Central Directory 获取
+        uncompressedSize: null,
+        data: null,
+        dataStart,
+        hasDataDescriptor: true,
+      });
+      // 暂时标记偏移到 Central Directory，稍后会从那里获取真实大小
+      // 我们需要扫描到 Central Directory 签名
+      let scanOffset = dataStart;
+      while (scanOffset + 4 <= bytes.length) {
+        const sig = readUint32(bytes, scanOffset);
+        if (sig === 0x02014b50 || sig === 0x06054b50) {
+          offset = scanOffset;
+          break;
+        }
+        scanOffset++;
+      }
+      if (scanOffset + 4 > bytes.length) {
+        throw new ConversionError("ZIP data descriptor: cannot find Central Directory", {
+          category: "parse",
+          code: "ZIP_DATA_DESCRIPTOR_NO_CENTRAL",
+          format: "zip",
+        });
+      }
+      continue;
+    }
+
     // 移除 64 字节阈值，所有文件都检查压缩比，防止小文件绕过限制
     if (compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
       throw new ConversionError("ZIP compression ratio exceeds the local processing budget", {
@@ -405,7 +438,53 @@ export function readZipEntries(content) {
     offset = dataStart + compressedSize;
   }
 
-  const hasCentralDirectory = validateCentralDirectory(bytes, offset, entries);
+  const centralDirInfo = validateCentralDirectory(bytes, offset, entries);
+
+  // 处理带 data descriptor 的条目：从 Central Directory 获取大小并解压
+  if (centralDirInfo.exists && centralDirInfo.entries) {
+    for (const [name, entry] of entries) {
+      if (entry.hasDataDescriptor && entry.data === null) {
+        const centralEntry = centralDirInfo.entries.get(name);
+        if (!centralEntry) {
+          throw new ConversionError(`ZIP entry "${name}" with data descriptor not found in Central Directory`, {
+            category: "parse",
+            code: "ZIP_DATA_DESCRIPTOR_NO_CENTRAL",
+            format: "zip",
+          });
+        }
+
+        const { compressedSize, uncompressedSize } = centralEntry;
+
+        // 安全检查
+        if (compressedSize > 0 && uncompressedSize / compressedSize > MAX_COMPRESSION_RATIO) {
+          throw new ConversionError("ZIP compression ratio exceeds the local processing budget", {
+            category: "parse",
+            code: "ZIP_COMPRESSION_RATIO_LIMIT",
+            format: "zip",
+          });
+        }
+        totalUncompressedBytes += uncompressedSize;
+        if (totalUncompressedBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+          throw new ConversionError("ZIP uncompressed size exceeds the local processing budget", {
+            category: "parse",
+            code: "ZIP_UNCOMPRESSED_SIZE_LIMIT",
+            format: "zip",
+          });
+        }
+
+        // 从 dataStart 读取压缩数据并解压
+        const compressedData = bytes.slice(entry.dataStart, entry.dataStart + compressedSize);
+        const data = entry.method === 8 ? inflateDeflateRaw(compressedData, uncompressedSize) : compressedData;
+
+        // 更新条目
+        entry.compressedSize = compressedSize;
+        entry.uncompressedSize = uncompressedSize;
+        entry.data = data;
+        delete entry.hasDataDescriptor;
+        delete entry.dataStart;
+      }
+    }
+  }
 
   return {
     entries,
@@ -416,7 +495,7 @@ export function readZipEntries(content) {
       return [...new Set([...entries.values()].map((entry) => entry.method))].sort((a, b) => a - b);
     },
     hasCentralDirectory() {
-      return hasCentralDirectory;
+      return centralDirInfo.exists;
     },
     has(name) {
       return entries.has(name);
