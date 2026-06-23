@@ -562,6 +562,149 @@ npm test  # 28 个脚本，覆盖核心转换、OCR、安全、性能、发布
 
 ---
 
+## 8. 代码审核经验（2026-06-23）
+
+### 8.1 全面代码审核发现的关键问题
+
+**审核方法**: High Effort（10 角度 × 8 候选 + 验证 + 扫尾）  
+**审核范围**: 全代码库（15,757 行）  
+**发现**: 15 个问题（1 P0, 3 P1, 7 P2, 4 P3）
+
+#### P0: 资源预算检查完全失效 (Issue #181)
+
+**问题**: `_checkResourceBudget` 调用 `getCapabilities(f)` 期望返回单个对象，但实际返回数组。访问数组的 `.resourceBudget` 返回 `undefined`，导致预算检查总是提前返回。
+
+**根因**: 类型混淆 - 方法返回数组但调用者期望对象。
+
+**影响**: 所有输入大小限制被绕过，用户可上传任意大小文件，导致浏览器崩溃或 OOM。
+
+**修复**:
+```javascript
+// 错误：
+const m = this.getCapabilities(f)?.resourceBudget?.maxInputBytes;
+
+// 正确：
+const capabilities = this.capabilityDetails?.get(f);
+const m = capabilities?.resourceBudget?.maxInputBytes;
+```
+
+**教训**: 
+- 类型混淆是常见 bug 来源，TypeScript 或 JSDoc 可以预防
+- 资源预算等安全关键功能必须有单元测试覆盖
+
+#### P1: XLSX 日期转换错误 (Issue #182)
+
+**问题**: Excel 错误地将 1900 年视为闰年，序列号 60 代表不存在的 1900-02-29。代码未补偿此 bug，且使用错误的 epoch (1899-12-30)，导致 1900 年 3 月 1 日前的日期偏移 1 天。
+
+**根因**: 历史兼容性问题未在代码中显式处理。
+
+**影响**: 数据完整性问题，历史日期数据不准确。
+
+**修复**:
+```javascript
+function excelSerialDateToIso(serial) {
+  const days = Number(serial);
+  if (!Number.isFinite(days)) return String(serial ?? "");
+  
+  // 补偿 Excel 1900 闰年 bug
+  let adjustedDays = days;
+  if (days > 60) adjustedDays -= 1;
+  
+  // 使用正确的 epoch
+  const epoch = Date.UTC(1899, 11, 31);
+  const date = new Date(epoch + adjustedDays * 86400000);
+  return date.toISOString().slice(0, 10);
+}
+```
+
+**教训**:
+- 历史兼容性需要显式处理，不能依赖"应该正确"的假设
+- 所有兼容性决策应该文档化并有测试覆盖
+
+#### P1: HTML 实体解析崩溃 (Issue #183)
+
+**问题**: `decodeHtmlEntities` 在调用 `String.fromCodePoint()` 前缺少 Unicode 范围验证（0x0 到 0x10FFFF）。无效实体如 `&#x110000;` 抛出 RangeError，导致转换失败。
+
+**根因**: 输入验证不完整。
+
+**影响**: 恶意或格式错误的 HTML 导致转换崩溃。
+
+**修复**:
+```javascript
+.replace(/&#x([0-9a-f]+);/gi, (_, n) => {
+  const code = Number.parseInt(n, 16);
+  return (code >= 0 && code <= 0x10FFFF) ? String.fromCodePoint(code) : '�';
+})
+```
+
+**教训**:
+- 所有外部输入必须完整验证
+- 边界值测试（最大有效值、超出范围）必不可少
+
+#### P1: Worker 异步转换取消竞态 (Issue #184)
+
+**问题**: 异步转换路径的 `activeConversion.reject` 函数抛出错误而不是正确拒绝 Promise。用户取消时，`reject()` 抛出的错误未被捕获，Promise 永远不会 reject。
+
+**根因**: Promise 取消逻辑设计错误 - `reject` 函数不在 Promise 执行器上下文中。
+
+**影响**: 取消操作后 UI 状态不恢复，按钮保持禁用。
+
+**修复**:
+```javascript
+reject: (error) => {
+  // 只调用 abort，让 Promise 链自然拒绝
+  abortController.abort();
+  // 不抛出错误
+}
+```
+
+**教训**:
+- 异步取消逻辑容易出错，应标准化取消模式
+- Promise 链的错误处理需要特别小心
+
+### 8.2 代码审核方法论
+
+#### 多角度审核有效
+
+10 个独立审核角度捕获了不同类型的问题：
+1. Workers 正确性（并发、取消）
+2. App.js 正确性（状态管理、DOM）
+3. Formats 正确性（解析、编码）
+4. Server 安全性（路径遍历、头部）
+5. Core 正确性（资源预算、验证）
+6. 简化机会（深度嵌套、重复代码）
+7. 代码复用（重复实现、不一致）
+8. 效率问题（冗余计算、循环扫描）
+9. 高度审核（CLAUDE.md 规范合规）
+10. 扫尾角度（捕获遗漏）
+
+#### 验证步骤关键
+
+6 个初始候选经验证被 REFUTED（如 Express.static 路径遍历保护、Worker 取消竞态的早期判断）。验证流程防止了误报。
+
+#### 常见问题模式
+
+1. **类型混淆**: 期望对象但收到数组（#181）
+2. **边界验证缺失**: Unicode 范围、资源预算（#181, #183）
+3. **历史兼容性**: Excel 1900 闰年 bug（#182）
+4. **状态一致性**: 并行更新、异步读取（#188, #192）
+5. **变异副作用**: 预期不可变但实际变异（#187, #189）
+
+### 8.3 修复流程最佳实践
+
+1. **每个修复独立提交** - 便于回滚和追踪
+2. **修复前先写测试** - TDD 方法论确保问题可复现
+3. **完整测试套件验证** - 确保无回归
+4. **清晰的提交信息** - 包含问题、修复、验证、关联 Issue
+
+本次修复：
+- 4 个 P0/P1 问题
+- 7 个独立提交
+- 3 个新测试文件（24 个测试用例）
+- 所有测试通过（EXIT_CODE: 0）
+
+---
+
 ## 附录：相关文档
 
 - [README.md](README.md) - 项目简介

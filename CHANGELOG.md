@@ -4,7 +4,15 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **资源预算检查失效 (Issue #181)**: `_checkResourceBudget` 调用 `getCapabilities(f)` 期望返回对象但实际返回数组，导致预算检查总是提前返回。所有输入大小限制被绕过，用户可上传任意大小文件导致浏览器崩溃。修复为直接访问 `capabilityDetails.get(f)` 获取单个格式能力对象。新增 `resource-budget-validation-test.js` (7 个测试用例) 验证修复。
+- **XLSX 日期转换错误 (Issue #182)**: Excel 错误地将 1900 年视为闰年，代码未补偿此 bug 且使用错误的 epoch (1899-12-30)，导致 1900 年 3 月 1 日前的日期偏移 1 天。修复为使用正确 epoch (1899-12-31) 并对序列号 > 60 的日期减去 1 天。新增 `xlsx-date-conversion-test.js` (12 个测试用例) 验证 Excel 1900 闰年 bug 处理。
+- **HTML 实体解析崩溃 (Issue #183)**: `decodeHtmlEntities` 在调用 `String.fromCodePoint()` 前缺少 Unicode 范围验证 (0x0 到 0x10FFFF)，无效实体如 `&#x110000;` 抛出 RangeError 导致转换失败。修复为验证范围后调用，超出范围返回替换字符 �。新增 `html-entity-validation-test.js` (5 个测试用例) 验证范围检查。
+- **Worker 异步转换取消竞态 (Issue #184)**: 异步转换路径 (PNG→PDF) 的 `activeConversion.reject` 函数抛出错误而不是正确拒绝 Promise，用户取消时错误未被捕获，Promise 永远不会 reject，UI 状态不恢复。修复为只调用 `abortController.abort()`，让 Promise 链自然处理取消。
+
 ### 文档
+- **代码审核报告 (2026-06-23)**: 完成全代码库审核 (15,757 行)，发现 15 个问题 (1 P0, 3 P1, 7 P2, 4 P3)，创建 GitHub Issues #181-194。新增 `docs/development/CODE_REVIEW_REPORT.md` 完整审核报告，`P0_P1_FIXES_COMPLETION_REPORT.md` 修复完成报告。更新 `docs/development/lessons.md` 记录审核方法论和常见问题模式。
 - **第三方依赖声明**：新增 `THIRD_PARTY_NOTICES.md`，完整记录所有依赖的许可证信息、版权声明和仓库链接，包含 PDF.js、Tesseract.js、ONNX Runtime、PaddleOCR、KaTeX、Express、Puppeteer 等核心依赖以及 vendor 目录资源的许可证声明。新增完整性测试脚本验证文档内容的准确性和完整性。
 
 ## [2.3.0] - 2026-05-30
