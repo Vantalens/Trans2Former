@@ -64,6 +64,7 @@ const copyErrorDiagnosticsButton = document.getElementById("copyErrorDiagnostics
 const outputMeta = document.getElementById("outputMeta");
 const markdownProfileSelect = document.getElementById("markdownProfileSelect");
 const persistHistoryCheckbox = document.getElementById("persistHistoryCheckbox");
+const applyFallbackCheckbox = document.getElementById("applyFallbackCheckbox");
 const clearHistoryButton = document.getElementById("clearHistoryButton");
 const refreshPreviewButton = document.getElementById("refreshPreviewButton");
 const largePreviewModeSelect = document.getElementById("largePreviewModeSelect");
@@ -684,9 +685,39 @@ function renderVerificationReport(quality = currentConversionQuality) {
 
   const repairStatus = report.repairStatus || (autoRepair.attempted ? "verified" : "not-attempted");
   const finalDecision = report.finalDecision || autoRepair.finalDecision || "pending";
+
+  // 构建修复状态文本，包含 recommendations
+  let repairText = `${repairStatus} · 结论 ${finalDecision}`;
+  const recommendations = autoRepair.recommendations || [];
+  const applied = autoRepair.applied || [];
+  const rejected = autoRepair.rejected || [];
+
+  if (recommendations.length > 0) {
+    repairText += ` · 推荐 ${recommendations.length} 项`;
+    // 添加推荐详情（最多显示前3项）
+    const displayCount = Math.min(3, recommendations.length);
+    for (let i = 0; i < displayCount; i++) {
+      const rec = recommendations[i];
+      const actionDesc = rec.actionType || "unknown";
+      const targetDesc = rec.fallbackTo ? ` → ${rec.fallbackTo}` : "";
+      repairText += ` [${i + 1}] ${actionDesc}${targetDesc}`;
+    }
+    if (recommendations.length > 3) {
+      repairText += ` (还有 ${recommendations.length - 3} 项)`;
+    }
+  }
+
+  if (applied.length > 0) {
+    repairText += ` · 已应用 ${applied.length} 项`;
+  }
+
+  if (rejected.length > 0) {
+    repairText += ` · 已拒绝 ${rejected.length} 项`;
+  }
+
   applyVerificationRow(verificationRepair, {
     state: finalDecision === "verified" ? "ok" : (finalDecision === "failed-quality-gate" ? "drift" : "skip"),
-    text: `${repairStatus} · 结论 ${finalDecision}`,
+    text: repairText,
   });
 
   applyVerificationRow(verificationRuleDiff, describeRuleDiff(report.ruleDiff, verification));
@@ -1622,6 +1653,9 @@ async function transformContent() {
     const title = getBaseName(currentFileName);
     const options = {
       profile: markdownOutputProfile,
+      repair: {
+        applyFallback: applyFallbackCheckbox?.checked || false,
+      },
     };
 
     // 如果输出为 PDF，读取纸张格式选项

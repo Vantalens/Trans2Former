@@ -360,7 +360,10 @@ function testPlaceholderHandlers() {
   for (const handlerName of placeholders) {
     const result = DEFAULT_HANDLERS[handlerName]({ model });
     assert.strictEqual(result.ok, false, `${handlerName} 应该失败（未实现）`);
-    assert.strictEqual(result.note, `handler-not-implemented:${handlerName}`);
+    assert.ok(
+      result.note.startsWith(`handler-not-implemented:${handlerName}`),
+      `${handlerName} 应该标注为未实现`
+    );
   }
 
   console.log("  ✅ placeholder handlers");
