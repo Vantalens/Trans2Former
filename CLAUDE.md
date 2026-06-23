@@ -32,15 +32,15 @@
 **⚠️ 强制执行**：每次接到新任务时必须按以下顺序阅读，不得跳过：
 
 1. **本文件** (`CLAUDE.md`) - AI 协作指南和执行红线
-2. **实施计划** (`IMPLEMENTATION_PLAN.md`) - **必读**：当前开发阶段和任务优先级
+2. **实施计划** (`docs/development/IMPLEMENTATION_PLAN.md`) - **必读**：当前开发阶段和任务优先级
 3. **用户文档** (`README.md`) - 项目介绍、核心功能、快速开始
 4. **贡献规范** (`CONTRIBUTING.md`) - 代码风格、提交规范、PR 流程
-5. **测试指南** (`TESTING_GUIDE.md`) - **必读**：测试策略、覆盖率要求、测试工具
+5. **测试指南** (`docs/development/TESTING_GUIDE.md`) - **必读**：测试策略、覆盖率要求、测试工具
 
 **特定场景额外阅读**：
-- 发布前：`RELEASE_GUIDE.md`
+- 发布前：`docs/release/RELEASE_GUIDE.md`
 - 修复 Bug：相关 Issue 和最新的审计报告
-- 性能优化：`resource-budget-test.js` 和相关性能测试
+- 性能优化：`scripts/resource-budget-test.js` 和相关性能测试
 - 新增格式：`public/formats/` 下对应格式的现有实现
 
 **读取后必须说明**：
@@ -344,22 +344,24 @@ Trans2Former 是面向普通用户的工具，必须简单易用：
 
 ### 文档类型
 
-1. **需求文档** (`PRD.md`): 产品定位和功能需求
-2. **技术文档** (`TECH_STACK.md`): 架构和技术选型
-3. **实施计划** (`IMPLEMENTATION_PLAN.md`): 开发阶段和任务
-4. **测试计划** (`TEST_PLAN.md`): 测试策略和用例
-5. **进度追踪** (`progress.md`): 已完成和进行中任务
-6. **经验教训** (`lessons.md`): 技术决策和避坑指南
-7. **开发规则** (`AGENT_RULES.md`): 代码规范和审核标准
+1. **需求文档** (`docs/development/PRD.md`): 产品定位和功能需求
+2. **技术文档** (`docs/development/TECH_STACK.md`): 架构和技术选型
+3. **实施计划** (`docs/development/IMPLEMENTATION_PLAN.md`): 开发阶段和任务
+4. **测试计划** (`docs/development/TEST_PLAN.md`): 测试策略和用例
+5. **进度追踪** (`docs/development/progress.md`): 已完成和进行中任务
+6. **经验教训** (`docs/development/lessons.md`): 技术决策和避坑指南
+7. **开发规则** (`docs/development/AGENT_RULES.md`): 代码规范和审核标准
 8. **用户文档** (`README.md`): 项目介绍和快速开始
+
+**文档导航**: 所有文档索引请查看 `docs/README.md`
 
 ### 更新时机
 
-- 添加新功能 → 更新 PRD、progress
-- 架构调整 → 更新 TECH_STACK
-- 完成阶段 → 更新 progress、lessons
-- 发现问题 → 更新 lessons
-- 修改规范 → 更新 AGENT_RULES
+- 添加新功能 → 更新 `docs/development/PRD.md`、`docs/development/progress.md`
+- 架构调整 → 更新 `docs/development/TECH_STACK.md`
+- 完成阶段 → 更新 `docs/development/progress.md`、`docs/development/lessons.md`
+- 发现问题 → 更新 `docs/development/lessons.md`
+- 修改规范 → 更新 `docs/development/AGENT_RULES.md`
 
 ### 更新要求
 
