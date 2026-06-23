@@ -36,7 +36,29 @@ jobs:
       #
       # Coverage gate (.c8rc.json): statements/lines >= 78%, functions >= 80%,
       # branches >= 64% over public/** (vendor excluded). These are ratchet
-      # floors pinned just below the current measured coverage (82.2/84.6/70.0)
+      # floors pinned just below the current measured coverage (81.38/85.56/71.95)
       # so coverage can only go up — raise them as the test rebuild lands.
       - name: Run test suite with coverage gate
         run: npm run coverage
+
+      - name: Generate coverage reports
+        run: |
+          npx c8 report --reporter=json-summary --reporter=text
+          npx c8 report --reporter=html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/coverage-summary.json
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-node-${{ matrix.node }}
+          path: coverage/
+          retention-days: 7
