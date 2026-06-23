@@ -124,6 +124,7 @@ npm run vendor:paddle
 | [INSTALL.md](INSTALL.md) | 安装指南 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本记录 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献与测试要求 |
+| [docs/BENCHMARK.md](docs/BENCHMARK.md) | 基准测试报告 |
 | [docs/MULTI_MODEL_ARCHITECTURE.md](docs/MULTI_MODEL_ARCHITECTURE.md) | 核心架构 |
 | [docs/CONVERSION_ROUTING.md](docs/CONVERSION_ROUTING.md) | 转换路由 |
 | [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md) | 安全策略 |
@@ -148,6 +149,8 @@ npm run vendor:paddle
 ## 许可证
 
 MIT，详见 [LICENSE](LICENSE)。
+
+第三方依赖的许可证信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ---
 

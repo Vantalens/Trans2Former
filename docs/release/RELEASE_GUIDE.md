@@ -17,6 +17,7 @@
 - [ ] README.md 已更新
 - [ ] CHANGELOG.md 已更新
 - [ ] RELEASE_NOTES 已创建
+- [ ] THIRD_PARTY_NOTICES.md 已更新（如有新依赖）
 - [ ] 所有文档链接有效
 
 ### 3. Release 包检查
