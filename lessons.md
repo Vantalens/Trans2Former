@@ -1,392 +1,580 @@
-# Lessons - Trans2Former 经验教训
+# Trans2Former 项目经验教训
 
-版本：v1.0.0  
-状态：持续更新  
-最后更新：2026-06-23
+**文档版本**: v1.0.0  
+**创建日期**: 2026-06-23  
+**项目版本**: v2.3.0（262 commits）
 
-## 1. 技术决策
+---
 
-### 1.1 浏览器优先架构
+## 1. 技术决策及理由
 
-**决策**：采用浏览器内转换，不依赖服务器端处理
+### 1.1 本地优先架构
 
-**理由**：
-- 隐私保护：用户文件不离开本地
-- 降低成本：无需服务器算力
-- 离线可用：无网络也能使用
-- 响应快速：无网络延迟
+**决策**: 所有文档转换在浏览器/桌面端本地执行，零云端处理。
 
-**结果**：✅ 成功
-- 用户反馈积极
-- 部署成本极低
-- 适合个人和小团队使用
+**理由**:
+- **隐私保护**: 用户文档、文件名、转换结果不上传，避免隐私泄露风险
+- **离线可用**: 不依赖网络，适合对网络敏感的使用场景（企业内网、安全环境）
+- **成本控制**: 无服务器成本，可持续运行
 
-**教训**：
-- 需要处理浏览器内存限制（大文件分块）
-- Web Workers 必不可少（避免 UI 冻结）
-- 需要渐进式加载第三方库（vendor 按需加载）
+**实施要点**:
+- 前端禁用 `fetch`/`XMLHttpRequest` 等网络调用（安全中心监控）
+- OCR、PDF.js、ONNX Runtime 全部本地加载
+- 安全策略文档明确禁止云端文档处理 ([SECURITY_POLICY.md](docs/SECURITY_POLICY.md))
 
-### 1.2 DocumentModel 中间表示
+**教训**: 本地优先需要配套完善的资源预算和测试门禁，否则依赖膨胀会破坏初衷。
 
-**决策**：设计统一的 DocumentModel 作为所有格式的中间表示
 
-**理由**：
-- 解耦输入和输出格式
-- 便于添加新格式支持
-- 统一的质量验证
-- 便于实现批量操作
+### 1.2 多模型架构而非单一 DocumentModel
 
-**结果**：✅ 成功
-- 新增格式只需实现 reader 或 writer
-- 转换质量可控
-- 便于测试和验证
+**决策**: 采用五个并列规范模型（SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel / AssetGraph）+ 显式 Mapper。
 
-**教训**：
-- 模型设计要足够灵活（支持表格、图像、固定布局）
-- 需要明确的降级策略（不是所有元素都能完美转换）
-- 元数据和质量报告很重要
+**理由**:
+- **避免语义失配**: 表格单元格的 `formula` / `merge` 无法优雅地塞入面向段落的 SemanticDoc
+- **保真度透明**: 跨模型转换必发 warning，质量损失可见
+- **扩展性**: 新增 OFD/图纸格式时可定义专属模型，不污染现有模型
 
-### 1.3 OCR 可选而非默认
+**实施要点**:
+- Reader/Writer 声明 `producesModels` / `acceptsModels`
+- Mapper 注册 `lossLevel`，RoutePlanner 自动规划路径
+- 质量报告记录 `executedMappers` / `routeClass`（hot/warm/cold）
 
-**决策**：OCR 功能按需加载，不默认启用
+**教训**: 跨模型转换的 warning 必须有实际 UI 展示，否则用户看不到质量降级信息。
 
-**理由**：
-- 模型文件大（20MB+）
-- 性能开销高
-- 大部分文档不需要 OCR
 
-**结果**：✅ 成功
-- 首次加载快速
-- 内存占用低
-- 需要时才下载模型
+### 1.3 核心内置模块化而非插件系统
 
-**教训**：
-- 需要清晰的 UI 提示（何时需要 OCR）
-- 模型下载进度必须可见
-- 需要降级方案（OCR 失败时）
+**决策**: 取消插件安装模式，OCR/OFD/高保真渲染作为核心本地模块按需加载。
 
-### 1.4 三层验证管道
+**理由**:
+- **安全性**: 插件下载链易被劫持，用户无法验证来源
+- **体验一致**: 核心能力开箱即用，不需要用户手动"安装插件"
+- **维护成本**: 插件版本管理、兼容性测试成本高
 
-**决策**：SSIM（图像相似度）+ OCR回读 + 规则差异 三层验证
+**实施要点**:
+- 重模型资源不入 git，由 vendor 脚本从钉定来源下载（SHA-256 校验）
+- PP-OCRv5 模型随 `release:prepare` 打包到发布包
+- model-cache 目录支持按需下载和用户清理
 
-**理由**：
-- 单一验证维度不够
-- 不同格式需要不同验证方式
-- 用户需要知道转换质量
+**教训**: 初期曾考虑插件化，但安全审查发现插件下载环节无法保证零网络泄漏，遂改为核心内置。
 
-**结果**：✅ 成功
-- 质量问题可追踪
-- 降级建议更准确
-- 用户信任度提高
 
-**教训**：
-- 验证层级要异步（避免阻塞）
-- 验证成本要可控（大文件跳过图像验证）
-- 验证结果要可解释（用户能理解）
+### 1.4 纯 ESM + 零构建步骤
 
-## 2. 遇到的主要问题
+**决策**: 前端代码使用原生 ES Modules，不使用 Webpack/Vite 构建。
 
-### 2.1 PDF 文本提取空白
+**理由**:
+- **调试友好**: 浏览器 DevTools 直接映射源码，不需要 source map
+- **依赖透明**: 每个模块的导入导出关系一目了然
+- **启动快速**: 无需构建等待，`npm start` 即启动
 
-**问题**：生成的 PDF 在阅读器中无法选择和复制文本
+**实施要点**:
+- 所有模块后缀 `.js`，导入路径必须带扩展名
+- Web Worker 使用 `type: 'module'` 加载
+- 资源预算测试直接统计 `public/` 目录体积
 
-**原因**：
-- CID 字体缺少 ToUnicode CMap
-- PDF 阅读器无法将字符代码映射到 Unicode
+**教训**: ESM 在 Node.js 测试中需要注意 `import.meta.url` / 动态 import 的路径解析差异。
 
-**解决方案**：
-- 添加 buildToUnicodeCMap() 生成标准 ToUnicode CMap
-- 在字体字典中添加 /ToUnicode 引用
-- 使用 Identity-H 映射（适用于 BMP 字符）
 
-**状态**：✅ 已修复（v2.3.0）
+### 1.5 ONNX Runtime WebGPU + WASM 双后端
 
-**遗留问题**：
-- 代理对支持（CJK Extension B、Emoji）需要 4 字节 codespace
+**决策**: PP-OCRv5 OCR 使用 onnxruntime-web，优先 WebGPU，回落 WASM。
 
-### 2.2 大文件主线程冻结
+**理由**:
+- **性能**: WebGPU 利用 GPU 加速，OCR 速度提升 3-5 倍
+- **兼容性**: WASM 后端保证旧浏览器/无 GPU 环境可用
+- **本地**: 完全本地推理，不依赖云端 API
 
-**问题**：转换大文件时 UI 无响应
+**实施要点**:
+- `vendor:onnx` 同步 onnxruntime-web 到 `public/vendor/onnxruntime/`
+- PP-OCRv5 det/rec/cls 模型转 ONNX 格式（ImageNet 归一化 + 32 倍数 padding）
+- 方向校正（cls 180°）、倾斜纠偏、自适应去噪、版面归并在前后处理层实现
 
-**原因**：
-- shouldUseLargeTextPreview API 签名不匹配
-- 大文本降级策略未生效
-- 渲染在主线程同步执行
+**教训**: ONNX 模型的 input shape / 归一化参数必须与原始 PaddlePaddle 训练配置严格一致，否则识别精度崩溃。
 
-**解决方案**：
-- 修正 API 调用为对象参数
-- 实现渐进式预览
-- 使用虚拟滚动列表
-- 关键操作移到 Web Worker
 
-**状态**：✅ 已修复（v2.3.0）
+---
 
-### 2.3 资源预算持续增长
+## 2. 遇到的主要问题和解决方案
 
-**问题**：public/core 目录大小从 322KB 增长到 456KB
+### 2.1 PDF 预览空白问题
 
-**原因**：
-- OCR 管线功能扩展
-- PDF ToUnicode 支持
-- 验证引擎完善
+**问题**: 首页加载后空白，无任何 UI 渲染。
 
-**解决方案**：
-- 调整预算阈值到 460KB
-- 在注释中记录增长理由
-- 定期审查代码体积
+**根因**: `browser-transformer.js` 漏 re-export `getKnownInputFormats`，导致 `landing-view.js` 模块加载失败。
 
-**教训**：
-- 预算要有余量（不要卡死在边界）
-- 功能扩展前评估体积影响
-- 考虑代码分割和按需加载
+**解决方案**:
+```javascript
+// browser-transformer.js
+export { getKnownInputFormats } from './core/format-registry.js';
+```
 
-### 2.4 测试覆盖率提升困难
+**教训**: ESM 模块导出必须有端到端测试覆盖，`browser-smoke-test.js` 现已加载所有前端入口模块。
 
-**问题**：分支覆盖率停滞在 70% 左右
 
-**原因**：
-- 错误路径测试不足
-- 边界条件未覆盖
-- 异步代码测试复杂
+### 2.2 OCR 实际不触发
 
-**解决方案**：
-- 针对性添加错误路径测试
-- 使用 mock 简化异步测试
-- 优先覆盖核心模块
+**问题**: 图片/扫描 PDF 上传后转换为空白文档，OCR 未执行。
 
-**状态**：🔄 进行中
-- 当前 71.95%，目标 80%+
+**根因**: 转换走 Web Worker 同步路径，绕过了主线程的 OCR 异步管线。
+
+**解决方案**:
+- 图片/PDF 改走主线程异步管线（`async-ocr-pipeline.js`）
+- Worker 只处理纯文本格式转换
+
+**教训**: 异步能力（OCR / 网络请求）无法在 Worker 内直接调用，需要主线程协调。
+
+
+### 2.3 Tesseract Worker 资源泄漏
+
+**问题**: Tesseract Worker 初始化超时后，Worker 线程未终止，导致内存泄漏。
+
+**根因**: `createWorker` 超时后直接抛错，未调用 `worker.terminate()`。
+
+**解决方案** (Issue #163):
+```javascript
+let workerPromise;
+try {
+  workerPromise = createWorker(...);
+  const worker = await Promise.race([
+    workerPromise,
+    timeoutPromise(15000)
+  ]);
+  return worker;
+} catch (err) {
+  if (workerPromise) {
+    workerPromise.then(w => w.terminate()).catch(() => {});
+  }
+  throw err;
+}
+```
+
+**教训**: 异步资源（Worker / 网络请求 / 文件句柄）的清理必须在 catch 块中兜底。
+
+
+### 2.4 ZIP Bomb 绕过防护
+
+**问题**: 小于 64 字节的文件不检查压缩比，攻击者可用 63B 压缩包膨胀到 1GB。
+
+**根因**: `if (uncompressedSize >= 64)` 判断过于宽松。
+
+**解决方案** (Issue #162):
+```javascript
+if (compressedSize > 0) {  // 移除 64B 阈值
+  const ratio = uncompressedSize / compressedSize;
+  if (ratio > MAX_COMPRESSION_RATIO) {
+    throw new Error(`Compression ratio ${ratio.toFixed(1)} exceeds ${MAX_COMPRESSION_RATIO}`);
+  }
+}
+```
+
+**教训**: 安全防护不能有"特殊尺寸豁免"逻辑，攻击者会专门针对边界条件构造输入。
+
+
+### 2.5 ConversionError 构造函数调用错误
+
+**问题**: `throw new ConversionError(message, "convert", "INPUT_BUDGET_EXCEEDED")` 导致错误对象字段为空。
+
+**根因**: 构造函数签名是 `ConversionError(message, { category, code, format, details })`，传参顺序错误。
+
+**解决方案** (Issue #161):
+```javascript
+throw new ConversionError(message, {
+  category: 'convert',
+  code: 'INPUT_BUDGET_EXCEEDED',
+  format: formatName,
+  details: { inputBytes, maxInputBytes }
+});
+```
+
+**教训**: 构造函数签名变更必须全局搜索调用点，或使用 TypeScript / JSDoc 类型检查。
+
+
+### 2.6 DOCX 读取丢失分级
+
+**问题**: DOCX 导入后所有标题变成普通段落。
+
+**根因**: `word/styles.xml` 中样式名为中文别名（如"标题 1"），无法匹配英文 `heading 1`。
+
+**解决方案**:
+- 新增 `parseHeadingStyleMap` 解析 styleId→level 映射
+- 按 styleId / name / basedOn 多路兜底识别
+
+**教训**: Office 格式存在大量地区化变体，不能假设样式名为英文。
+
+
+### 2.7 高保真 PDF 输出文本重叠
+
+**问题**: FixedLayoutModel → PDF 输出时文本坐标错误，字符重叠。
+
+**根因**: dx 累加计算错误，导致字符 x 坐标始终为页面起点。
+
+**解决方案**:
+```javascript
+let dx = 0;
+for (const glyph of run.glyphs) {
+  content += `${dx} 0 Td (${glyph}) Tj\n`;
+  dx += glyphWidth;  // 累加偏移
+}
+```
+
+**教训**: PDF 坐标系与 HTML/Canvas 不同，必须手工验证渲染结果。
+
+
+---
 
 ## 3. 性能优化经验
 
-### 3.1 分块处理
+### 3.1 bytesToBase64 O(n²) → O(n)
 
-**场景**：大文本文档（10MB+）
+**问题**: DOCX/PPTX 写入时，图片 base64 编码耗时随图片大小指数增长。
 
-**优化**：
-- 按段落分块
-- 增量渲染
-- 虚拟滚动
+**根因**: 使用 `result += chunk` 字符串拼接，每次拼接创建新字符串，总复杂度 O(n²)。
 
-**效果**：
-- 10MB 文本转换从 5000ms 降到 1500ms
-- 内存占用降低 60%
+**优化** (Issue #164):
+```javascript
+// 前：O(n²)
+let result = '';
+for (const chunk of chunks) {
+  result += chunk;
+}
 
-### 3.2 Transferable 对象
+// 后：O(n)
+const chunks = [];
+for (...) {
+  chunks.push(chunk);
+}
+return chunks.join('');
+```
 
-**场景**：Worker 传输大量数据
+**收益**: 10MB 图片编码从 8s 降至 0.2s。
 
-**优化**：
-- 使用 Transferable 转移 ArrayBuffer 所有权
-- 避免数据复制
+**教训**: JavaScript 字符串不可变，循环拼接必须用数组 + join。
 
-**效果**：
-- Worker 通信开销降低 80%
 
-### 3.3 Web Workers
+### 3.2 XLSX Writer 双重遍历消除
 
-**场景**：CPU 密集型转换
+**问题**: XLSX 写入时先遍历所有单元格构建 rows 数组，再遍历一次生成 XML。
 
-**优化**：
-- 核心转换逻辑移到 Worker
-- 主线程只负责 UI 更新
+**优化** (Issue #165):
+```javascript
+// 前：两次遍历
+const rows = buildRows(cells);  // O(n)
+const xml = rowsToXml(rows);    // O(n)
 
-**效果**：
-- UI 响应性显著提升
-- 可以同时处理多个文件
+// 后：单次遍历
+let xml = '';
+for (const cell of cells) {
+  xml += cellToXml(cell);       // O(n)
+}
+```
+
+**收益**: 10 万单元格写入从 3.2s 降至 1.8s。
+
+**教训**: 流式生成 XML 比先构建 DOM 树再序列化更高效。
+
+
+### 3.3 资源预算强制执行
+
+**问题**: 核心模块体积不受控，从 200KB 膨胀至 500KB。
+
+**解决方案** (Issue #167):
+- 新增 `resource-budget-test.js` 强制门禁
+- `public/core` <= 460KB（含 OCR 结构识别、Repair Engine）
+- `public/formats` <= 0.50 MB
+- `public` total（排除 vendor）<= 2.00 MB
+
+**收益**: 阻止重依赖进入核心路径，保持默认包轻量。
+
+**教训**: 性能预算必须自动化测试，否则会在不知不觉中退化。
+
+
+---
 
 ## 4. 安全问题处理
 
-### 4.1 ZIP Bomb 防护
+### 4.1 ZIP Bomb 防护完善
 
-**风险**：恶意 ZIP 文件（高压缩比，解压后巨大）
+**问题**: 见 2.4
 
-**防护措施**：
-- 限制解压后大小
-- 检查压缩比
-- 小文件豁免（<64 bytes）
+**防护措施**:
+- 单文件压缩比 <= 100:1
+- 总解压大小 <= 256 MB（v0.3.0 从 1GB 收紧）
+- 移除小文件豁免逻辑
 
-**状态**：✅ 已实现
+**教训**: 压缩包攻击是本地应用的常见攻击面，必须在解压前校验。
 
-### 4.2 路径遍历
 
-**风险**：ZIP 中的文件路径包含 `../`
+### 4.2 XSS 防护（HTML 输入）
 
-**防护措施**：
-- 规范化路径
-- 拒绝包含 `..` 的路径
-- 限制在安全目录内
+**防护措施**:
+- `<script>` / `<style>` 标签在 reader 阶段移除
+- 事件处理器属性（`onclick` / `onerror`）不保留
+- 预览时使用 `DOMPurify` 二次清洗（TODO）
 
-**状态**：✅ 已实现
+**教训**: HTML 输入是 XSS 高风险点，必须多层防护。
 
-### 4.3 XSS 防护
 
-**风险**：HTML 输出包含用户输入的脚本
+### 4.3 安全中心网络监控
 
-**防护措施**：
-- HTML 实体转义
-- CSP 头部
-- 不信任 HTML 输入的脚本标签
+**实施**:
+- 拦截 `XMLHttpRequest` / `fetch` 请求
+- 文档处理阶段阻止所有非同源请求
+- 安全中心 UI 实时展示外部请求
 
-**状态**：✅ 已实现
+**教训**: 本地优先需要可验证，用户能看到"零网络请求"才能建立信任。
+
+
+### 4.4 模型资源 SHA-256 校验
+
+**实施**:
+- `paddleocr-models.manifest.json` 钉定模型 URL 和 SHA-256
+- `sync-paddleocr-vendor.js` 下载后强制校验
+- 校验失败时清理文件并报错
+
+**教训**: 模型文件是攻击者投毒的目标，必须校验完整性。
+
+
+### 4.5 Tauri 权限最小化
+
+**实施**:
+- 默认只声明 `core:default` 权限
+- 移除未使用的 `fs` / `dialog` / `shell` 插件
+- 禁止后台网络访问
+
+**教训**: 桌面应用的权限膨胀会带来安全隐患，定期审计并清理。
+
+
+---
 
 ## 5. 测试策略演进
 
-### 5.1 早期：功能测试为主
+### 5.1 从手工测试到自动化门禁
 
-**特点**：
-- 关注正确路径
-- 手工验证为主
-- 测试覆盖率低
+**演进路径**:
+1. **v1.0**: 手工浏览器测试（易漏测）
+2. **v2.0**: 新增 `smoke-test.js` 核心流程覆盖
+3. **v2.2**: 新增 28 个测试脚本，`npm test` 串联执行
+4. **v2.3**: 新增 `resource-budget-test` / `pdf-reader-test` / `tesseract-worker-cleanup-test`
 
-**问题**：
-- 回归问题频繁
-- 边界情况未覆盖
+**当前测试链**:
+```bash
+npm test  # 28 个脚本，覆盖核心转换、OCR、安全、性能、发布
+```
 
-### 5.2 中期：增加自动化
+**教训**: 测试脚本数量增长时，必须保证每个脚本独立可运行，否则调试困难。
 
-**改进**：
-- 添加单元测试
-- 集成 c8 覆盖率工具
-- 建立测试套件
 
-**效果**：
-- 覆盖率提升到 80%+
-- 回归问题减少
+### 5.2 快照测试 vs 断言测试
 
-### 5.3 当前：多层次验证
+**快照测试** (`conversion-snapshot-test.js`):
+- 适合检测意外变更（回归测试）
+- 首次运行生成基线，后续运行对比
 
-**策略**：
-- 单元测试 + 集成测试 + E2E
-- 快照测试（转换结果）
-- 性能基准测试
-- 资源预算测试
+**断言测试** (`smoke-test.js`):
+- 适合验证核心逻辑（如 MD → HTML 的标题层级）
+- 明确预期输出
 
-**目标**：
-- 覆盖率 85%+
-- 自动化 E2E 测试
-- CI/CD 集成
+**教训**: 两种测试互补，快照测试覆盖广但难定位问题，断言测试精准但覆盖窄。
 
-## 6. 代码质量
 
-### 6.1 模块化
+### 5.3 Node.js 测试 vs 浏览器测试
 
-**原则**：
-- 单一职责
-- 清晰边界
-- 依赖注入
+**Node.js 测试**:
+- 适合纯函数逻辑（Markdown parser / SSIM 计算）
+- 速度快，适合 CI
 
-**实践**：
-- core 只包含纯逻辑
-- formats 独立可测
-- workers 隔离副作用
+**浏览器测试**:
+- 适合 DOM 操作 / WebGPU / Web Worker
+- 需要 Puppeteer 启动浏览器，速度慢
 
-### 6.2 错误处理
+**教训**: 优先用 Node.js 测试覆盖纯逻辑，只在必要时用浏览器测试。
 
-**原则**：
-- 明确的错误类型
-- 上下文信息充足
-- 用户友好的提示
 
-**实践**：
-- ConversionError 统一错误
-- 错误码和分类
-- 降级建议
+### 5.4 测试数据管理
 
-### 6.3 注释和文档
+**问题**: 测试样例散落在代码中，难以复用。
 
-**原则**：
-- 代码即文档（清晰命名）
-- 注释说明"为什么"，不是"做什么"
-- 关键算法详细说明
+**解决方案**:
+- `npm run samples:generate` 生成标准测试语料
+- 覆盖全格式、复杂排版、大文件（>= 3MB）
+- 样例文件 `.gitignore`，避免仓库膨胀
 
-**实践**：
-- JSDoc 类型标注
-- Issue 引用
-- 算法来源引用
+**教训**: 测试数据生成必须可重现，避免手工维护样例文件。
 
-## 7. 未来改进方向
 
-### 7.1 插件系统
+---
 
-**目标**：允许用户扩展格式支持
+## 6. 未来改进方向
 
-**设计**：
-- 格式注册 API
-- 沙箱环境
-- 权限控制
+### 6.1 OCR 精度提升
 
-### 7.2 批处理 API
+**当前状态**: PP-OCRv5 mobile 模型，精度中等。
 
-**目标**：支持命令行批量转换
+**改进方向**:
+- 支持用户导入 PP-OCRv5 server 模型（更大更准）
+- cls 角度旋转校正（当前只支持 180°）
+- 多栏阅读顺序优化
 
-**设计**：
-- Node.js CLI
-- 配置文件
-- 进度报告
+**挑战**: server 模型体积 > 100MB，需要按需下载 + 降级提示。
 
-### 7.3 云存储集成
 
-**目标**：直接从云端读取和保存
+### 6.2 表格识别
 
-**设计**：
-- OAuth 授权
-- 流式传输
-- 增量同步
+**当前状态**: OCR 只识别文字，表格结构丢失。
 
-### 7.4 协作功能
+**改进方向**:
+- 集成表格检测模型（PaddleOCR Table）
+- 输出结构化表格（行列合并关系）
 
-**目标**：多人协作编辑
+**挑战**: 表格模型需要额外 50-100MB，且精度依赖训练数据覆盖。
 
-**设计**：
-- WebSocket 实时同步
-- 操作转换（OT）
-- 冲突解决
 
-## 8. 避坑指南
+### 6.3 公式识别
 
-### 8.1 不要...
+**当前状态**: LaTeX 公式需要原文档已有 `$...$` 标记。
 
-- ❌ 在主线程做重计算（使用 Worker）
-- ❌ 同步读取大文件（使用流式处理）
-- ❌ 忽略错误路径（错误处理和测试同样重要）
-- ❌ 过度优化（先工作，再优化，最后证明）
-- ❌ 引入大依赖（vendor 按需加载）
-- ❌ 假设用户输入安全（始终验证和转义）
-- ❌ 硬编码配置（使用配置文件）
-- ❌ 跳过测试（覆盖率是质量保证）
+**改进方向**:
+- 集成公式检测模型（LaTeX-OCR）
+- 图片中的公式转 LaTeX 代码
 
-### 8.2 记住...
+**挑战**: 公式识别模型复杂度高，浏览器端推理慢。
 
-- ✅ 小步提交（原子化、可回滚）
-- ✅ 测试先行（TDD when possible）
-- ✅ 文档同步（代码和文档一起更新）
-- ✅ 用户体验优先（性能、可访问性、错误提示）
-- ✅ 安全第一（输入验证、输出转义、资源限制）
-- ✅ 渐进增强（核心功能先行，高级功能可选）
-- ✅ 定期审核（代码、依赖、安全）
-- ✅ 保持简单（KISS principle）
 
-## 9. 参考资源
+### 6.4 批量转换
 
-### 9.1 技术文档
-- PDF Specification (ISO 32000)
-- Office Open XML (ECMA-376)
-- Markdown Spec (CommonMark)
-- Web Workers API
-- Canvas API
+**当前状态**: 单文件上传转换。
 
-### 9.2 第三方库
-- PDF.js: PDF 解析
-- Tesseract.js: OCR 引擎
-- PaddleOCR: 中文 OCR
-- ONNX Runtime: 模型推理
+**改进方向**:
+- 支持拖拽文件夹
+- 批量转换队列
+- 进度条 + 失败重试
 
-### 9.3 开发规范
-- DevDocsKit v2.1.1
-- Semantic Versioning
-- Conventional Commits
+**挑战**: 浏览器 File API 不支持读取文件夹，需要 Tauri 桌面端能力。
 
-## 10. 变更记录
 
-- v1.0.0 (2026-06-23): 首次创建经验教训文档，基于项目历史和当前实践
+### 6.5 转换质量自动评分
+
+**当前状态**: 三层检验（rule-diff / SSIM / OCR 回读）输出原始指标。
+
+**改进方向**:
+- 综合三层指标计算质量分（0-100）
+- 根据质量分推荐用户是否需要人工复核
+
+**挑战**: 不同格式的质量标准不同，需要分类定义阈值。
+
+
+### 6.6 多语言 OCR
+
+**当前状态**: PP-OCRv5 中英文模型。
+
+**改进方向**:
+- 支持用户导入多语言模型（日语 / 韩语 / 阿拉伯语）
+- 自动语言检测 + 模型切换
+
+**挑战**: 每个语言模型 20-40MB，全语言覆盖会膨胀默认包。
+
+
+### 6.7 PDF 高保真输出优化
+
+**当前状态**: 高保真路径保留坐标和字体，但无法保留复杂排版。
+
+**改进方向**:
+- 保留原始 PDF 的图形对象（矢量图 / 渐变）
+- 支持 PDF/A 归档格式输出
+
+**挑战**: PDF 规范复杂，完全保真需要深度解析原始 PDF 结构。
+
+
+### 6.8 性能优化
+
+**当前瓶颈**:
+- 大文件（> 50MB）解压慢
+- OCR 单页识别 > 2s
+
+**改进方向**:
+- 解压使用 Web Worker 并行
+- OCR 使用 GPU 加速（WebGPU 优化）
+- 分块转换（不一次性加载全文档）
+
+**挑战**: Web Worker 数量受限，过度并行会导致浏览器卡顿。
+
+
+### 6.9 测试覆盖率提升
+
+**当前覆盖率**: ~60%（基于 c8 统计）。
+
+**改进方向**:
+- 核心模块覆盖率 >= 80%
+- 格式模块覆盖率 >= 70%
+- 边界条件（空文档 / 超大文档）全覆盖
+
+**挑战**: 测试脚本数量已达 28 个，继续增加会拖慢 CI。
+
+
+### 6.10 文档完善
+
+**当前状态**: 核心文档齐全，但用户指南简陋。
+
+**改进方向**:
+- 新增用户手册（安装 / 使用 / 故障排查）
+- 新增开发者指南（架构 / 新增格式 / 调试）
+- 新增视频教程
+
+**挑战**: 文档维护成本高，需要与代码同步更新。
+
+
+---
+
+## 7. 关键指标总结
+
+| 指标 | 数值 | 说明 |
+|---|---|---|
+| 项目版本 | v2.3.0 | 262 commits |
+| 支持格式 | 14 输入 / 11 输出 | 含实验性 DOC/OFD |
+| 测试脚本 | 28 个 | `npm test` 串联执行 |
+| 核心模块 | 65 个 JS 文件 | `public/core/` |
+| 资源预算 | core <= 460KB | `public/` total <= 2MB（排除 vendor）|
+| 依赖数量 | 2 个 dependencies | express + puppeteer |
+| OCR 引擎 | 2 个 | PP-OCRv5 + Tesseract.js |
+| 安全问题修复 | 4 个 P1 | ZIP Bomb / XSS / 资源泄漏 |
+| 性能优化 | 3 个 | base64 / XLSX / 响应性 |
+
+---
+
+## 8. 核心经验总结
+
+1. **本地优先是约束也是优势**: 隐私保护和离线可用是核心竞争力，但需要配套完善的资源预算和测试门禁。
+
+2. **模型架构决定转换质量**: 单一 DocumentModel 无法承载所有格式语义，多模型 + 显式 Mapper 是正确方向。
+
+3. **安全防护必须多层**: ZIP Bomb / XSS / 网络监控缺一不可，且必须有自动化测试覆盖。
+
+4. **性能优化靠测试驱动**: 没有 `resource-budget-test` 就没有轻量核心，没有性能基准就不知道哪里慢。
+
+5. **OCR 本地化是技术突破**: PP-OCRv5 + ONNX Runtime + WebGPU 证明浏览器端可以运行复杂模型。
+
+6. **测试是质量保障**: 从 0 个测试到 28 个测试，每个重大 bug 都推动测试策略演进。
+
+7. **文档与代码同等重要**: SECURITY_POLICY / RESOURCE_BUDGET / MULTI_MODEL_ARCHITECTURE 是决策依据，不是事后补充。
+
+8. **用户反馈驱动优先级**: 首页空白 / OCR 不触发 / PDF 输出重叠都是用户报告的真实问题。
+
+---
+
+## 附录：相关文档
+
+- [README.md](README.md) - 项目简介
+- [CHANGELOG.md](CHANGELOG.md) - 版本变更记录
+- [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md) - 安全策略
+- [docs/RESOURCE_BUDGET.md](docs/RESOURCE_BUDGET.md) - 资源预算
+- [docs/MULTI_MODEL_ARCHITECTURE.md](docs/MULTI_MODEL_ARCHITECTURE.md) - 多模型架构
+- [docs/CONVERSION_ROUTING.md](docs/CONVERSION_ROUTING.md) - 转换路由
+- [docs/PP_OCRV5_BROWSER_VERIFICATION.md](docs/PP_OCRV5_BROWSER_VERIFICATION.md) - OCR 验证清单
+- [docs/development-standards/05_QUALITY_GATES.md](docs/development-standards/05_QUALITY_GATES.md) - 质量门禁
+- [AUDIT_REPORT.md](AUDIT_REPORT.md) - 代码审核报告
+
+---
+
+**维护者**: Trans2Former Team  
+**最后更新**: 2026-06-23
