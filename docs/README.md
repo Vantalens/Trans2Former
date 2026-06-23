@@ -50,6 +50,14 @@
 |------|------|
 | [BENCHMARK.md](BENCHMARK.md) | 📊 基准测试报告（转换正确性、性能、OCR 准确率） |
 
+### 测试样例
+测试样例库和 fixture 索引。
+
+| 文档 | 说明 |
+|------|------|
+| [samples/corpus/README.md](../samples/corpus/README.md) | 📦 样例库索引（basic/complex/edge-cases/real-world/benchmark 五层结构） |
+| [samples/fixtures/README.md](../samples/fixtures/README.md) | 🔧 P4 Fixture 分层索引（程序化生成样例） |
+
 ### [formats/](formats/) - 格式规范（1 个）
 文档格式和数据模型规范。
 
@@ -152,9 +160,10 @@
 
 ### 对于准备发布
 1. [TESTING_GUIDE.md](development/TESTING_GUIDE.md) - 运行测试
-2. [ACCEPTANCE_CHECKLIST.md](checklists/ACCEPTANCE_CHECKLIST.md) - 验收清单
-3. [RELEASE_GUIDE.md](release/RELEASE_GUIDE.md) - 发布流程
-4. [CHANGELOG.md](../CHANGELOG.md) - 更新变更日志
+2. [samples/corpus/README.md](../samples/corpus/README.md) - 样例库使用
+3. [ACCEPTANCE_CHECKLIST.md](checklists/ACCEPTANCE_CHECKLIST.md) - 验收清单
+4. [RELEASE_GUIDE.md](release/RELEASE_GUIDE.md) - 发布流程
+5. [CHANGELOG.md](../CHANGELOG.md) - 更新变更日志
 
 ---
 
@@ -200,8 +209,9 @@
   - i18n: 9 个
   - quality: 1 个（BENCHMARK.md）
   - README.md: 1 个
+- **samples/ 文档**: 4 个（corpus/README.md, fixtures/README.md, ofd/README.md, png/README.md）
 
-**总计**: 38 个文档（清晰分类，易于查找）
+**总计**: 42 个文档（清晰分类，易于查找）
 
 ---
 
