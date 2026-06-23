@@ -24,6 +24,23 @@ npm start
 http://localhost:3000
 ```
 
+## Vendor 资源同步（可选）
+
+项目使用第三方库（PDF.js、Tesseract.js、ONNX Runtime、PaddleOCR 模型）作为 vendor 资源。大部分资源在 `npm install` 时自动同步，但部分可选依赖需要手动同步：
+
+```bash
+# 同步所有 vendor 资源（包含在 npm run release:prepare 中）
+npm run vendor:pdfjs       # PDF.js 库
+npm run vendor:tesseract   # Tesseract.js OCR 引擎
+npm run vendor:onnx        # ONNX Runtime（PP-OCRv5 依赖，可选）
+npm run vendor:paddle      # PaddleOCR 模型（高级 OCR，可选）
+```
+
+**注意**：
+- `vendor:onnx` 和 `vendor:paddle` 依赖网络下载，离线环境会跳过
+- ONNX Runtime 和 PaddleOCR 是 `optionalDependencies`，未安装不影响基础功能
+- 高级 OCR 功能（PP-OCRv5）需要同时安装 ONNX Runtime 和 PaddleOCR 模型
+
 当前 Node.js 服务只负责承载 Web 页面，转换逻辑在浏览器端执行。Tauri 桌面壳已建立 scaffold，并复用这套 Web-GUI 和转换核心。
 
 在输出面板的导出设置中，可以切换 Markdown profile、开启“关闭后保留版本历史”并使用“清除历史”入口删除本地保存的会话版本。
