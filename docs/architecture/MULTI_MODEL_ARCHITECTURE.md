@@ -172,7 +172,7 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 
 - `createModelManifest({ manifestId, task, engine, modelVersion, bundleSize, ... })` 返回冻结的 `ModelManifest`，`validateModelManifest` 在缺字段、未知 task/engine、非 SHA-256 等情况下抛 `MODEL_MANIFEST_INVALID`。
 - `MODEL_TASKS = ["ocr-text", "ocr-layout", "ocr-table", "quality-reviewer"]`；`MODEL_ENGINES = ["tesseract", "paddleocr", "paddleocr-vl", "mineru", "custom"]`。
-- `sha256Hex` / `verifyChecksum` 用 `crypto.subtle.digest`，模型导入后必须经过 SHA-256 校验才能进入 `available` 状态。
+- `sha256Hex` / `verifyChecksum` 用 `crypto.subtle.digest`。**PP-OCRv5 模型导入后必须经过钉定 SHA-256 校验才能进入 `available` 状态**（先验后写，失败拒激活）；Tesseract tessdata 计算 SHA-256 并记录但不与钉定值比对（用户自行提供任意 .traineddata 文件）。
 - `defaultModelCache`（`ModelCacheRegistry` 单例）维护 `manifestId → { manifest, status, detail }` 内存状态机，状态包括 `not-downloaded / importing / verifying / available / degraded / disabled`；`onChange` 让 UI 实时刷新。
 - `getCacheDirectory({ task, engine, modelVersion })` 统一返回 `model-cache/<task>/<engine>/<modelVersion>`，绝不写入用户数据或动态时间戳。
 - 安全中心 dialog 的「模型缓存」card 自动渲染当前注册的 manifest 列表；S3 阶段无 register 调用，显示空状态。
@@ -206,7 +206,7 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 - `createIndexedDBStorage` 现在返回 `LazyIndexedDBStorage`（dynamic import IDB 实现）；Node / 无 IDB 环境继续回退 `InMemoryStorage`。
 - `loadTesseractRuntime` (`public/core/ocr/tesseract-runtime.js`) 动态 import `/vendor/tesseract/core/tesseract.min.js`；失败抛 `OCR_VENDOR_LOAD_FAILED`。`createTesseractWorker` 用 vendor 路径 + tessdata blob URL 实例化 worker；`runRecognize` 把 tesseract data 映射成 `OCRResult`。
 - `TesseractEngine.recognize` 真实接入：`loadTesseractRuntime → defaultOCRStorage.get tessdata → createTesseractWorker → runRecognize → disposeWorker`。错误统一抛 `OCR_ENGINE_FAILED` 含 cause。
-- 安全中心「模型缓存」card 对 tesseract 行渲染三个按钮：「导入 chi_sim.traineddata」/「导入 eng.traineddata」/「清除缓存」。点击导入按钮 → `<input type=file>` → `arrayBuffer` → `sha256Hex` → `defaultOCRStorage.put` → `tesseractOCREngine.ensureProbe()` → `markTesseractVendorReady(true)` → `setStatus(STATUS_AVAILABLE)`。
+- 安全中心「模型缓存」card 对 tesseract 行渲染三个按钮：「导入 chi_sim.traineddata」/「导入 eng.traineddata」/「清除缓存」。点击导入按钮 → `<input type=file>` → `arrayBuffer` → `sha256Hex`（计算并记录，不比对钉定值）→ `defaultOCRStorage.put` → `tesseractOCREngine.ensureProbe()` → `markTesseractVendorReady(true)` → `setStatus(STATUS_AVAILABLE)`。
 - `enhanceWithOCR(model, { engine })` (`public/core/ocr/png-ocr.js`) 作为独立函数提供：找第一个 image asset → engine.recognize → 追加 paragraph blocks + 写 `metadata.modelReview` 含 `summarizeOCRResult` + 在 `metadata.ocr.lines` 持久化每条 line 的 confidence/bbox/blockId；低置信度发 `OCR_LOW_CONFIDENCE`、engine 不可用发 `OCR_UNAVAILABLE`。
 
 ### PNG 异步 OCR 管线 + Repair Engine OCR 入口（P9-A.3 落地）
@@ -280,7 +280,7 @@ P9-D.1 骨架（同 tesseract 骨架先行）：
 
 P9-D.2 接入 onnxruntime-web 运行时骨架：`onnxruntime-web` 作为 optionalDependency + `scripts/sync-onnxruntime-vendor.js`（缺包 exit 0）同步到 `public/vendor/onnxruntime/`；`public/core/ocr/paddle-ocr-runtime.js` 提供 `loadOnnxRuntime`（dynamic import 同源 vendor ORT，设 `ort.env.wasm.wasmPaths` 同源、Node 抛 `OCR_VENDOR_LOAD_FAILED`）、`pickExecutionProviders`（`navigator.gpu` → `["webgpu","wasm"]`，否则 `["wasm"]`）、`createOcrSession`/`disposeOcrSession` 骨架。`paddleOcrEngine.recognize` 第三阶段经 `loadOnnxRuntime()`，浏览器装好 vendor + 模型后以 `pipeline-not-wired` 拒绝（det/cls/rec 推理管线 + CTC 解码留给 P9-D.2.b）。Tauri CSP 已含 `wasm-unsafe-eval` + `worker-src blob:` + `connect-src 'self'`，无需改动。后续：P9-D.4 接入转换链并让 paddle 在可用时优先于 tesseract。
 
-P9-D.3 模型导入与安全中心管理：复用 tesseract tessdata 的**本地导入**模式（禁联网，不做远程 fetch）。安全中心「模型缓存」对 PP-OCRv5 行渲染导入 det/cls/rec onnx + 清除按钮；导入走 file picker → `sha256Hex` → `defaultOCRStorage.put("paddleocr/v5/<file>")` → `paddleOcrEngine.ensureProbe()`，三件齐全才 `markPaddleOcrVendorReady(true)` + 状态 `available`。**同时修复一个潜伏 bug**：`paddleOcrEngine` / `tesseractOCREngine` 的就绪状态原先存在 `Object.freeze` 后的实例属性上，`ensureProbe()` 赋值在严格模式（ES module）下抛 `Cannot assign to read only property`，会让安全中心导入流程静默失败；改为模块级可变变量持有就绪状态，引擎对象仍冻结。
+P9-D.3 模型导入与安全中心管理：复用 tesseract tessdata 的**本地导入**模式（禁联网，不做远程 fetch）。安全中心「模型缓存」对 PP-OCRv5 行渲染导入 det/cls/rec onnx + 清除按钮；导入走 file picker → `sha256Hex` → **与钉定值比对，不匹配拒绝激活** → `defaultOCRStorage.put("paddleocr/v5/<file>")` → `paddleOcrEngine.ensureProbe()`，三件齐全且哈希全部通过才 `markPaddleOcrVendorReady(true)` + 状态 `available`。**同时修复一个潜伏 bug**：`paddleOcrEngine` / `tesseractOCREngine` 的就绪状态原先存在 `Object.freeze` 后的实例属性上，`ensureProbe()` 赋值在严格模式（ES module）下抛 `Cannot assign to read only property`，会让安全中心导入流程静默失败；改为模块级可变变量持有就绪状态，引擎对象仍冻结。
 
 P9-D.2.b 推理管线：`public/core/ocr/paddle-ocr-pipeline.js` 提供纯函数 `parseCharDictionary` / `preprocessForDetection`（ImageNet 归一化 + 32 倍数 + limit_side_len）/ `preprocessForRecognition`（高 48 + [-1,1] 归一化）/ `dbPostProcess`（阈值二值化 + 4-连通域 + 轴对齐 bbox + box 分数过滤 + 缩放回原图）/ `ctcGreedyDecode`（逐时刻 argmax → 折叠连续重复 → 去 blank → 映射字典）/ `cropImageData` / `resizeRgba`，以及编排器 `runPaddlePipeline({ ort, detSession, clsSession, recSession, imageData, dictionary, options })` → OCRResult。`paddleOcrEngine.recognize` 在浏览器把 image 解码为 RGBA（Image+canvas，不用 fetch）→ 从本地缓存取 det/cls/rec 模型 + 可选字典 `paddleocr/v5/dict.txt` → `createOcrSession` ×3 → `runPaddlePipeline`；Node/未就位仍在 `loadOnnxRuntime` 前置拒绝。纯函数 + 编排器（mock session）在 Node 完整单测，真实模型端到端为浏览器手动。本轮不做 cls 角度旋转校正、不做 minAreaRect+unclip 高精度框。
 

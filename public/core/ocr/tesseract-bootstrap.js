@@ -44,8 +44,9 @@ export function ensureTesseractBootstrap() {
       ],
       checksums: {
         algorithm: "SHA-256",
-        digest: "f".repeat(64),
+        digest: "user-provided",
         perFile: {},
+        note: "Tesseract tessdata 由用户自行提供，计算 SHA-256 并记录但不与钉定值比对。",
       },
       fallback: {
         onFailure: "use-degraded-route",
@@ -54,7 +55,7 @@ export function ensureTesseractBootstrap() {
       ui: {
         label: "Tesseract.js OCR",
         description: "本地轻量 OCR runtime；启用前需在安全中心导入 tessdata (.traineddata)。",
-        enableHint: "首次启用时本地选择 chi_sim.traineddata / eng.traineddata，写入本地缓存后激活。",
+        enableHint: "首次启用时本地选择 chi_sim.traineddata / eng.traineddata，写入本地缓存后激活。SHA-256 哈希值会被计算并记录，但不进行严格验证（用户自行确保文件来源可信）。",
       },
     });
     defaultModelCache.register(manifest);

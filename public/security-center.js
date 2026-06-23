@@ -339,7 +339,7 @@ async function importTessdata(dialog, button) {
         }
         markTesseractVendorReady(true);
         defaultModelCache.setStatus(manifestId, STATUS_AVAILABLE, {
-          message: `已导入 ${language} (${(buffer.byteLength / (1024 * 1024)).toFixed(2)} MB, sha256=${sha256.slice(0, 12)}…)`,
+          message: `已导入 ${language} (${(buffer.byteLength / (1024 * 1024)).toFixed(2)} MB, sha256=${sha256.slice(0, 12)}…)。注意：tessdata 由用户提供，SHA-256 已记录但未与官方值比对，请确保文件来源可信。`,
           language,
           sha256,
           size: buffer.byteLength,
