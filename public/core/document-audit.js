@@ -23,6 +23,12 @@ function createSourceContext(source) {
   return { normalized, lineStarts };
 }
 
+// Issue #123: blockSearchText 生成的搜索文本与 markdown 源语法不匹配
+// - list: items.join('\n') 不含 '- ' 标记，多项列表永不匹配源文本
+// - table: headers.join(' ') 不含管道符，永不匹配 markdown 表格源
+// 导致 table 块 sourceSpan 恒为 null，list 块 endOffset 基于 firstLine 回退推算
+// 影响: 无实际消费方（唯一依赖是 smoke-test.js:936 的类型断言）
+// 状态: 已知限制，纳入 Phase 6 roadmap，多域模型重构时修复
 function blockSearchText(block) {
   if (block.type === "heading" || block.type === "paragraph" || block.type === "quote") return block.text ?? "";
   if (block.type === "code") return block.code ?? "";

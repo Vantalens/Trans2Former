@@ -100,7 +100,16 @@
 - **提交**: fdd1f0f
 
 #### ✅ Issue #123: document-audit 匹配
-- **状态**: ✅ 已完成（批次修复）
+- **状态**: ✅ 标记为 roadmap（本次会话）
+- **处理方式**: 
+  - 已添加代码注释说明已知限制
+  - 已添加验证测试（`scripts/issue-123-verification-test.js`）
+  - 已更新 GitHub Issue 状态评论
+  - 纳入 Phase 6 roadmap，多域模型重构时修复
+- **理由**: 
+  - Bug 真实但影响有限（全仓库无消费方）
+  - 符合 CLAUDE.md "开发节制"原则
+  - sourceSpan 为 null 是合法降级（schema 允许）
 
 ---
 
