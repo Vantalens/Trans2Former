@@ -180,7 +180,8 @@ export class RoutePlanner {
 // P8-M1：产品矩阵 + Planner 双跑。reader/writer 声明规范模型，RoutePlanner
 // 用 mapper 图计算真实 route 温度。
 export function getAllowedOutputFormats(from) {
-  return [...(PRODUCT_MATRIX_BY_INPUT[normalizeFormat(from)] || [])];
+  const matrix = PRODUCT_MATRIX_BY_INPUT[normalizeFormat(from)];
+  return matrix ? [...matrix] : [];
 }
 
 export function getKnownInputFormats() {

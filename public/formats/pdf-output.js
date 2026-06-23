@@ -2,7 +2,7 @@ import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
 import { writePdfHighFidelity } from "./pdf-output-high-fidelity.js";
 import { getCellInlineTokens, getInlineTokens } from "./inline-tokens.js";
 import { createWarning } from "../core/warnings.js";
-import { utf16BeHex, pdfUnicodeString, buildCidFontObjects, charWidthFactor, sanitizeGb1Text } from "./pdf-cid-font.js";
+import { utf16BeHex, pdfUnicodeString, buildCidFontObjects, buildToUnicodeCMap, charWidthFactor, sanitizeGb1Text } from "./pdf-cid-font.js";
 
 // 程序化 PDF 输出：保留 block 结构与 inline 样式。
 // 不嵌入额外字体，只用 STSong-Light（CJK + ASCII 都能渲染），通过：
@@ -640,6 +640,7 @@ function buildPdfBytes(model, title, paperSize) {
   const fontObjectNumber = cursor++;
   const cidFontObjectNumber = cursor++;
   const fontDescriptorObjectNumber = cursor++;
+  const toUnicodeObjectNumber = cursor++;
   const infoObjectNumber = cursor++;
 
   const objects = [
@@ -673,13 +674,19 @@ function buildPdfBytes(model, title, paperSize) {
   objects.push(...annotObjectsToAppend);
 
   // issue #105/#107: 用 buildCidFontObjects 统一字体对象（UniGB-UTF16-H + /W + Supplement 5）
+  // 修复：添加 ToUnicode CMap 以支持文本显示和复制
+  const toUnicodeCMap = buildToUnicodeCMap();
+  const toUnicodeCMapBytes = textToBytes(toUnicodeCMap);
+
   const { type0, cidFont, descriptor } = buildCidFontObjects({
     cidFontRef: `${cidFontObjectNumber} 0 R`,
     descriptorRef: `${fontDescriptorObjectNumber} 0 R`,
+    toUnicodeRef: `${toUnicodeObjectNumber} 0 R`,
   });
   objects.push(type0);
   objects.push(cidFont);
   objects.push(descriptor);
+  objects.push(`<< /Length ${toUnicodeCMapBytes.length} >>\nstream\n${toUnicodeCMap}\nendstream`);
   objects.push(`<< /Title ${pdfUnicodeString(title)} /Producer (Trans2Former) >>`);
 
   let output = "%PDF-1.4\n";

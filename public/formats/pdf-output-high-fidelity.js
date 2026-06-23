@@ -6,7 +6,7 @@
 // issue #105/#106/#107/#108/#111: 统一 CID 字体、annotations 大小写、降级/字替 warning、rotation。
 
 import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
-import { utf16BeHex, pdfUnicodeString, buildCidFontObjects, sanitizeGb1Text } from "./pdf-cid-font.js";
+import { utf16BeHex, pdfUnicodeString, buildCidFontObjects, buildToUnicodeCMap, sanitizeGb1Text } from "./pdf-cid-font.js";
 import { createWarning } from "../core/warnings.js";
 
 function escapePdfText(value) {
@@ -53,16 +53,21 @@ function buildHighFidelityPdfBytes(fixedLayout, title) {
   const fontObjectNumber = objects.length + 1;
   const cidFontObjectNumber = fontObjectNumber + 1;
   const fontDescriptorObjectNumber = fontObjectNumber + 2;
+  const toUnicodeObjectNumber = fontObjectNumber + 3;
   const pageObjectNumbers = [];
 
   // issue #105/#107: 统一用 buildCidFontObjects
+  // 修复：添加 ToUnicode CMap
+  const toUnicodeCMap = buildToUnicodeCMap();
   const { type0, cidFont, descriptor } = buildCidFontObjects({
     cidFontRef: `${cidFontObjectNumber} 0 R`,
     descriptorRef: `${fontDescriptorObjectNumber} 0 R`,
+    toUnicodeRef: `${toUnicodeObjectNumber} 0 R`,
   });
   objects.push(type0);
   objects.push(cidFont);
   objects.push(descriptor);
+  objects.push(`<< /Length ${textToBytes(toUnicodeCMap).length} >>\nstream\n${toUnicodeCMap}\nendstream`);
 
   pages.forEach((page) => {
     const width = page.size?.width || 612;

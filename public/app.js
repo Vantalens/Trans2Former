@@ -772,7 +772,12 @@ function renderOutputPreview(content = "") {
   }
 
   // 修复 issue #66: 对大文本输出应用降级策略，避免主线程冻结
-  const isLarge = shouldUseLargeTextPreview(content, currentOutputFormat, "");
+  const isLarge = shouldUseLargeTextPreview({
+    format: currentOutputFormat,
+    contentLength: content.length,
+    threshold: LARGE_PROGRESSIVE_PREVIEW_BYTES,
+    binaryFormats: BINARY_INPUT_FORMATS
+  });
   const contentBytes = new Blob([content]).size;
 
   if (isLarge && contentBytes > LARGE_PROGRESSIVE_PREVIEW_BYTES) {
@@ -917,7 +922,12 @@ function initializeOutputDraft(result) {
 
     // 修复 issue #66: 对大文本输出应用降级策略
     const outputBytes = new Blob([result.data]).size;
-    const isLarge = shouldUseLargeTextPreview(result.data, result.format, "");
+    const isLarge = shouldUseLargeTextPreview({
+      format: result.format,
+      contentLength: result.data.length,
+      threshold: LARGE_PROGRESSIVE_PREVIEW_BYTES,
+      binaryFormats: BINARY_INPUT_FORMATS
+    });
 
     if (outputEditor) {
       if (isLarge && outputBytes > LARGE_PROGRESSIVE_PREVIEW_BYTES) {
@@ -1235,7 +1245,7 @@ function syncFormatOptions() {
     .filter((item) => item.canRead)
     .map((item) => new Option(item.label, item.format)));
   fromFormatSelect.value = [...fromFormatSelect.options].some((option) => option.value === currentFrom) ? currentFrom : "md";
-  const allowedOutputs = new Set(getAllowedOutputFormats(fromFormatSelect.value));
+  const allowedOutputs = new Set(getAllowedOutputFormats(fromFormatSelect.value) || []);
   toFormatSelect.replaceChildren(...formatCapabilities
     .filter((item) => item.canWrite && allowedOutputs.has(item.format))
     .map((item) => new Option(item.label, item.format)));
@@ -1624,7 +1634,7 @@ async function transformContent() {
     currentOutputMime = result.mime;
     clearOutputHistory();
     updateOutputVersionControls();
-    renderBottomReports(model, result.type === "text" ? result.data : "");
+    renderBottomReports(currentDocumentModel, result.type === "text" ? result.data : "");
     renderVerificationReport(currentConversionQuality);
 
     if (result.type === "binary") {
