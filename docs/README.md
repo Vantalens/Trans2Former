@@ -1,80 +1,167 @@
-# Trans2Former Documentation
+# Trans2Former 文档中心
 
-本目录用于承载开发期的产品、架构、格式、质量和安全文档。根目录文档只保留入口、安装、贡献和任务状态；长期原则和专题设计统一放在这里。
+欢迎来到 Trans2Former 文档中心！本目录包含项目的所有开发文档、指南和报告。
 
-## 推荐阅读顺序
+## 📚 快速导航
 
-1. [PROJECT_ASSESSMENT_2026-05-27.md](PROJECT_ASSESSMENT_2026-05-27.md)：当前项目评估、已验证发布基线和下一阶段方向。
-2. [PRODUCT_STRATEGY.md](PRODUCT_STRATEGY.md)：产品边界、市场路线、差异化亮点和数据安全底线。
-3. [DESKTOP_APP_ARCHITECTURE.md](DESKTOP_APP_ARCHITECTURE.md)：Tauri 桌面壳、Web-GUI、体验标准、版本控制和本地处理架构。
-4. [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md)：P7 桌面发布、安装包、checksum、平台 smoke 和核心能力发布规则。
-5. [CONVERSION_PATHS.md](CONVERSION_PATHS.md)：输入格式到输出格式的产品路径矩阵。
-6. [MULTI_MODEL_ARCHITECTURE.md](MULTI_MODEL_ARCHITECTURE.md)：P8 多模型架构（SemanticDoc / WorkbookModel / SlideModel / FixedLayoutModel / AssetGraph）。
-7. [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md)：P8 Capability Registry + Route Planner，路径可见性基线与执行型 mapper 后续校准。
-8. [FORMAT_ROADMAP.md](FORMAT_ROADMAP.md)：格式覆盖矩阵、格式优先级和建议执行顺序。
-9. [DOCUMENT_MODEL_SCHEMA.md](DOCUMENT_MODEL_SCHEMA.md)：`DocumentModel` 的结构说明。
-10. [CONVERSION_POLICY.md](CONVERSION_POLICY.md)：不可逆转换、降级和 warnings 策略。
-11. [BASIC_FORMAT_QUALITY.md](BASIC_FORMAT_QUALITY.md)：P0 基础格式 before/after、保真范围和降级说明。
-12. [HEAVY_FORMAT_CAPABILITY_NOTES.md](HEAVY_FORMAT_CAPABILITY_NOTES.md)：重格式能力等级、warnings、资源预算和降级路径。
-13. [STRUCTURED_EDITING_MODEL.md](STRUCTURED_EDITING_MODEL.md)：桌面 Web-GUI 结构化编辑状态模型。
-14. [AI_READY_MARKDOWN.md](AI_READY_MARKDOWN.md)：AI/RAG 友好的 Markdown 输出准则。
-15. [SECURITY_POLICY.md](SECURITY_POLICY.md)：本地优先、零云端处理、安全模式和核心内置处理规则。
-16. [RESOURCE_BUDGET.md](RESOURCE_BUDGET.md)：核心包体积、依赖和重格式本地模块边界。
-17. [DYNAMIC_CHUNKING_MERGE_DESIGN.md](DYNAMIC_CHUNKING_MERGE_DESIGN.md)：超大单文件动态分块与结构化合并设计。
-18. [OOXML_CONTAINER.md](OOXML_CONTAINER.md)：ZIP/OOXML 容器基础设施。
-19. [DOCX_INPUT_MVP.md](DOCX_INPUT_MVP.md)：DOCX input 支持范围和限制。
-20. [XLSX_INPUT_MVP.md](XLSX_INPUT_MVP.md)：XLSX input 支持范围和限制。
-21. [EPUB_INPUT_MVP.md](EPUB_INPUT_MVP.md)：EPUB input 支持范围和限制。
-22. [PDF_TEXT_EXTRACTION_MVP.md](PDF_TEXT_EXTRACTION_MVP.md)：PDF 文本提取 MVP 支持范围和限制。
-23. [PPTX_INPUT_MVP.md](PPTX_INPUT_MVP.md)：PPTX input 支持范围和限制。
-24. [P4_OUTPUTS.md](P4_OUTPUTS.md)：DOCX/XLSX/EPUB/PPTX/PDF output 支持范围和限制，以及 PNG/JPEG 输出隐藏规则。
-25. [OFD_RESEARCH.md](OFD_RESEARCH.md)：OFD 政务格式高保真攻坚路线、能力等级和样例规则。
-26. [PROJECT_ASSESSMENT_2026-05-03.md](PROJECT_ASSESSMENT_2026-05-03.md)：插件路线取消前的历史评估。
-27. [PROJECT_ASSESSMENT_2026-04-30.md](PROJECT_ASSESSMENT_2026-04-30.md)：早期项目评估、问题和修复结果。
-28. [RELEASE_PREP.md](RELEASE_PREP.md)：GitHub release 准备规则和本地 release 包流程。
-29. [development-standards/00_README.md](development-standards/00_README.md)：开发规范体系，覆盖文档、流程、AI 协作、质量门禁和成本资源治理。
+### 🚀 新手入门
+1. [README.md](../README.md) - 项目介绍和快速开始
+2. [INSTALL.md](development/INSTALL.md) - 安装指南
+3. [CONTRIBUTING.md](../CONTRIBUTING.md) - 贡献指南
 
-## 文档职责
+### 💻 开发者必读
+1. [CLAUDE.md](../CLAUDE.md) - **AI 协作入口**（每次开发前必读）
+2. [PRD.md](development/PRD.md) - 产品需求文档
+3. [TECH_STACK.md](development/TECH_STACK.md) - 技术栈与架构
+4. [IMPLEMENTATION_PLAN.md](development/IMPLEMENTATION_PLAN.md) - 实施计划
+5. [TEST_PLAN.md](development/TEST_PLAN.md) - 测试计划
 
-| 文档 | 职责 |
-| --- | --- |
-| [../README.md](../README.md) | 项目入口、当前能力、运行和验证方式 |
-| [../DEVELOPMENT_TASKS.md](../DEVELOPMENT_TASKS.md) | 当前任务看板、阶段状态、下一步开发顺序 |
-| [../CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献规则、开发约束、测试要求 |
-| [../INSTALL.md](../INSTALL.md) | 安装、运行、验证、故障排除 |
-| [../COMMIT_CHECKLIST.md](../COMMIT_CHECKLIST.md) | 提交前检查 |
-| [../CHANGELOG.md](../CHANGELOG.md) | 已发生的变更记录 |
-| [PROJECT_ASSESSMENT_2026-05-27.md](PROJECT_ASSESSMENT_2026-05-27.md) | 当前项目评估、发布基线证据和下一阶段方向 |
-| [PROJECT_ASSESSMENT_2026-05-03.md](PROJECT_ASSESSMENT_2026-05-03.md) | 插件路线取消前的历史评估 |
-| [BASIC_FORMAT_QUALITY.md](BASIC_FORMAT_QUALITY.md) | P0 基础格式质量、样例和可解释降级 |
-| [CONVERSION_PATHS.md](CONVERSION_PATHS.md) | 输入到输出的产品路径矩阵 |
-| [MULTI_MODEL_ARCHITECTURE.md](MULTI_MODEL_ARCHITECTURE.md) | P8 多模型架构：五个规范模型 + 共享资产图 |
-| [CONVERSION_ROUTING.md](CONVERSION_ROUTING.md) | P8 Capability Registry + Route Planner |
-| [HEAVY_FORMAT_CAPABILITY_NOTES.md](HEAVY_FORMAT_CAPABILITY_NOTES.md) | 重格式 capability note、fixture 分层和 P4/P6 回归入口 |
-| [DESKTOP_APP_ARCHITECTURE.md](DESKTOP_APP_ARCHITECTURE.md) | 桌面 Web-GUI 架构、体验标准、模块、权限和版本策略 |
-| [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md) | P7 桌面安装包、平台 smoke、自动更新、文件关联和核心能力发布规则 |
-| [STRUCTURED_EDITING_MODEL.md](STRUCTURED_EDITING_MODEL.md) | P1 结构化编辑状态模型 |
-| [AI_READY_MARKDOWN.md](AI_READY_MARKDOWN.md) | AI-ready Markdown 输出准则 |
-| [OOXML_CONTAINER.md](OOXML_CONTAINER.md) | ZIP/OOXML 容器基础设施 |
-| [DOCX_INPUT_MVP.md](DOCX_INPUT_MVP.md) | DOCX input |
-| [XLSX_INPUT_MVP.md](XLSX_INPUT_MVP.md) | XLSX input |
-| [EPUB_INPUT_MVP.md](EPUB_INPUT_MVP.md) | EPUB input |
-| [PDF_TEXT_EXTRACTION_MVP.md](PDF_TEXT_EXTRACTION_MVP.md) | PDF 文本提取 MVP |
-| [PPTX_INPUT_MVP.md](PPTX_INPUT_MVP.md) | PPTX input |
-| [P4_OUTPUTS.md](P4_OUTPUTS.md) | P4 output |
-| [PROJECT_ASSESSMENT_2026-04-30.md](PROJECT_ASSESSMENT_2026-04-30.md) | 早期项目评估和修复记录 |
-| [RELEASE_PREP.md](RELEASE_PREP.md) | GitHub release 准备规则 |
-| [development-standards/00_README.md](development-standards/00_README.md) | 开发规范、任务流程、质量门禁和成本资源治理 |
-| [OFD_RESEARCH.md](OFD_RESEARCH.md) | OFD 高保真攻坚路线、能力等级、样例和安全准入 |
+---
 
-## 归档文档
+## 📁 文档分类
 
-历史审计、一次性修复记录和已经被专题文档吸收的材料统一放入 `docs/archive/`，不再堆在项目根目录。当前格式合规历史材料位于 [archive/format-compliance/](archive/format-compliance/)；日常开发优先阅读 `CONVERSION_PATHS.md`、`FORMAT_ROADMAP.md`、`BASIC_FORMAT_QUALITY.md` 和 `HEAVY_FORMAT_CAPABILITY_NOTES.md`。
+### [development/](development/) - 开发文档（10 个）
+开发相关的所有文档，包括需求、架构、测试、进度等。
 
-## 维护规则
+| 文档 | 说明 |
+|------|------|
+| [PRD.md](development/PRD.md) | 产品需求文档 |
+| [TECH_STACK.md](development/TECH_STACK.md) | 技术栈与架构 |
+| [IMPLEMENTATION_PLAN.md](development/IMPLEMENTATION_PLAN.md) | 实施计划 |
+| [TEST_PLAN.md](development/TEST_PLAN.md) | 测试计划 |
+| [AGENT_RULES.md](development/AGENT_RULES.md) | AI 协作详细规则 |
+| [progress.md](development/progress.md) | 进度追踪 |
+| [lessons.md](development/lessons.md) | 经验教训 |
+| [INSTALL.md](development/INSTALL.md) | 安装指南 |
+| [TESTING_GUIDE.md](development/TESTING_GUIDE.md) | 测试指南 |
+| [DEVELOPMENT_TASKS.md](development/DEVELOPMENT_TASKS.md) | 开发任务清单 |
 
-- 新增长期产品原则、架构决策或格式规划时，优先更新 `docs/` 专题文档。
-- `DEVELOPMENT_TASKS.md` 只记录可执行任务，不堆放长篇背景说明。
-- README 只保留用户和开发者快速入口，不复制完整路线图。
-- 修改支持格式、安全边界、资源预算、测试命令或运行方式时，同步更新相关专题文档和任务看板。
-- 核心模块化、热门基础格式免下载、本地按需加载、资源治理等开发规则统一维护在 `docs/development-standards/`。
+### [release/](release/) - 发布文档（4 个）
+版本发布相关的文档和发布说明。
+
+| 文档 | 说明 |
+|------|------|
+| [RELEASE_GUIDE.md](release/RELEASE_GUIDE.md) | 发布指南 |
+| [v2.3.0.md](release/v2.3.0.md) | v2.3.0 发布说明（最新） |
+| [v2.1.0.md](release/v2.1.0.md) | v2.1.0 发布说明 |
+| [v2.0.0.md](release/v2.0.0.md) | v2.0.0 发布说明 |
+
+### [checklists/](checklists/) - 检查清单（2 个）
+开发和发布过程中使用的检查清单。
+
+| 文档 | 说明 |
+|------|------|
+| [ACCEPTANCE_CHECKLIST.md](checklists/ACCEPTANCE_CHECKLIST.md) | 验收检查清单 |
+| [COMMIT_CHECKLIST.md](checklists/COMMIT_CHECKLIST.md) | 提交检查清单 |
+
+### [reports/](reports/) - 项目报告（2 个）
+项目整理报告和改进计划。
+
+| 文档 | 说明 |
+|------|------|
+| [PROJECT_ORGANIZATION_REPORT.md](reports/PROJECT_ORGANIZATION_REPORT.md) | 项目整理完成报告（2026-06-23） |
+| [P1_BRANCH_COVERAGE_PLAN.md](reports/P1_BRANCH_COVERAGE_PLAN.md) | P1: 分支覆盖率提升计划 |
+
+### [setup/](setup/) - 设置指南（1 个）
+项目设置相关的脚本和说明。
+
+| 文档 | 说明 |
+|------|------|
+| [setup-labels.md](setup/setup-labels.md) | GitHub Issue 标签设置指南 |
+
+### [i18n/](i18n/) - 多语言文档（9 个）
+不同语言的 README 文档。
+
+| 语言 | 文档 |
+|------|------|
+| 🇸🇦 العربية | [README.ar.md](i18n/README.ar.md) |
+| 🇩🇪 Deutsch | [README.de.md](i18n/README.de.md) |
+| 🇬🇧 English | [README.en.md](i18n/README.en.md) |
+| 🇪🇸 Español | [README.es.md](i18n/README.es.md) |
+| 🇫🇷 Français | [README.fr.md](i18n/README.fr.md) |
+| 🇯🇵 日本語 | [README.ja.md](i18n/README.ja.md) |
+| 🇰🇷 한국어 | [README.ko.md](i18n/README.ko.md) |
+| 🇧🇷 Português | [README.pt-BR.md](i18n/README.pt-BR.md) |
+| 🇷🇺 Русский | [README.ru.md](i18n/README.ru.md) |
+
+### [archived/](archived/) - 归档文档
+历史报告和临时文档的归档（不再维护）。
+
+---
+
+## 📖 推荐阅读顺序
+
+### 对于新加入的开发者
+1. [README.md](../README.md) - 了解项目
+2. [INSTALL.md](development/INSTALL.md) - 安装环境
+3. [CLAUDE.md](../CLAUDE.md) - AI 协作规范
+4. [PRD.md](development/PRD.md) - 产品需求
+5. [TECH_STACK.md](development/TECH_STACK.md) - 技术架构
+6. [CONTRIBUTING.md](../CONTRIBUTING.md) - 贡献指南
+
+### 对于 AI 协作开发
+
+**每次开发前必读**（按顺序）：
+
+1. [CLAUDE.md](../CLAUDE.md) - AI 协作入口
+2. [PRD.md](development/PRD.md) - 产品需求
+3. [TECH_STACK.md](development/TECH_STACK.md) - 技术架构
+4. [IMPLEMENTATION_PLAN.md](development/IMPLEMENTATION_PLAN.md) - 实施计划
+5. [TEST_PLAN.md](development/TEST_PLAN.md) - 测试计划
+6. [progress.md](development/progress.md) - 当前进度
+7. [lessons.md](development/lessons.md) - 经验教训
+8. [AGENT_RULES.md](development/AGENT_RULES.md) - 详细规则
+
+### 对于准备发布
+1. [TESTING_GUIDE.md](development/TESTING_GUIDE.md) - 运行测试
+2. [ACCEPTANCE_CHECKLIST.md](checklists/ACCEPTANCE_CHECKLIST.md) - 验收清单
+3. [RELEASE_GUIDE.md](release/RELEASE_GUIDE.md) - 发布流程
+4. [CHANGELOG.md](../CHANGELOG.md) - 更新变更日志
+
+---
+
+## 🔍 查找文档
+
+- **按主题搜索**：使用 IDE 的全局搜索功能
+- **按文件名**：所有文档都在 `docs/` 目录下分类存放
+- **按分类**：参考上面的分类导航
+
+---
+
+## 📝 文档维护规则
+
+### 新增文档时的归属
+- **开发文档** → `docs/development/`
+- **发布说明** → `docs/release/`
+- **检查清单** → `docs/checklists/`
+- **项目报告** → `docs/reports/`
+- **设置指南** → `docs/setup/`
+- **多语言版本** → `docs/i18n/`
+
+### 文档更新要求
+1. ✅ 同步更新版本号和日期
+2. ✅ 在变更记录中说明修改内容
+3. ✅ 保持文档间一致性
+4. ✅ 使用清晰的 Markdown 格式
+
+---
+
+## 📊 文档统计
+
+- **根目录文档**: 5 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE）
+- **docs/ 文档**: 29 个
+  - development: 10 个
+  - release: 4 个
+  - checklists: 2 个
+  - reports: 2 个
+  - setup: 1 个
+  - i18n: 9 个
+  - README.md: 1 个
+
+**总计**: 34 个文档（清晰分类，易于查找）
+
+---
+
+**文档版本**: v1.0.0  
+**最后更新**: 2026-06-23  
+**维护者**: Trans2Former Team
