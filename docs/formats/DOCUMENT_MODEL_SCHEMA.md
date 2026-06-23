@@ -1,8 +1,21 @@
-# DocumentModel Schema
+# DocumentModel Schema (v1 单一模型 - 当前实现)
 
-版本：v0.2.0
-状态：生效  
-最后更新：2026-04-30
+**版本：v0.2.0**  
+**状态：当前生效（v2 多域模型设计中，Phase 5 后迁移）**  
+**最后更新：2026-04-30**
+
+---
+
+## 说明
+
+本文档描述 Trans2Former 当前使用的**单一 DocumentModel 架构**（v1）。
+
+**架构演进**：
+- **当前**：单一 `DocumentModel` 承载所有格式（语义文档、表格、幻灯片、固定版式）
+- **目标**：多域模型架构（SemanticDoc, WorkbookModel, SlideModel, FixedLayoutModel, AssetGraph）
+- **迁移计划**：详见 [MULTI_MODEL_ARCHITECTURE.md](../architecture/MULTI_MODEL_ARCHITECTURE.md)
+
+---
 
 ## 目标
 

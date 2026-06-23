@@ -76,6 +76,13 @@ Trans2Former/
 
 增强能力直接内置于核心模块，不使用插件机制；模型资源不入 git，由 vendor 脚本按钉定来源下载并经 SHA-256 校验（[scripts/paddleocr-models.manifest.json](scripts/paddleocr-models.manifest.json)），随发布包分发、开箱即用。
 
+**架构演进**：
+- **当前（v1）**：单一 DocumentModel 承载所有格式 - 详见 [DOCUMENT_MODEL_SCHEMA.md](docs/formats/DOCUMENT_MODEL_SCHEMA.md)
+- **目标（v2）**：多域模型架构（SemanticDoc, WorkbookModel, SlideModel, FixedLayoutModel, AssetGraph）- 详见 [MULTI_MODEL_ARCHITECTURE.md](docs/architecture/MULTI_MODEL_ARCHITECTURE.md)
+- **迁移计划**：Phase 5 完成详细设计，Phase 6+ 分阶段实施
+
+**本地能力**：
+
 - **PP-OCRv5 本地 OCR**：图片与扫描 PDF 的检测 + 识别 + 方向分类，含纠偏、去噪、版面归并和置信度评分
 - **Tesseract.js 轻量 OCR**：可选引擎，在安全中心导入 tessdata 即可启用
 - **三层转换校验**：规则 diff + SSIM + OCR 回读，结果可解释、可降级

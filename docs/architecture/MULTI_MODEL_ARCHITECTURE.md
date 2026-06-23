@@ -1,8 +1,21 @@
-# Multi-Model Architecture
+# Multi-Model Architecture (v2 多域模型 - 目标架构)
 
-版本：v0.1.0
-状态：方案落地，分阶段实施（P8-M1 ~ M6）
-最后更新：2026-05-12
+**版本：v0.1.0**  
+**状态：设计文档（Phase 5 详细设计，Phase 6+ 实施）**  
+**最后更新：2026-05-12**
+
+---
+
+## 说明
+
+本文档描述 Trans2Former **目标架构**（v2）：从单一 DocumentModel 升级为五个并列规范模型。
+
+**架构演进**：
+- **v1（当前）**：单一 `DocumentModel` - 详见 [DOCUMENT_MODEL_SCHEMA.md](../formats/DOCUMENT_MODEL_SCHEMA.md)
+- **v2（目标）**：五个规范模型（本文档）
+- **迁移计划**：Phase 5 完成详细设计，Phase 6+ 分阶段实施
+
+---
 
 ## 设计原则
 
