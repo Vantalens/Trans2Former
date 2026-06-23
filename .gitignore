@@ -104,3 +104,9 @@ Thumbs.db
 # Coverage output (regenerable via npm run coverage)
 /.coverage-tmp/
 /coverage/
+.archive/
+
+# Archived temporary files and old reports
+.archive/temp-files/
+.archive/test-artifacts/
+.archive/old-reports/
