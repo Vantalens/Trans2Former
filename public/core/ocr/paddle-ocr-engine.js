@@ -8,7 +8,7 @@ import {
   OCR_ENGINE_FAILED,
   OCR_UNAVAILABLE,
 } from "./ocr-warnings.js";
-import { loadOnnxRuntime, pickExecutionProviders, createOcrSession, disposeOcrSession } from "./paddle-ocr-runtime.js";
+import { loadOnnxRuntime, pickExecutionProviders, createOcrSession, disposeOcrSession, clearSessionCache } from "./paddle-ocr-runtime.js";
 import { runPaddlePipeline, parseCharDictionary } from "./paddle-ocr-pipeline.js";
 
 const DICT_KEY = "paddleocr/v5/dict.txt";
@@ -126,6 +126,7 @@ export const paddleOcrEngine = Object.freeze({
     // P9-D.2.b：真实推理管线。Node/未 vendor 在 loadOnnxRuntime 抛 OCR_VENDOR_LOAD_FAILED。
     const ort = await loadOnnxRuntime();
     const providers = pickExecutionProviders();
+    const providersKey = providers.join(",");
     let detSession = null;
     let clsSession = null;
     let recSession = null;
@@ -147,9 +148,10 @@ export const paddleOcrEngine = Object.freeze({
         });
       }
       const dictionary = parseCharDictionary(new TextDecoder().decode(dictBuf instanceof ArrayBuffer ? new Uint8Array(dictBuf) : dictBuf));
-      detSession = await createOcrSession({ ort, modelBuffer: detBuf, providers });
-      clsSession = clsBuf ? await createOcrSession({ ort, modelBuffer: clsBuf, providers }) : null;
-      recSession = await createOcrSession({ ort, modelBuffer: recBuf, providers });
+      // 使用缓存 key 复用 sessions：按模型类型 + providers 缓存
+      detSession = await createOcrSession({ ort, modelBuffer: detBuf, providers, cacheKey: `paddleocr-det-${providersKey}` });
+      clsSession = clsBuf ? await createOcrSession({ ort, modelBuffer: clsBuf, providers, cacheKey: `paddleocr-cls-${providersKey}` }) : null;
+      recSession = await createOcrSession({ ort, modelBuffer: recBuf, providers, cacheKey: `paddleocr-rec-${providersKey}` });
       return await runPaddlePipeline({
         ort,
         detSession,
@@ -167,9 +169,10 @@ export const paddleOcrEngine = Object.freeze({
         details: { engineId: "paddleocr-v5", reason: "inference-failed", providers, cause: String(error?.name || error?.message || "unknown") },
       });
     } finally {
-      await disposeOcrSession(detSession);
-      await disposeOcrSession(clsSession);
-      await disposeOcrSession(recSession);
+      // 不再释放 sessions，让它们保持缓存以供后续页面复用
+      await disposeOcrSession(detSession, `paddleocr-det-${providersKey}`);
+      await disposeOcrSession(clsSession, clsSession ? `paddleocr-cls-${providersKey}` : null);
+      await disposeOcrSession(recSession, `paddleocr-rec-${providersKey}`);
     }
   },
 });
@@ -177,3 +180,6 @@ export const paddleOcrEngine = Object.freeze({
 export function markPaddleOcrVendorReady(ready = true) {
   globalThis.__t2fPaddleOcrVendorReady = Boolean(ready);
 }
+
+// 导出清理函数，供外部在需要释放内存时调用
+export { clearSessionCache };

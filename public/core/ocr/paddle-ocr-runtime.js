@@ -13,6 +13,8 @@ export const PADDLE_VENDOR_PATHS = Object.freeze({
 });
 
 let cachedNamespace = null;
+// Session 缓存：按模型 key 缓存已创建的 InferenceSession，避免重复加载/编译
+const sessionCache = new Map();
 
 function hasWebGPU() {
   return typeof globalThis !== "undefined"
@@ -57,7 +59,7 @@ export async function loadOnnxRuntime(vendorUrl = PADDLE_VENDOR_PATHS.mainBundle
   }
 }
 
-export async function createOcrSession({ ort, modelBuffer, providers = pickExecutionProviders() } = {}) {
+export async function createOcrSession({ ort, modelBuffer, providers = pickExecutionProviders(), cacheKey = null } = {}) {
   if (!ort || !ort.InferenceSession) {
     throw new ConversionError("onnxruntime namespace 未就位，无法创建 InferenceSession。", {
       category: "convert",
@@ -72,9 +74,22 @@ export async function createOcrSession({ ort, modelBuffer, providers = pickExecu
       details: { reason: "missing-model-buffer" },
     });
   }
+
+  // 如果提供了 cacheKey，先检查缓存
+  if (cacheKey && sessionCache.has(cacheKey)) {
+    return sessionCache.get(cacheKey);
+  }
+
   try {
     const data = modelBuffer instanceof ArrayBuffer ? new Uint8Array(modelBuffer) : modelBuffer;
-    return await ort.InferenceSession.create(data, { executionProviders: providers });
+    const session = await ort.InferenceSession.create(data, { executionProviders: providers });
+
+    // 如果提供了 cacheKey，缓存 session
+    if (cacheKey) {
+      sessionCache.set(cacheKey, session);
+    }
+
+    return session;
   } catch (error) {
     throw new ConversionError(`ONNX InferenceSession 创建失败：${error?.message || error}`, {
       category: "convert",
@@ -84,12 +99,30 @@ export async function createOcrSession({ ort, modelBuffer, providers = pickExecu
   }
 }
 
-export async function disposeOcrSession(session) {
+export async function disposeOcrSession(session, cacheKey = null) {
+  // 如果 session 在缓存中，不释放（保持复用）
+  if (cacheKey && sessionCache.has(cacheKey) && sessionCache.get(cacheKey) === session) {
+    return;
+  }
+
   if (session && typeof session.release === "function") {
     try { await session.release(); } catch (error) { /* ignore */ }
   }
 }
 
+// 清理 session 缓存（在需要释放内存时调用）
+export async function clearSessionCache() {
+  const sessions = Array.from(sessionCache.values());
+  sessionCache.clear();
+
+  for (const session of sessions) {
+    if (session && typeof session.release === "function") {
+      try { await session.release(); } catch (error) { /* ignore */ }
+    }
+  }
+}
+
 export function resetOnnxRuntimeCache() {
   cachedNamespace = null;
+  sessionCache.clear();
 }
