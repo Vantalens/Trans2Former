@@ -56,8 +56,16 @@ const NAMED_ENTITIES = {
 
 function decodeHtmlEntities(value) {
   return String(value ?? "")
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(Number.parseInt(n, 16)))
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => {
+      const code = Number.parseInt(n, 16);
+      // 修复 issue #183: 验证 Unicode 范围 (0x0 到 0x10FFFF)
+      return (code >= 0 && code <= 0x10FFFF) ? String.fromCodePoint(code) : '�';
+    })
+    .replace(/&#(\d+);/g, (_, n) => {
+      const code = Number(n);
+      // 修复 issue #183: 验证 Unicode 范围 (0 到 1114111)
+      return (code >= 0 && code <= 0x10FFFF) ? String.fromCodePoint(code) : '�';
+    })
     .replace(/&([a-zA-Z][a-zA-Z0-9]+);/g, (raw, name) => {
       const decoded = NAMED_ENTITIES[name];
       return decoded != null ? decoded : raw;
