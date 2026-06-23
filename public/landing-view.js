@@ -88,7 +88,7 @@ function buildHero(host, stats) {
       <h2 class="landing-hero-title">把文档跨格式转换变成<br/><span class="landing-hero-accent">可验证、可修复、可解释</span>的工程</h2>
       <p class="landing-hero-sub">${stats.inputFormats} 种输入 × ${stats.outputFormats} 种输出 · ${stats.recommendedRoutes} 条推荐路径 · Repair Engine（2/7 动作已实现）· 处理阶段禁联网</p>
       <div class="landing-hero-actions">
-        <button type="button" class="landing-cta-primary" data-landing-cta>立即体验 ${svgIcon("arrow")}</button>
+        <button type="button" class="primary-button btn-gradient btn-lg" data-landing-cta>立即体验 ${svgIcon("arrow")}</button>
         <a href="#formats" class="landing-cta-ghost">查看路径矩阵</a>
       </div>
       <ul class="landing-hero-badges">
@@ -191,7 +191,7 @@ function buildCta(host) {
   wrapper.innerHTML = `
     <h3>现在就开始一次本地优先的转换</h3>
     <p>无需注册、无云端依赖、无插件安装。打开工作台，拖入文件，立刻看到结构化质量报告。</p>
-    <button type="button" class="landing-cta-primary" data-landing-cta>打开工作台 ${svgIcon("arrow")}</button>
+    <button type="button" class="primary-button btn-gradient btn-lg" data-landing-cta>打开工作台 ${svgIcon("arrow")}</button>
   `;
   host.appendChild(wrapper);
 }
