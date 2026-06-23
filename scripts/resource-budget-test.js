@@ -9,7 +9,8 @@ const BUDGETS = [
   // issue #115 修复: 添加 resourceBudget 执行检查，预算微调至 321KB。
   // issue #161 #166: ConversionError 正确调用 + null 防护，预算微调至 322KB。
   // issue #163 修复: Tesseract Worker 资源清理逻辑，预算保持 322KB。
-  { path: "public/core", maxBytes: 322 * 1024 },
+  // issue #177 修复: PDF ToUnicode CMap + API 签名修复，OCR 管线扩展，预算调整至 460KB。
+  { path: "public/core", maxBytes: 460 * 1024 },
   { path: "public/formats", maxBytes: 512 * 1024 },
   { path: "public/workers", maxBytes: 128 * 1024 },
   { path: "scripts", maxBytes: 512 * 1024 },
