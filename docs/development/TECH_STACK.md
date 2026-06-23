@@ -111,7 +111,14 @@ Trans2Former/
 
 **关键组件**：
 
-#### DocumentModel（文档模型）
+#### DocumentModel（文档模型 - v1 当前实现）
+
+**架构演进**：
+- **✅ v1（当前）**：单一 `DocumentModel` 统一承载所有格式 - 详见 [DOCUMENT_MODEL_SCHEMA.md](../formats/DOCUMENT_MODEL_SCHEMA.md)
+- **🎯 v2（目标）**：五个规范模型（SemanticDoc、WorkbookModel、SlideModel、FixedLayoutModel、AssetGraph）- 详见 [MULTI_MODEL_ARCHITECTURE.md](../architecture/MULTI_MODEL_ARCHITECTURE.md)
+- **⏱️ 迁移计划**：Phase 5 完成详细设计，Phase 6+ 分阶段实施
+
+**v1 当前结构**：
 ```javascript
 {
   blocks: [
@@ -252,16 +259,22 @@ Main Thread          Worker Thread
 - ❌ 代码复杂度增加（Worker 通信）
 - ❌ 调试稍困难（已通过完善的测试缓解）
 
-### 4.4 DocumentModel 中间表示 vs 直接转换
+### 4.4 DocumentModel 中间表示 vs 直接转换（v1 当前架构）
 
-**选择**：统一 DocumentModel
+**选择**：统一 DocumentModel（v1 单一模型）
 
-**理由**：
+**架构演进**：
+- **✅ v1（当前）**：单一 `DocumentModel` - 9 种块类型统一承载所有格式
+- **🎯 v2（目标）**：多域模型 - SemanticDoc、WorkbookModel、SlideModel、FixedLayoutModel、AssetGraph
+- **迁移路径**：Phase 5 详细设计，Phase 6+ 分阶段实施，保持向下兼容
+
+**v1 架构理由**：
 - ✅ 解耦输入输出格式（添加新格式容易）
 - ✅ 统一质量验证
 - ✅ 便于实现批量操作
 - ✅ 可扩展性好
 - ❌ 性能开销（直接转换更快，但可接受）
+- ⚠️ 跨域语义损失（表格→文档、演示→文档存在降级，v2 将通过显式 mapper 解决）
 
 ### 4.5 测试框架选择
 
@@ -275,7 +288,7 @@ Main Thread          Worker Thread
 
 ## 5. 数据流
 
-### 5.1 完整转换流程
+### 5.1 完整转换流程（基于 v1 DocumentModel）
 
 ```
 用户上传文件
@@ -284,7 +297,7 @@ Main Thread          Worker Thread
     ↓
 [格式检测] → 确定输入格式
     ↓
-[格式 Reader] → DocumentModel
+[格式 Reader] → DocumentModel (v1 单一模型)
     ↓
 [文档审计] → 添加 ID、质量报告
     ↓
@@ -296,6 +309,8 @@ Main Thread          Worker Thread
     ↓
 [下载保存] → 本地文件系统
 ```
+
+**注**：v2 多域模型将在此流程中引入跨模型 mapper，详见 [MULTI_MODEL_ARCHITECTURE.md](../architecture/MULTI_MODEL_ARCHITECTURE.md)
 
 ### 5.2 OCR 流程
 

@@ -169,7 +169,11 @@
 
 ### 决策1: 废弃插件模式 ✅
 - **理由**: 研究报告认为"增强能力直接并入核心"更符合产品路线
-- **行动**: 归档PLUGIN_SECURITY_MODEL.md，删除PluginManager逻辑
+- **行动**: 已创建 docs/archive/PLUGIN_DEPRECATION.md 说明废弃决策
+- **状态**: ✅ 已完成（2026-06-23）
+  - PLUGIN_SECURITY_MODEL.md 已移除
+  - README.md 明确"不使用插件机制"
+  - 代码中无 PluginManager 逻辑
 
 ### 决策2: Repair Engine收缩宣传 ✅
 - **理由**: 7类修复中5类为placeholder，不符合"不过度超前"原则
