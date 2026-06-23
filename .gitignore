@@ -53,6 +53,10 @@ Thumbs.db
 .local/
 .claude/settings.local.json
 
+# Claude Code worktrees and workflows (temporary)
+.claude/worktrees/
+.claude/workflows/
+
 # Local tooling / review pipeline scratch (never committed)
 /.codegraph/
 /.review-tmp/
@@ -62,6 +66,20 @@ Thumbs.db
 /release/
 /releases/
 /artifacts/
+
+# Temporary review and audit reports (keep only final versions)
+/AUDIT_REPORT.md
+/FINAL_FIX_*.md
+/FIX_*.md
+/PDF_*_ISSUE.md
+/PDF_*_SUMMARY.md
+/PROJECT_FEEDBACK_*.md
+/fix-log.txt
+/pr*.diff
+/test-data-descriptor.cjs
+/audit-results/
+/CODE_REVIEW_REPORT.md
+/public/CODE_REVIEW_REPORT.md
 
 # Generated sample corpus (programmatically regenerable; `npm run samples:generate`)
 /samples/generated/
