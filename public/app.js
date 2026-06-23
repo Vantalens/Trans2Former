@@ -600,12 +600,26 @@ function renderBottomReports(model = null, output = "") {
   );
 
   const quality = summarizeQualityReport(model);
-  renderVirtualTextList(qualityReportList, [
+  const qualityLines = [
     `warnings: ${quality.warningCount}`,
     `structure: ${quality.structureFidelity}`,
     `asset: ${quality.assetFidelity}`,
     `text: ${quality.textFidelity}`,
-  ], "等待转换");
+  ];
+
+  // 添加 Repair Engine recommendations（如果有）
+  const autoRepair = quality.autoRepair || {};
+  const recommendations = autoRepair.recommendations || [];
+  if (recommendations.length > 0) {
+    qualityLines.push(`repair recommendations: ${recommendations.length} 条`);
+    recommendations.forEach((rec, index) => {
+      const actionDesc = rec.actionType || "unknown";
+      const noteDesc = rec.note ? ` (${rec.note})` : "";
+      qualityLines.push(`  [${index + 1}] ${actionDesc}${noteDesc}`);
+    });
+  }
+
+  renderVirtualTextList(qualityReportList, qualityLines, "等待转换");
 
   const current = sessionVersions.at(outputVersionIndex) || sessionVersions.at(-1);
   const previous = outputVersionIndex > 0 ? sessionVersions.at(outputVersionIndex - 1) : null;

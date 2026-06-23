@@ -44,7 +44,7 @@ const FEATURE_CARDS = [
   {
     icon: "wand",
     title: "Repair Engine 自动修复",
-    body: "结构化修复动作 + 规则驱动 validator + post-repair 复核，转换缺陷自动检测、自动应用、复核失败回退。",
+    body: "结构化修复动作 + 规则驱动 validator + post-repair 复核。当前实现：replaceTextRun + selectFallbackRoute 自动应用；insertTextRun / reorderBlocks / restoreTableGrid / adjustBoundingBox / regeneratePageLayout 为占位（S3/S4 路线图）。",
   },
   {
     icon: "scope",
@@ -56,7 +56,7 @@ const FEATURE_CARDS = [
 const WORKFLOW_STEPS = [
   { step: "1", title: "导入", body: "拖入或选择文件，自动识别格式" },
   { step: "2", title: "路由", body: "Planner 计算最佳路径与温度等级" },
-  { step: "3", title: "Repair", body: "Repair Engine 提议、应用、复核修复动作" },
+  { step: "3", title: "Repair", body: "Repair Engine 提议、应用（当前 2/7 动作）、复核" },
   { step: "4", title: "质检", body: "规则 + SSIM + OCR 回读三层证据" },
   { step: "5", title: "输出", body: "高质量目标格式，可下载、可独立预览" },
 ];
@@ -86,7 +86,7 @@ function buildHero(host, stats) {
     <div class="landing-hero-inner">
       <span class="landing-hero-eyebrow">v2.3 · local-first 多格式转换工作台</span>
       <h2 class="landing-hero-title">把文档跨格式转换变成<br/><span class="landing-hero-accent">可验证、可修复、可解释</span>的工程</h2>
-      <p class="landing-hero-sub">${stats.inputFormats} 种输入 × ${stats.outputFormats} 种输出 · ${stats.recommendedRoutes} 条推荐路径 · Repair Engine 自动修复 · 处理阶段禁联网</p>
+      <p class="landing-hero-sub">${stats.inputFormats} 种输入 × ${stats.outputFormats} 种输出 · ${stats.recommendedRoutes} 条推荐路径 · Repair Engine（2/7 动作已实现）· 处理阶段禁联网</p>
       <div class="landing-hero-actions">
         <button type="button" class="landing-cta-primary" data-landing-cta>立即体验 ${svgIcon("arrow")}</button>
         <a href="#formats" class="landing-cta-ghost">查看路径矩阵</a>
