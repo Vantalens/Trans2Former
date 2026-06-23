@@ -51,6 +51,7 @@
 |------|------|
 | [BENCHMARK.md](BENCHMARK.md) | 📊 基准测试报告（转换正确性、性能、OCR 准确率） |
 | [V2_MULTI_DOMAIN_MODELS.md](V2_MULTI_DOMAIN_MODELS.md) | 📖 v2 多域模型参考手册（用户指南） |
+| [V2_MIGRATION_GUIDE.md](V2_MIGRATION_GUIDE.md) | 🔄 v2 迁移指南（从 v1 迁移到 v2） |
 
 ### 测试样例
 测试样例库和 fixture 索引。
@@ -201,9 +202,9 @@
 ## 📊 文档统计
 
 - **根目录文档**: 6 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE, THIRD_PARTY_NOTICES.md）
-- **docs/ 文档**: 35 个
+- **docs/ 文档**: 36 个
   - development: 10 个
-  - architecture: 2 个（新增 MULTI_DOMAIN_MODEL_DESIGN.md）
+  - architecture: 2 个（MULTI_DOMAIN_MODEL_DESIGN.md, MULTI_MODEL_ARCHITECTURE.md）
   - formats: 1 个（v1-document-model.md，归档）
   - product: 1 个（CONVERSION_POLICY.md）
   - release: 4 个
@@ -211,11 +212,11 @@
   - reports: 2 个
   - setup: 1 个
   - i18n: 9 个
-  - quality: 2 个（BENCHMARK.md, V2_MULTI_DOMAIN_MODELS.md）
+  - quality: 3 个（BENCHMARK.md, V2_MULTI_DOMAIN_MODELS.md, V2_MIGRATION_GUIDE.md）
   - README.md: 1 个
 - **samples/ 文档**: 4 个（corpus/README.md, fixtures/README.md, ofd/README.md, png/README.md）
 
-**总计**: 45 个文档（清晰分类，易于查找）
+**总计**: 46 个文档（清晰分类，易于查找）
 
 ---
 

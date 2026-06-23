@@ -4,106 +4,129 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname).slice(1), "..");
-const workbenchStateCode = await readFile(path.join(ROOT, "public/core/workbench-state.js"), "utf8");
+import { createQueueItem, buildExportFileName, summarizeQualityReport } from "../public/core/workbench-state.js";
 
 console.log("Testing workbench state management...\n");
 
-// Test 1: 验证状态结构定义
-console.log("Test 1: Verify workbench state structure");
-assert.equal(workbenchStateCode.includes("export function WorkbenchState()"), true, "WorkbenchState 构造函数应该存在");
-assert.equal(workbenchStateCode.includes("this.queue"), true, "应该有 queue 属性");
-assert.equal(workbenchStateCode.includes("this.active"), true, "应该有 active 属性");
-assert.equal(workbenchStateCode.includes("this.completed"), true, "应该有 completed 属性");
-console.log("  ✅ 状态结构定义正确\n");
+// Test 1: createQueueItem - 正常文件
+console.log("Test 1: createQueueItem with valid file");
+const mockFile = { name: "test.pdf", size: 1024 };
+const item1 = createQueueItem(mockFile, "pdf");
+assert.equal(item1.name, "test.pdf");
+assert.equal(item1.size, 1024);
+assert.equal(item1.format, "pdf");
+assert.equal(item1.status, "queued");
+assert.equal(item1.selected, true);
+assert.equal(item1.attempts, 0);
+assert.equal(item1.error, "");
+assert.ok(item1.id);
+console.log("  ✅ 正常文件队列项创建成功\n");
 
-// Test 2: 验证添加任务方法
-console.log("Test 2: Verify task addition methods");
-assert.equal(workbenchStateCode.includes("addTask") || workbenchStateCode.includes("enqueue"), true, "应该有添加任务的方法");
-console.log("  ✅ 任务添加方法存在\n");
+// Test 2: createQueueItem - 无文件对象
+console.log("Test 2: createQueueItem with null file");
+const item2 = createQueueItem(null);
+assert.equal(item2.name, "untitled");
+assert.equal(item2.size, 0);
+assert.equal(item2.format, "");
+assert.equal(item2.status, "queued");
+console.log("  ✅ null 文件处理正确\n");
 
-// Test 3: 验证任务状态转换
-console.log("Test 3: Verify task state transitions");
-assert.equal(
-  workbenchStateCode.includes("pending") || workbenchStateCode.includes("active") || workbenchStateCode.includes("completed"),
-  true,
-  "应该有任务状态定义"
-);
-console.log("  ✅ 任务状态转换逻辑存在\n");
+// Test 3: createQueueItem - 无大小属性
+console.log("Test 3: createQueueItem with missing size");
+const item3 = createQueueItem({ name: "doc.txt" });
+assert.equal(item3.name, "doc.txt");
+assert.equal(item3.size, 0);
+console.log("  ✅ 缺失 size 属性处理正确\n");
 
-// Test 4: 验证任务优先级
-console.log("Test 4: Verify task priority handling");
-const hasPriority = workbenchStateCode.includes("priority") || workbenchStateCode.includes("order");
-if (hasPriority) {
-  console.log("  ✅ 任务优先级处理存在");
-} else {
-  console.log("  ℹ️  未实现任务优先级（可选功能）");
-}
-console.log();
+// Test 4: buildExportFileName - 默认参数
+console.log("Test 4: buildExportFileName with defaults");
+const name1 = buildExportFileName();
+assert.ok(name1.endsWith(".txt"));
+assert.ok(name1.includes("document"));
+console.log(`  ✅ 默认文件名: ${name1}\n`);
 
-// Test 5: 验证任务清理
-console.log("Test 5: Verify task cleanup");
-assert.equal(
-  workbenchStateCode.includes("clear") || workbenchStateCode.includes("reset") || workbenchStateCode.includes("remove"),
-  true,
-  "应该有任务清理方法"
-);
-console.log("  ✅ 任务清理方法存在\n");
+// Test 5: buildExportFileName - 自定义名称和扩展名
+console.log("Test 5: buildExportFileName with custom name and extension");
+const name2 = buildExportFileName({ baseName: "myfile", extension: "pdf" });
+assert.ok(name2.includes("myfile"));
+assert.ok(name2.endsWith(".pdf"));
+console.log(`  ✅ 自定义文件名: ${name2}\n`);
 
-// Test 6: 验证并发控制
-console.log("Test 6: Verify concurrency control");
-const hasConcurrencyControl =
-  workbenchStateCode.includes("maxConcurrent") || workbenchStateCode.includes("limit") || workbenchStateCode.includes("parallel");
-if (hasConcurrencyControl) {
-  console.log("  ✅ 并发控制逻辑存在");
-} else {
-  console.log("  ℹ️  未实现并发控制（可选功能）");
-}
-console.log();
+// Test 6: buildExportFileName - 模板模式
+console.log("Test 6: buildExportFileName with pattern");
+const name3 = buildExportFileName({ pattern: "{name}-{date}.{ext}", baseName: "report", extension: "xlsx" });
+assert.ok(name3.includes("report"));
+assert.ok(name3.includes("-"));
+assert.ok(name3.endsWith(".xlsx"));
+console.log(`  ✅ 模板文件名: ${name3}\n`);
 
-// Test 7: 验证错误处理
-console.log("Test 7: Verify error handling");
-assert.equal(workbenchStateCode.includes("error") || workbenchStateCode.includes("failed") || workbenchStateCode.includes("catch"), true, "应该有错误处理");
-console.log("  ✅ 错误处理逻辑存在\n");
+// Test 7: buildExportFileName - 非法字符过滤
+console.log("Test 7: buildExportFileName with illegal characters");
+const name4 = buildExportFileName({ baseName: "file<>:|?*test", extension: "txt" });
+assert.equal(name4.includes("<"), false);
+assert.equal(name4.includes(">"), false);
+assert.equal(name4.includes(":"), false);
+assert.equal(name4.includes("|"), false);
+console.log(`  ✅ 非法字符过滤: ${name4}\n`);
 
-// Test 8: 验证状态查询
-console.log("Test 8: Verify state query methods");
-const hasQueryMethods =
-  workbenchStateCode.includes("getActive") || workbenchStateCode.includes("isPending") || workbenchStateCode.includes("isComplete");
-if (hasQueryMethods) {
-  console.log("  ✅ 状态查询方法存在");
-} else {
-  console.log("  ℹ️  使用直接属性访问（简化模式）");
-}
-console.log();
+// Test 8: buildExportFileName - Windows 保留名称
+console.log("Test 8: buildExportFileName with reserved Windows names");
+const name5 = buildExportFileName({ baseName: "CON", extension: "txt" });
+assert.ok(name5.startsWith("file"));
+console.log(`  ✅ Windows 保留名称处理: ${name5}\n`);
 
-// Test 9: 验证事件通知
-console.log("Test 9: Verify event notification");
-const hasEvents =
-  workbenchStateCode.includes("on") ||
-  workbenchStateCode.includes("addEventListener") ||
-  workbenchStateCode.includes("emit") ||
-  workbenchStateCode.includes("dispatch");
-if (hasEvents) {
-  console.log("  ✅ 事件通知系统存在");
-} else {
-  console.log("  ℹ️  未实现事件系统（简化模式）");
-}
-console.log();
+// Test 9: buildExportFileName - 空名称
+console.log("Test 9: buildExportFileName with empty name");
+const name6 = buildExportFileName({ baseName: "", extension: "md" });
+assert.ok(name6.includes("document"));
+assert.ok(name6.endsWith(".md"));
+console.log(`  ✅ 空名称回退: ${name6}\n`);
 
-// Test 10: 验证持久化
-console.log("Test 10: Verify persistence");
-const hasPersistence =
-  workbenchStateCode.includes("localStorage") || workbenchStateCode.includes("save") || workbenchStateCode.includes("load");
-if (hasPersistence) {
-  console.log("  ✅ 持久化功能存在");
-} else {
-  console.log("  ℹ️  未实现持久化（内存模式）");
-}
-console.log();
+// Test 10: buildExportFileName - 移除最后一个扩展名
+console.log("Test 10: buildExportFileName removes last extension");
+const name7 = buildExportFileName({ baseName: "test.old.pdf", extension: "docx" });
+assert.ok(name7.endsWith(".docx"));
+assert.equal(name7.endsWith(".pdf"), false);
+console.log(`  ✅ 最后扩展名移除: ${name7}\n`);
 
-console.log("✅ Workbench state test passed: structure and key methods verified.");
-console.log("📊 覆盖范围: 状态结构、任务管理、状态转换、清理、错误处理");
+// Test 11: summarizeQualityReport - 完整报告
+console.log("Test 11: summarizeQualityReport with full report");
+const model1 = {
+  metadata: {
+    qualityReport: {
+      warningCount: 5,
+      structureFidelity: "high",
+      assetFidelity: "medium",
+      textFidelity: "high",
+    },
+  },
+};
+const summary1 = summarizeQualityReport(model1);
+assert.equal(summary1.warningCount, 5);
+assert.equal(summary1.structureFidelity, "high");
+assert.equal(summary1.assetFidelity, "medium");
+assert.equal(summary1.textFidelity, "high");
+console.log("  ✅ 完整质量报告总结正确\n");
+
+// Test 12: summarizeQualityReport - 空模型
+console.log("Test 12: summarizeQualityReport with empty model");
+const summary2 = summarizeQualityReport(null);
+assert.equal(summary2.warningCount, 0);
+assert.equal(summary2.structureFidelity, "unknown");
+assert.equal(summary2.assetFidelity, "unknown");
+assert.equal(summary2.textFidelity, "unknown");
+console.log("  ✅ 空模型处理正确\n");
+
+// Test 13: summarizeQualityReport - 仅有 warnings 数组
+console.log("Test 13: summarizeQualityReport with warnings array only");
+const model2 = {
+  metadata: {
+    warnings: ["warn1", "warn2", "warn3"],
+  },
+};
+const summary3 = summarizeQualityReport(model2);
+assert.equal(summary3.warningCount, 3);
+console.log("  ✅ warnings 数组回退处理正确\n");
+
+console.log("✅ Workbench state test passed: all utility functions verified.");
+console.log("📊 覆盖范围: 队列项创建、文件名生成、质量报告总结、边界条件");

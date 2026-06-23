@@ -83,12 +83,6 @@ const retryFailedButton = document.getElementById("retryFailedButton");
 const outputDirectoryButton = document.getElementById("outputDirectoryButton");
 const exportNamingInput = document.getElementById("exportNamingInput");
 // 修复 issue #39: 删除 documentModelPreview（面板已移除）
-const warningsList = document.getElementById("warningsList");
-const resolveWarningsButton = document.getElementById("resolveWarningsButton");
-const clearResolvedWarningsButton = document.getElementById("clearResolvedWarningsButton");
-const qualityReportList = document.getElementById("qualityReportList");
-const diffSummary = document.getElementById("diffSummary");
-const versionsList = document.getElementById("versionsList");
 const verificationReportPanel = document.getElementById("verificationReportPanel");
 const verificationReportBadge = document.getElementById("verificationReportBadge");
 const verificationRepair = document.getElementById("verificationRepair");
@@ -153,7 +147,6 @@ let currentOutputMime = "";
 let currentOutputType = "none";
 let outputDraftCommitTimer = null;
 let markdownOutputProfile = "ai-ready";
-let currentResolvedWarnings = new Set();
 let historyPersistenceEnabled = false;
 let cachedHistoryKey = null; // 缓存历史存储键，避免每次提交重新计算（issue #65）
 
@@ -431,7 +424,6 @@ function writePersistentHistory() {
     window.localStorage.setItem(getHistoryStorageKey(), JSON.stringify({
       sessionVersions: versionsToStore,
       outputVersionIndex: Math.min(outputVersionIndex, versionsToStore.length - 1),
-      currentResolvedWarnings: [...currentResolvedWarnings],
       markdownOutputProfile,
     }));
   } catch {
@@ -508,47 +500,11 @@ function applyPersistentHistoryIfAny() {
     Math.max(0, Number(persisted.outputVersionIndex || 0)),
     Math.max(0, sessionVersions.length - 1)
   );
-  currentResolvedWarnings = new Set(Array.isArray(persisted.currentResolvedWarnings) ? persisted.currentResolvedWarnings : []);
   if (markdownProfileSelect && typeof persisted.markdownOutputProfile === "string") {
     markdownOutputProfile = persisted.markdownOutputProfile;
     markdownProfileSelect.value = markdownOutputProfile;
   }
   return sessionVersions.length > 0;
-}
-
-function updateWarningsResolvedControls(model = currentDocumentModel) {
-  const warningCount = getCurrentWarningSignatures(model).length;
-  const resolvedCount = [...currentResolvedWarnings].filter((signature) => getCurrentWarningSignatures(model).includes(signature)).length;
-  if (resolveWarningsButton) {
-    resolveWarningsButton.disabled = warningCount === 0;
-  }
-  if (clearResolvedWarningsButton) {
-    clearResolvedWarningsButton.disabled = currentResolvedWarnings.size === 0;
-  }
-  if (warningsList && warningCount > 0) {
-    warningsList.dataset.resolvedCount = String(resolvedCount);
-  }
-}
-
-function markCurrentWarningsResolved() {
-  const warningSignatures = getCurrentWarningSignatures();
-  if (!warningSignatures.length) {
-    setStatus("当前没有可标记的 warnings", "info");
-    return;
-  }
-  warningSignatures.forEach((signature) => currentResolvedWarnings.add(signature));
-  updateWarningsResolvedControls();
-  renderBottomReports(currentDocumentModel, getCurrentOutputContent());
-  writePersistentHistory();
-  setStatus("已标记当前 warnings 为已处理", "success");
-}
-
-function clearWarningsResolved() {
-  currentResolvedWarnings.clear();
-  updateWarningsResolvedControls();
-  renderBottomReports(currentDocumentModel, getCurrentOutputContent());
-  writePersistentHistory();
-  setStatus("已清除 warnings 已处理标记", "info");
 }
 
 function renderDocumentModelPanel(model = null) {
@@ -571,71 +527,6 @@ function renderVirtualTextList(target, rows, emptyText) {
   target.textContent = omitted > 0
     ? [...visibleRows, `... 已隐藏 ${omitted} 条，滚动/筛选视图将在后续批量任务中心加载`].join("\n")
     : visibleRows.join("\n");
-}
-
-function renderBottomReports(model = null, output = "") {
-  if (!warningsList || !qualityReportList || !diffSummary || !versionsList) {
-    return;
-  }
-  if (!model) {
-    renderVirtualTextList(warningsList, [], "无");
-    renderVirtualTextList(qualityReportList, [], "等待转换");
-    diffSummary.textContent = currentOutputType === "text" ? "尚无版本差异" : "非文本输出不参与文本 diff";
-    renderVirtualTextList(versionsList,
-      sessionVersions.map((item) => `${item.label}${item.kind === "checkpoint" ? " · checkpoint" : ""} · ${item.outputLength} chars · ${item.lineCount} lines`),
-      currentOutputType === "text" ? "v0 等待初始转换" : "当前输出不是可编辑文本，暂无会话版本历史"
-    );
-    updateWarningsResolvedControls(model);
-    return;
-  }
-
-  const warnings = model.metadata?.warnings || [];
-  renderVirtualTextList(
-    warningsList,
-    warnings.map((warning) => {
-      const signature = getWarningSignature(warning);
-      const resolved = currentResolvedWarnings.has(signature) ? "✓ 已处理" : "待处理";
-      return `${resolved} · ${warning.severity || "info"} · ${warning.code}: ${warning.message}`;
-    }),
-    "无"
-  );
-
-  const quality = summarizeQualityReport(model);
-  const qualityLines = [
-    `warnings: ${quality.warningCount}`,
-    `structure: ${quality.structureFidelity}`,
-    `asset: ${quality.assetFidelity}`,
-    `text: ${quality.textFidelity}`,
-  ];
-
-  // 添加 Repair Engine recommendations（如果有）
-  const autoRepair = quality.autoRepair || {};
-  const recommendations = autoRepair.recommendations || [];
-  if (recommendations.length > 0) {
-    qualityLines.push(`repair recommendations: ${recommendations.length} 条`);
-    recommendations.forEach((rec, index) => {
-      const actionDesc = rec.actionType || "unknown";
-      const noteDesc = rec.note ? ` (${rec.note})` : "";
-      qualityLines.push(`  [${index + 1}] ${actionDesc}${noteDesc}`);
-    });
-  }
-
-  renderVirtualTextList(qualityReportList, qualityLines, "等待转换");
-
-  const current = sessionVersions.at(outputVersionIndex) || sessionVersions.at(-1);
-  const previous = outputVersionIndex > 0 ? sessionVersions.at(outputVersionIndex - 1) : null;
-  const blockDiff = current && previous ? compareIdSets(previous.blockIds, current.blockIds) : null;
-  const textDiff = current && previous
-    ? `${previous.label} -> ${current.label}: ${Math.abs(current.outputLength - previous.outputLength)} chars, ${Math.abs(current.lineCount - previous.lineCount)} lines`
-    : (current ? "初始转换结果" : (currentOutputType === "text" ? "尚无版本差异" : "非文本输出不参与文本 diff"));
-  diffSummary.textContent = blockDiff
-    ? `${textDiff}\nblock ids: +${blockDiff.added} / -${blockDiff.removed} / =${blockDiff.shared}`
-    : textDiff;
-  renderVirtualTextList(versionsList,
-    sessionVersions.map((item) => `${item.label}${item.kind === "checkpoint" ? " · checkpoint" : ""} · ${item.outputLength} chars · ${item.lineCount} lines · ${item.blockIds?.length || 0} blocks`),
-    currentOutputType === "text" ? "v0 等待初始转换" : "当前输出不是可编辑文本，暂无会话版本历史"
-  );
-  updateWarningsResolvedControls(model);
 }
 
 function describeRuleDiff(ruleDiff, verification) {
@@ -907,7 +798,6 @@ function commitOutputVersion(output, { kind = "edit", forceNew = false } = {}) {
       outputVersionIndex = sessionVersions.length - 1;
     }
   }
-  renderBottomReports(currentDocumentModel, normalized);
   updateOutputVersionControls();
   writePersistentHistory();
 }
@@ -921,7 +811,6 @@ function applyOutputVersion(index) {
   outputEditor.value = snapshot.content;
   renderOutputPreview(snapshot.content);
   updateOutputDownloadLink(snapshot.content);
-  renderBottomReports(currentDocumentModel, snapshot.content);
   updateOutputVersionControls();
   writePersistentHistory();
   setStatus(`已切换到 ${snapshot.label}`, "info");
@@ -959,7 +848,6 @@ function initializeOutputDraft(result) {
         renderOutputPreview(snapshot.content);
         updateOutputDownloadLink(snapshot.content);
         updateOutputVersionControls();
-        renderBottomReports(currentDocumentModel, snapshot.content);
         setOutputMeta(`已恢复 ${sessionVersions.length} 个历史版本 · ${outputDirectoryLabel}`);
         return;
       }
@@ -1135,7 +1023,6 @@ function resetGeneratedOutput(metaMessage = "尚未生成") {
   currentOutputMime = "";
   currentOutputFormat = "";
   currentOutputType = "none";
-  currentResolvedWarnings = new Set();
   currentConversionQuality = null;
   if (verificationReportPanel) {
     verificationReportPanel.hidden = true;
@@ -1355,7 +1242,6 @@ function renderLargeDocumentPreview(rawContent, fileName = currentFileName) {
       },
     },
   });
-  renderBottomReports(model);
   lastRenderedPayload = getPayloadKey();
   setStatus(`大文件${rawContent.length >= LARGE_DEGRADED_PREVIEW_BYTES ? "降级" : "渐进"}预览已更新`, "success");
 }
@@ -1383,7 +1269,6 @@ function renderPreview() {
   htmlPreview.innerHTML = bodyHtml;
   renderMathIn(htmlPreview);
   renderDocumentModelPanel(model);
-  renderBottomReports(model);
   lastRenderedPayload = payloadKey;
   setStatus(`浏览器端预览已更新 (${Date.now() - renderStart}ms)`, "success");
 }
@@ -1423,7 +1308,6 @@ async function handleInputText(rawContent, fileName = currentFileName, { renderI
   currentDocumentModel = null;
   resetGeneratedOutput();
   renderDocumentModelPanel(null);
-  renderBottomReports(null);
   lastRenderedPayload = "";
   clearErrorDetails();
   updateWordCount();
@@ -1671,8 +1555,8 @@ async function transformContent() {
     // 1. 双倍解析开销（大文件时主线程阻塞数秒）
     // 2. 主线程解析的 model 未经过 OCR stage，与实际输出 model 不一致
     //
-    // currentDocumentModel 主要用于 renderBottomReports 和 renderDocumentModelPanel，
-    // 但这两个面板的 DOM 元素已被移除（issue #34, #39），函数会立即 early return。
+    // currentDocumentModel 主要用于 renderDocumentModelPanel，
+    // 该函数只保留状态赋值（面板已删除，但状态被其他功能依赖）。
     // 因此暂时设为 null，等待未来如果需要展示 model 时，让 worker 返回序列化的 model。
     currentDocumentModel = null;
     currentConversionQuality = result.quality || null;
@@ -1682,7 +1566,6 @@ async function transformContent() {
     currentOutputMime = result.mime;
     clearOutputHistory();
     updateOutputVersionControls();
-    renderBottomReports(currentDocumentModel, result.type === "text" ? result.data : "");
     renderVerificationReport(currentConversionQuality);
 
     if (result.type === "binary") {
@@ -1807,8 +1690,6 @@ persistHistoryCheckbox?.addEventListener("change", () => {
 clearHistoryButton?.addEventListener("click", () => {
   clearPersistentHistory();
   clearOutputHistory();
-  currentResolvedWarnings.clear();
-  updateWarningsResolvedControls();
   updateOutputVersionControls();
   setOutputMeta("已清除本地历史记录");
   setStatus("已清除本地历史记录", "info");
@@ -1905,30 +1786,6 @@ retryFailedButton.addEventListener("click", retryFailedQueueItems);
 outputDirectoryButton.addEventListener("click", () => {
   chooseOutputDirectory().catch((error) => setStatus(error.message, "error"));
 });
-document.getElementById("bottomReportPanel")?.addEventListener("click", (event) => {
-  const drawerTab = event.target.closest("[data-drawer-tab]");
-  if (drawerTab) {
-    activateDrawerTab(drawerTab.dataset.drawerTab);
-  }
-});
-
-function activateDrawerTab(targetId) {
-  const drawer = document.getElementById("bottomReportPanel");
-  if (!drawer) return;
-  drawer.querySelectorAll(".drawer-tab").forEach((tab) => {
-    tab.classList.toggle("is-active", tab.dataset.drawerTab === targetId);
-  });
-  drawer.querySelectorAll(".drawer-group").forEach((group) => {
-    group.classList.toggle("is-active", group.id === targetId);
-  });
-}
-
-function openDrawerOnTab(targetId) {
-  const drawer = document.getElementById("bottomReportPanel");
-  if (!drawer) return;
-  drawer.open = true;
-  activateDrawerTab(targetId);
-}
 workbenchTabs.addEventListener("click", (event) => {
   const button = event.target.closest("[data-tab-target]");
   if (button) {
@@ -1954,12 +1811,6 @@ workbenchTabs.addEventListener("keydown", (event) => {
 });
 copyErrorDiagnosticsButton.addEventListener("click", () => {
   copyErrorDiagnostics().catch((error) => setStatus(error.message, "error"));
-});
-resolveWarningsButton?.addEventListener("click", () => {
-  markCurrentWarningsResolved();
-});
-clearResolvedWarningsButton?.addEventListener("click", () => {
-  clearWarningsResolved();
 });
 cancelTransformButton.addEventListener("click", () => {
   if (!activeConversion) {

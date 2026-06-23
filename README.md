@@ -127,6 +127,7 @@ npm run vendor:paddle
 | [docs/BENCHMARK.md](docs/BENCHMARK.md) | 基准测试报告 |
 | [docs/architecture/MULTI_DOMAIN_MODEL_DESIGN.md](docs/architecture/MULTI_DOMAIN_MODEL_DESIGN.md) | v2 多域模型设计文档 |
 | [docs/V2_MULTI_DOMAIN_MODELS.md](docs/V2_MULTI_DOMAIN_MODELS.md) | v2 多域模型参考手册 |
+| [docs/V2_MIGRATION_GUIDE.md](docs/V2_MIGRATION_GUIDE.md) | v2 迁移指南 |
 | [docs/CONVERSION_ROUTING.md](docs/CONVERSION_ROUTING.md) | 转换路由 |
 | [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md) | 安全策略 |
 

@@ -27,7 +27,5 @@ assert.match(css, /\.mini-button\s*\{[^}]*min-height:\s*44px/s);
 assert.match(css, /\.tab-button\s*\{[^}]*min-height:\s*44px/s);
 assert.match(css, /\.toggle-label\s*\{[^}]*min-height:\s*44px/s);
 assert.match(css, /\.toggle-label input\s*\{[^}]*width:\s*20px;[^}]*height:\s*20px/s);
-assert.match(css, /\.bottom-drawer-toggle\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px/s);
-assert.match(css, /\.drawer-tab\s*\{[^}]*min-height:\s*44px/s);
 
 console.log("UI accessibility test passed: upload keyboard access, ARIA tabs, disabled download state, details dismissal, and touch targets are covered.");

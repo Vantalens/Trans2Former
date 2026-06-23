@@ -168,7 +168,7 @@ try {
   assert.equal(appJs.includes("registerQueuedFileState"), true, "main app should delegate queued file state to a reusable module");
   assert.equal(fileQueueJs.includes("createQueueItem"), true, "file queue module should track queued files as reusable workbench state");
   assert.equal(appJs.includes("renderDocumentModelPanel"), true, "main app should render DocumentModel inspection");
-  assert.equal(appJs.includes("renderBottomReports"), true, "main app should render warnings, quality, diff, and versions");
+  assert.equal(appJs.includes("renderBottomReports"), false, "bottom report panel has been removed (issue #34)");
   assert.equal(appJs.includes("chooseOutputDirectory"), true, "main app should expose explicit output directory selection");
   assert.equal(appJs.includes("outputDirectoryHandle"), true, "output directory selection should keep the directory handle");
   assert.equal(appJs.includes("writeBlobToDirectory"), true, "main app should write generated output into the selected directory");
