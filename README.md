@@ -30,7 +30,7 @@ Trans2Former 是一款桌面级文档转换工具：14 种输入格式、11 种�
 | 文档 | Markdown、HTML、TXT、DOCX、PDF、EPUB | Markdown、HTML、TXT、DOCX、PDF、EPUB |
 | 数据 | JSON、CSV、XML、XLSX | JSON、CSV、XML、XLSX |
 | 演示 | PPTX | PPTX |
-| 图片 | PNG（OCR 识别） | — |
+| 图片 | PNG（OCR 识别） | （PNG → HTML、TXT、JSON、PDF 通过 OCR 识别后转换） |
 | 实验性 | DOC（仅文本提取）、OFD（L0 级：容器解析，战略攻坚格式） | — |
 
 常用路径：Markdown ↔ HTML · DOCX → Markdown · PDF → Markdown · XLSX ↔ CSV · HTML → PDF
