@@ -1,5 +1,5 @@
 // Tesseract.js v5 traineddata 官方 SHA-256 清单
-// 来源：https://github.com/naptha/tessdata/tree/gh-pages/5.0.0
+// 来源：naptha/tessdata gh-pages/5.0.0 分支
 // 注意：只钉定最常用的语言文件（chi_sim, eng）
 
 import { ConversionError } from "../conversion-error.js";
