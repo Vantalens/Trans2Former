@@ -263,7 +263,7 @@
 
 .preview-error {
   border: 1px solid var(--danger-border);
-  background: rgba(225, 29, 72, 0.12);
+  background: var(--danger-error-soft);
   color: #fecdd3;
   padding: var(--space-6) var(--space-7);
   border-radius: var(--radius-lg);

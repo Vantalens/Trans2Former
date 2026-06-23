@@ -27,7 +27,9 @@
   --color-warning-strong: #92400e;
   --danger: #be123c;
   --danger-soft: rgba(190, 18, 60, 0.12);
+  --danger-error-soft: rgba(225, 29, 72, 0.12);
   --danger-strong: #9f1239;
+  --danger-border: rgba(225, 29, 72, 0.4);
 
   /* 焦点与阴影 */
   --focus: rgba(13, 148, 136, 0.18);
@@ -252,13 +254,13 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
 }
 
 .model-cache-status[data-status="available"] {
-  background: rgba(16, 185, 129, 0.16);
-  color: #047857;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .model-cache-status[data-status="degraded"] {
-  background: rgba(245, 158, 11, 0.18);
-  color: #b45309;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .model-cache-status[data-status="disabled"] {
@@ -304,13 +306,13 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
 }
 
 .model-cache-status-message[data-level="error"] {
-  background: rgba(225, 29, 72, 0.1);
-  color: #be123c;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .model-cache-status-message[data-level="success"] {
-  background: rgba(16, 185, 129, 0.12);
-  color: #047857;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .topbar {

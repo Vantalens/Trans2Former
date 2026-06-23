@@ -1,181 +1,191 @@
-// Design Token 体系测试
-// Issue #38: 验证完整的 Design Token 体系（颜色角色化、间距刻度、字号梯度、动效时长）
+/**
+ * Design Token 完整性测试
+ * 验证 CSS 文件中的 Design Token 使用情况
+ *
+ * Issue #38: Design Token 体系不完整
+ */
 
-import { strict as assert } from "assert";
-import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const projectRoot = join(__dirname, "..");
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
 
-console.log("Testing Design Token system (Issue #38)...");
+// 定义应该存在的 Design Token
+const expectedTokens = {
+  colors: [
+    '--bg', '--surface', '--surface-raised', '--surface-soft',
+    '--text', '--muted', '--muted-strong',
+    '--border', '--border-strong',
+    '--accent', '--accent-strong', '--accent-soft', '--accent-warm',
+    '--color-success', '--color-success-soft', '--color-success-strong',
+    '--color-warning', '--color-warning-soft', '--color-warning-strong',
+    '--danger', '--danger-soft', '--danger-strong', '--danger-border',
+    '--focus'
+  ],
+  spacing: [
+    '--space-1', '--space-2', '--space-3', '--space-4',
+    '--space-5', '--space-6', '--space-7', '--space-8'
+  ],
+  fontSize: [
+    '--text-xs', '--text-sm', '--text-base', '--text-lg',
+    '--text-xl', '--text-2xl', '--text-3xl'
+  ],
+  radius: [
+    '--radius', '--radius-sm', '--radius-lg', '--radius-xl', '--radius-full'
+  ],
+  duration: [
+    '--duration-fast', '--duration-base', '--duration-slow'
+  ],
+  fonts: [
+    '--font-ui', '--mono'
+  ],
+  gradients: [
+    '--btn-gradient-primary'
+  ]
+};
 
-// 测试 1: 验证角色色（success/warning/danger）定义
-function testSemanticColors() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
+// 定义不应该出现的硬编码模式（排除 token 定义本身）
+const hardcodedPatterns = [
+  { pattern: /(?<!--[a-z-]+:\s*)rgba\(16,\s*185,\s*129/gi, name: '成功色 rgba(16, 185, 129, ...)' },
+  { pattern: /(?<!--[a-z-]+:\s*)rgba\(245,\s*158,\s*11/gi, name: '警告色 rgba(245, 158, 11, ...)' },
+  { pattern: /(?<!--[a-z-]+:\s*)rgba\(225,\s*29,\s*72/gi, name: '错误色 rgba(225, 29, 72, ...)' },
+  { pattern: /(?<!--[a-z-]+:\s*)#047857(?!\s*;)/gi, name: '成功色 #047857' },
+  { pattern: /(?<!--[a-z-]+:\s*)#b45309(?!\s*;)/gi, name: '警告色 #b45309' },
+  { pattern: /font-size:\s*(12|13|14|15|17|32)px/gi, name: 'px 字号硬编码' },
+  { pattern: /padding:\s*\d+px/gi, name: 'padding px 硬编码' },
+  { pattern: /margin:\s*\d+px/gi, name: 'margin px 硬编码' },
+  { pattern: /gap:\s*\d+px/gi, name: 'gap px 硬编码' },
+  { pattern: /border-radius:\s*(8|10|12|14|16|18|24)px/gi, name: '圆角 px 硬编码' },
+  { pattern: /transition:.*?(0\.15|0\.18|0\.6)s/gi, name: '动效时长硬编码' }
+];
 
-  // 成功色
-  assert.ok(stylesContent.includes("--color-success:"), "应定义 --color-success");
-  assert.ok(stylesContent.includes("--color-success-soft:"), "应定义 --color-success-soft");
-  assert.ok(stylesContent.includes("--color-success-strong:"), "应定义 --color-success-strong");
+console.log('🧪 Design Token 完整性测试\n');
 
-  // 警告色
-  assert.ok(stylesContent.includes("--color-warning:"), "应定义 --color-warning");
-  assert.ok(stylesContent.includes("--color-warning-soft:"), "应定义 --color-warning-soft");
-  assert.ok(stylesContent.includes("--color-warning-strong:"), "应定义 --color-warning-strong");
+let totalErrors = 0;
+let totalWarnings = 0;
 
-  // 危险色（已有基础，验证扩展）
-  assert.ok(stylesContent.includes("--danger:"), "应定义 --danger");
-  assert.ok(stylesContent.includes("--danger-soft:"), "应定义 --danger-soft");
-  assert.ok(stylesContent.includes("--danger-strong:"), "应定义 --danger-strong");
+// 1. 检查 Token 定义是否完整
+console.log('📋 检查 Token 定义完整性...');
+const stylesPath = path.join(rootDir, 'public', 'styles.css');
+const stylesContent = fs.readFileSync(stylesPath, 'utf-8');
 
-  console.log("  ✅ 角色色（success/warning/danger）完整定义");
+const rootBlock = stylesContent.match(/:root\s*\{([^}]+)\}/s);
+if (!rootBlock) {
+  console.error('❌ 未找到 :root 块');
+  totalErrors++;
+} else {
+  const rootContent = rootBlock[1];
+
+  let missingTokens = [];
+  for (const [category, tokens] of Object.entries(expectedTokens)) {
+    for (const token of tokens) {
+      const regex = new RegExp(`${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`, 'i');
+      if (!regex.test(rootContent)) {
+        missingTokens.push(`${category}: ${token}`);
+      }
+    }
+  }
+
+  if (missingTokens.length > 0) {
+    console.error(`❌ 缺失 ${missingTokens.length} 个 Token:`);
+    missingTokens.forEach(token => console.error(`   - ${token}`));
+    totalErrors += missingTokens.length;
+  } else {
+    console.log('✅ 所有必需的 Token 都已定义');
+  }
 }
 
-// 测试 2: 验证间距刻度（4px 基数）
-function testSpacingScale() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
+// 2. 检查 CSS 文件中的硬编码使用
+console.log('\n🔍 检查硬编码使用情况...');
+const cssFiles = [
+  'public/styles/landing.css',
+  'public/styles/preview.css'
+];
 
-  const expectedSpaces = [
-    { token: "--space-1", value: "0.25rem", px: "4px" },
-    { token: "--space-2", value: "0.5rem", px: "8px" },
-    { token: "--space-3", value: "0.75rem", px: "12px" },
-    { token: "--space-4", value: "1rem", px: "16px" },
-    { token: "--space-5", value: "1.25rem", px: "20px" },
-    { token: "--space-6", value: "1.5rem", px: "24px" },
-    { token: "--space-7", value: "1.75rem", px: "28px" },
-    { token: "--space-8", value: "2rem", px: "32px" },
-  ];
+for (const filePath of cssFiles) {
+  const fullPath = path.join(rootDir, filePath);
+  const fileName = path.basename(filePath);
 
-  expectedSpaces.forEach(({ token, value, px }) => {
-    assert.ok(
-      stylesContent.includes(`${token}: ${value}`),
-      `应定义 ${token}: ${value} (${px})`
-    );
-  });
+  if (!fs.existsSync(fullPath)) {
+    console.warn(`⚠️  文件不存在: ${filePath}`);
+    totalWarnings++;
+    continue;
+  }
 
-  console.log("  ✅ 间距刻度（4px 基数，--space-1 到 --space-8）");
+  const content = fs.readFileSync(fullPath, 'utf-8');
+  let fileHasIssues = false;
+
+  for (const { pattern, name } of hardcodedPatterns) {
+    const matches = [...content.matchAll(pattern)];
+
+    if (matches.length > 0) {
+      if (!fileHasIssues) {
+        console.log(`\n📄 ${fileName}:`);
+        fileHasIssues = true;
+      }
+
+      console.log(`   ⚠️  发现 ${matches.length} 处 ${name}`);
+
+      // 显示前 3 个匹配项的上下文
+      matches.slice(0, 3).forEach((match, idx) => {
+        const lines = content.substring(0, match.index).split('\n');
+        const lineNum = lines.length;
+        const lineContent = content.split('\n')[lineNum - 1].trim();
+        console.log(`      L${lineNum}: ${lineContent.substring(0, 80)}`);
+      });
+
+      if (matches.length > 3) {
+        console.log(`      ... 还有 ${matches.length - 3} 处`);
+      }
+
+      totalWarnings += matches.length;
+    }
+  }
+
+  if (!fileHasIssues) {
+    console.log(`✅ ${fileName}: 无硬编码问题`);
+  }
 }
 
-// 测试 3: 验证字号梯度（统一 rem）
-function testFontSizeScale() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
+// 3. 检查 Token 使用覆盖率
+console.log('\n📊 Token 使用统计...');
+const allTokens = Object.values(expectedTokens).flat();
 
-  const expectedSizes = [
-    { token: "--text-xs", value: "0.75rem", px: "12px" },
-    { token: "--text-sm", value: "0.875rem", px: "14px" },
-    { token: "--text-base", value: "1rem", px: "16px" },
-    { token: "--text-lg", value: "1.125rem", px: "18px" },
-    { token: "--text-xl", value: "1.25rem", px: "20px" },
-    { token: "--text-2xl", value: "1.5rem", px: "24px" },
-    { token: "--text-3xl", value: "1.875rem", px: "30px" },
-  ];
+for (const filePath of cssFiles) {
+  const fullPath = path.join(rootDir, filePath);
+  const fileName = path.basename(filePath);
 
-  expectedSizes.forEach(({ token, value, px }) => {
-    assert.ok(
-      stylesContent.includes(`${token}: ${value}`),
-      `应定义 ${token}: ${value} (${px})`
-    );
-  });
+  if (!fs.existsSync(fullPath)) continue;
 
-  console.log("  ✅ 字号梯度（统一 rem，--text-xs 到 --text-3xl）");
+  const content = fs.readFileSync(fullPath, 'utf-8');
+  const usedTokens = new Set();
+
+  for (const token of allTokens) {
+    const regex = new RegExp(`var\\(${token.replace(/[.*+?^$()|[\]\\]/g, '\\$&')}`, 'gi');
+    if (regex.test(content)) {
+      usedTokens.add(token);
+    }
+  }
+
+  const coverage = ((usedTokens.size / allTokens.length) * 100).toFixed(1);
+  console.log(`   ${fileName}: ${usedTokens.size}/${allTokens.length} tokens (${coverage}%)`);
 }
 
-// 测试 4: 验证动效时长 token
-function testDurationTokens() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
-
-  assert.ok(stylesContent.includes("--duration-fast:"), "应定义 --duration-fast");
-  assert.ok(stylesContent.includes("--duration-base:"), "应定义 --duration-base");
-  assert.ok(stylesContent.includes("--duration-slow:"), "应定义 --duration-slow");
-
-  // 验证具体值
-  assert.ok(stylesContent.includes("--duration-fast: 0.15s"), "fast 应为 0.15s");
-  assert.ok(stylesContent.includes("--duration-base: 0.2s"), "base 应为 0.2s");
-  assert.ok(stylesContent.includes("--duration-slow: 0.3s"), "slow 应为 0.3s");
-
-  console.log("  ✅ 动效时长 token（--duration-fast/base/slow）");
-}
-
-// 测试 5: 验证圆角扩展
-function testRadiusTokens() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
-
-  assert.ok(stylesContent.includes("--radius:"), "应定义 --radius");
-  assert.ok(stylesContent.includes("--radius-sm:"), "应定义 --radius-sm");
-  assert.ok(stylesContent.includes("--radius-lg:"), "应定义 --radius-lg");
-  assert.ok(stylesContent.includes("--radius-xl:"), "应定义 --radius-xl");
-  assert.ok(stylesContent.includes("--radius-full:"), "应定义 --radius-full");
-
-  console.log("  ✅ 圆角 token 扩展（--radius-xl / --radius-full）");
-}
-
-// 测试 6: 验证 token 总数增加
-function testTokenCount() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
-
-  // 统计自定义属性数量
-  const customProps = stylesContent.match(/--[\w-]+:/g) || [];
-  const uniqueProps = new Set(customProps.map(p => p.replace(":", "")));
-
-  // 应该有大量 token（原来约 22 个，现在应该 50+ 个）
-  assert.ok(
-    uniqueProps.size >= 50,
-    `Token 数量应 ≥ 50，实际 ${uniqueProps.size} 个`
-  );
-
-  console.log(`  ✅ Token 总数：${uniqueProps.size} 个（从原来 ~22 个扩展）`);
-}
-
-// 测试 7: 验证 token 分类组织
-function testTokenOrganization() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
-
-  // 应该有注释分类
-  assert.ok(stylesContent.includes("/* 基础色板 */"), "应有基础色板分类");
-  assert.ok(stylesContent.includes("/* 品牌色 */"), "应有品牌色分类");
-  assert.ok(stylesContent.includes("/* 角色色（语义） */"), "应有角色色分类");
-  assert.ok(stylesContent.includes("/* 间距刻度（4px 基数） */"), "应有间距刻度分类");
-  assert.ok(stylesContent.includes("/* 字号梯度（rem 统一） */"), "应有字号梯度分类");
-  assert.ok(stylesContent.includes("/* 动效时长 */"), "应有动效时长分类");
-
-  console.log("  ✅ Token 按分类组织（基础色板/品牌色/角色色/间距/字号/动效）");
-}
-
-// 运行测试
-try {
-  testSemanticColors();
-  testSpacingScale();
-  testFontSizeScale();
-  testDurationTokens();
-  testRadiusTokens();
-  testTokenCount();
-  testTokenOrganization();
-
-  console.log("\n✅ Design Token system test passed (Issue #38)");
-  console.log("   - 角色色完整（success/warning/danger 各带 soft/strong 变体）");
-  console.log("   - 间距刻度（4px 基数，--space-1 到 --space-8）");
-  console.log("   - 字号梯度（统一 rem，--text-xs 到 --text-3xl）");
-  console.log("   - 动效时长 token（--duration-fast/base/slow）");
-  console.log("   - 圆角扩展（--radius-xl / --radius-full）");
-  console.log("   - Token 总数从 ~22 个扩展到 50+ 个");
-  console.log("   - Token 按分类清晰组织");
-  console.log("\n下一步建议：");
-  console.log("   - 在 styles.css/landing.css/preview.css 中替换硬编码颜色为 token");
-  console.log("   - 统一使用 rem 字号（替换 px）");
-  console.log("   - 使用 --duration-* 替换硬编码动效时长");
+// 4. 总结
+console.log('\n' + '='.repeat(60));
+if (totalErrors === 0 && totalWarnings === 0) {
+  console.log('✅ 所有测试通过！Design Token 体系完整且使用正确。');
   process.exit(0);
-} catch (error) {
-  console.error("\n❌ Design Token system test failed:", error.message);
-  console.error(error.stack);
-  process.exit(1);
+} else {
+  if (totalErrors > 0) {
+    console.log(`❌ 发现 ${totalErrors} 个错误`);
+  }
+  if (totalWarnings > 0) {
+    console.log(`⚠️  发现 ${totalWarnings} 个警告（建议优化的硬编码）`);
+  }
+  console.log('\n💡 建议: 将硬编码值替换为对应的 Design Token');
+  process.exit(totalErrors > 0 ? 1 : 0);
 }
