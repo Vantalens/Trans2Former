@@ -36,6 +36,20 @@
 | [TESTING_GUIDE.md](development/TESTING_GUIDE.md) | 测试指南 |
 | [DEVELOPMENT_TASKS.md](development/DEVELOPMENT_TASKS.md) | 开发任务清单 |
 
+### [architecture/](architecture/) - 架构设计（1 个）
+核心架构设计文档。
+
+| 文档 | 说明 |
+|------|------|
+| [MULTI_MODEL_ARCHITECTURE.md](architecture/MULTI_MODEL_ARCHITECTURE.md) | 🎯 v2 多域模型目标架构 |
+
+### [formats/](formats/) - 格式规范（1 个）
+文档格式和数据模型规范。
+
+| 文档 | 说明 |
+|------|------|
+| [DOCUMENT_MODEL_SCHEMA.md](formats/DOCUMENT_MODEL_SCHEMA.md) | ✅ v1 单一模型当前实现 |
+
 ### [release/](release/) - 发布文档（4 个）
 版本发布相关的文档和发布说明。
 
@@ -141,6 +155,8 @@
 
 ### 新增文档时的归属
 - **开发文档** → `docs/development/`
+- **架构设计** → `docs/architecture/`
+- **格式规范** → `docs/formats/`
 - **发布说明** → `docs/release/`
 - **检查清单** → `docs/checklists/`
 - **项目报告** → `docs/reports/`
@@ -158,8 +174,10 @@
 ## 📊 文档统计
 
 - **根目录文档**: 5 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE）
-- **docs/ 文档**: 29 个
+- **docs/ 文档**: 31 个
   - development: 10 个
+  - architecture: 1 个
+  - formats: 1 个
   - release: 4 个
   - checklists: 2 个
   - reports: 2 个
@@ -167,7 +185,7 @@
   - i18n: 9 个
   - README.md: 1 个
 
-**总计**: 34 个文档（清晰分类，易于查找）
+**总计**: 36 个文档（清晰分类，易于查找）
 
 ---
 

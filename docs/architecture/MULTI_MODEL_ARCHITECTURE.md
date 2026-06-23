@@ -1,8 +1,8 @@
-# Multi-Model Architecture (v2 多域模型 - 目标架构)
+# Multi-Model Architecture - v2 多域模型（目标架构）
 
-**版本：v0.1.0**  
-**状态：设计文档（Phase 5 详细设计，Phase 6+ 实施）**  
-**最后更新：2026-05-12**
+**版本：v0.1.1**  
+**状态：🎯 设计文档（Phase 5 详细设计，Phase 6+ 实施）**  
+**最后更新：2026-06-23**
 
 ---
 
@@ -90,9 +90,9 @@ Trans2Former 的转换核心从"单一 `DocumentModel`"升级为**五个并列�
 | `pages[].annotations[]` | 注释/链接 `{type, bbox, target}` |
 | `pages[].signatures[]` | 签章占位 |
 | `pages[].assets[]` | 页内图像引用 |
-| `metadata` | 同 SemanticDoc，含 `provenance.engine`（pdfjs / ofdrw / ocr-plugin / ...） |
+| `metadata` | 同 SemanticDoc，含 `provenance.engine`（pdfjs / ofdrw / ocr-core / ...） |
 
-**reader 来源**：pdf, ofd, png（经 OCR/layout 插件）。
+**reader 来源**：pdf, ofd, png（经 OCR/layout 核心本地模块）。
 **writer 目标**：pdf, png。
 
 ### AssetGraph

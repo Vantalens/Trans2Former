@@ -76,10 +76,16 @@ Trans2Former/
 
 增强能力直接内置于核心模块，不使用插件机制；模型资源不入 git，由 vendor 脚本按钉定来源下载并经 SHA-256 校验（[scripts/paddleocr-models.manifest.json](scripts/paddleocr-models.manifest.json)），随发布包分发、开箱即用。
 
-**架构演进**：
-- **当前（v1）**：单一 DocumentModel 承载所有格式 - 详见 [DOCUMENT_MODEL_SCHEMA.md](docs/formats/DOCUMENT_MODEL_SCHEMA.md)
-- **目标（v2）**：多域模型架构（SemanticDoc, WorkbookModel, SlideModel, FixedLayoutModel, AssetGraph）- 详见 [MULTI_MODEL_ARCHITECTURE.md](docs/architecture/MULTI_MODEL_ARCHITECTURE.md)
-- **迁移计划**：Phase 5 完成详细设计，Phase 6+ 分阶段实施
+**架构演进路径**：
+- **✅ v1（当前）**：单一 DocumentModel 统一承载所有格式
+  - 详见 [DOCUMENT_MODEL_SCHEMA.md](docs/formats/DOCUMENT_MODEL_SCHEMA.md)
+  - 9 种块类型（heading/paragraph/list/table/code/quote/image/asset/raw）
+  - 已验证支持 14 种输入 → 11 种输出转换矩阵
+- **🎯 v2（目标）**：多域模型架构，语义解耦
+  - 五个规范模型：SemanticDoc（流式文档）、WorkbookModel（表格）、SlideModel（演示）、FixedLayoutModel（固定版式）、AssetGraph（共享资产）
+  - 详见 [MULTI_MODEL_ARCHITECTURE.md](docs/architecture/MULTI_MODEL_ARCHITECTURE.md)
+  - 跨模型转换显式 mapper，降级可见
+- **⏱️ 迁移计划**：Phase 5 完成详细设计，Phase 6+ 分阶段实施，保证向下兼容
 
 **本地能力**：
 

@@ -1,19 +1,34 @@
-# DocumentModel Schema (v1 单一模型 - 当前实现)
+# DocumentModel Schema - v1 单一模型（当前实现）
 
-**版本：v0.2.0**  
-**状态：当前生效（v2 多域模型设计中，Phase 5 后迁移）**  
-**最后更新：2026-04-30**
+**版本：v0.2.1**  
+**状态：✅ 当前生效（v2 多域模型设计中，Phase 5 后迁移）**  
+**最后更新：2026-06-23**
 
 ---
 
 ## 说明
 
-本文档描述 Trans2Former 当前使用的**单一 DocumentModel 架构**（v1）。
+本文档描述 Trans2Former **当前生效的单一 DocumentModel 架构**（v1）。
 
-**架构演进**：
-- **当前**：单一 `DocumentModel` 承载所有格式（语义文档、表格、幻灯片、固定版式）
-- **目标**：多域模型架构（SemanticDoc, WorkbookModel, SlideModel, FixedLayoutModel, AssetGraph）
-- **迁移计划**：详见 [MULTI_MODEL_ARCHITECTURE.md](../architecture/MULTI_MODEL_ARCHITECTURE.md)
+### ✅ 当前实现（v1）
+
+Trans2Former 目前使用**单一 `DocumentModel` 统一承载所有格式**（语义文档、表格、幻灯片、固定版式）：
+
+- **统一中间模型**：所有格式转换都遵循 `input format → DocumentModel → output format`
+- **9 种块类型**：heading、paragraph、list、table、code、quote、image、asset、raw
+- **已验证支持**：14 种输入格式 → 11 种输出格式，完整转换矩阵见 [CONVERSION_PATHS.md](../CONVERSION_PATHS.md)
+- **生产就绪**：所有现有转换路径、测试、质量报告基于此架构
+
+### 🎯 目标架构（v2 - 设计中）
+
+未来将升级为**多域模型架构**，语义解耦：
+
+- **五个规范模型**：SemanticDoc（流式文档）、WorkbookModel（表格）、SlideModel（演示）、FixedLayoutModel（固定版式）、AssetGraph（共享资产）
+- **显式跨模型转换**：通过 mapper 实现，降级可见、质量可追溯
+- **向下兼容**：保留 `DocumentModel` 作为 `SemanticDoc` 别名，现有 API 不破坏
+
+**详细设计**：见 [MULTI_MODEL_ARCHITECTURE.md](../architecture/MULTI_MODEL_ARCHITECTURE.md)  
+**迁移计划**：Phase 5 完成详细设计，Phase 6+ 分阶段实施
 
 ---
 
