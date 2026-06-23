@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### 文档
+- **第三方依赖声明**：新增 `THIRD_PARTY_NOTICES.md`，完整记录所有依赖的许可证信息、版权声明和仓库链接，包含 PDF.js、Tesseract.js、ONNX Runtime、PaddleOCR、KaTeX、Express、Puppeteer 等核心依赖以及 vendor 目录资源的许可证声明。新增完整性测试脚本验证文档内容的准确性和完整性。
+
 ## [2.3.0] - 2026-05-30
 
 ### 新增
