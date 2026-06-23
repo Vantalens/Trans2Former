@@ -332,6 +332,56 @@ test/
 - 回滚预案
 - 变更日志
 
+#### 任务 4.5: 创建第三方依赖许可证声明 ✅
+**状态**: 已完成 (2026-06-23)
+
+创建 `THIRD_PARTY_NOTICES.md`，记录所有第三方依赖的许可证信息：
+- ✅ PDF.js (Apache 2.0)
+- ✅ Tesseract.js (Apache 2.0)
+- ✅ ONNX Runtime Web (MIT)
+- ✅ PaddleOCR Models (Apache 2.0)
+- ✅ KaTeX (MIT)
+- ✅ Express, Puppeteer 等 Node.js 依赖
+- ✅ 字体许可证（Liberation Fonts, Adobe CMaps）
+- ✅ 包含完整许可证文本
+- ✅ 提供验证命令
+
+**修改文件**：
+- `THIRD_PARTY_NOTICES.md`: 第三方许可证声明（新增）
+- `README.md`: 添加第三方许可证链接
+- `docs/release/RELEASE_GUIDE.md`: 发布检查清单新增许可证更新检查
+
+**验证结果**：
+- ✅ 所有测试通过（42 个测试脚本）
+- ✅ 覆盖所有 vendor 和 package.json 依赖
+- ✅ 许可证信息完整且可验证
+
+#### 任务 4.6: 建立公开基准表 ✅
+**状态**: 已完成 (2026-06-23)
+
+创建 `docs/BENCHMARK.md`，建立转换正确性、性能、OCR 准确率的公开基准：
+- ✅ 转换正确性基准：11 个关键路径（hot/warm），100% 关键词保留率
+- ✅ OCR 准确率基准：PP-OCRv5/Tesseract.js，印刷体中文 ≥ 95%
+- ✅ 性能基准：XLSX 50K 单元格 ~1.2s，MD→HTML < 50ms
+- ✅ 资源预算基准：core 460KB，formats 512KB，workers 128KB
+- ✅ 测试覆盖率基准：81.38% 整体 / 71.95% 分支 / 85.56% 函数
+- ✅ 创建基准测试执行脚本（`scripts/run-benchmark.js`）
+- ✅ 添加 npm 命令（`npm run benchmark`）
+- ✅ 生成 JSON 报告（`benchmark-report.json`）
+
+**修改文件**：
+- `docs/BENCHMARK.md`: 基准测试报告（新增，15k 字）
+- `scripts/run-benchmark.js`: 基准测试执行脚本（新增）
+- `package.json`: 添加 `benchmark` 命令
+- `docs/README.md`: 添加 BENCHMARK.md 到文档索引
+- `README.md`: 添加基准测试文档链接
+
+**验证结果**：
+- ✅ 基准测试套件通过（12/12 测试，耗时 ~3.6s）
+- ✅ 生成 JSON 报告（包含分类统计和详细结果）
+- ✅ 文档完整且可执行（所有命令可复现）
+- ✅ 覆盖转换正确性、OCR、性能、健壮性四大类
+
 ### Phase 5: 验证与复盘（1天）
 
 #### 任务 5.1: 完整测试运行

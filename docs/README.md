@@ -43,6 +43,13 @@
 |------|------|
 | [MULTI_MODEL_ARCHITECTURE.md](architecture/MULTI_MODEL_ARCHITECTURE.md) | 🎯 v2 多域模型目标架构 |
 
+### 质量与基准
+性能基准和质量标准文档。
+
+| 文档 | 说明 |
+|------|------|
+| [BENCHMARK.md](BENCHMARK.md) | 📊 基准测试报告（转换正确性、性能、OCR 准确率） |
+
 ### [formats/](formats/) - 格式规范（1 个）
 文档格式和数据模型规范。
 
@@ -97,6 +104,14 @@
 | 🇰🇷 한국어 | [README.ko.md](i18n/README.ko.md) |
 | 🇧🇷 Português | [README.pt-BR.md](i18n/README.pt-BR.md) |
 | 🇷🇺 Русский | [README.ru.md](i18n/README.ru.md) |
+
+### 根目录 - 许可证与法律声明
+项目许可证和第三方依赖声明。
+
+| 文档 | 说明 |
+|------|------|
+| [LICENSE](../LICENSE) | MIT 许可证 |
+| [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | 第三方依赖许可证声明 |
 
 ### [operations/](operations/) - 运维和发布（3 个）
 运维和发布相关的文档。
@@ -173,8 +188,8 @@
 
 ## 📊 文档统计
 
-- **根目录文档**: 5 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE）
-- **docs/ 文档**: 31 个
+- **根目录文档**: 6 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE, THIRD_PARTY_NOTICES.md）
+- **docs/ 文档**: 32 个
   - development: 10 个
   - architecture: 1 个
   - formats: 1 个
@@ -183,9 +198,10 @@
   - reports: 2 个
   - setup: 1 个
   - i18n: 9 个
+  - quality: 1 个（BENCHMARK.md）
   - README.md: 1 个
 
-**总计**: 36 个文档（清晰分类，易于查找）
+**总计**: 38 个文档（清晰分类，易于查找）
 
 ---
 

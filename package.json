@@ -12,6 +12,7 @@
     "vendor:onnx": "node scripts/sync-onnxruntime-vendor.js",
     "vendor:paddle": "node scripts/sync-paddleocr-vendor.js",
     "samples:generate": "node scripts/generate-samples.js",
+    "benchmark": "node scripts/run-benchmark.js",
     "coverage": "c8 npm test",
     "release:prepare": "node scripts/sync-pdfjs-vendor.js && node scripts/sync-tesseract-vendor.js && node scripts/sync-onnxruntime-vendor.js && node scripts/sync-paddleocr-vendor.js && node scripts/prepare-release.js",
     "desktop:check": "node scripts/desktop-shell-test.js",
