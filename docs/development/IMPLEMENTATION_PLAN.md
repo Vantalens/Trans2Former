@@ -106,6 +106,30 @@ scripts/release-readiness-test.js
 - 逻辑运算符短路
 - try/catch
 
+#### 任务 1.5: 统一能力矩阵 ✅
+**状态**: 已完成 (2026-06-23)
+
+确保文档与代码实现的一致性：
+- ✅ 对照 `public/formats/` 实现，提取实际的格式能力
+- ✅ 验证 README.md 中的格式数量声明（14 种输入，11 种输出）
+- ✅ 更新 `docs/product/CONVERSION_PATHS.md`，将 DOC 和 DOCX 分开列出
+- ✅ 更新 `scripts/product-matrix-docs-test.js`，支持独立的 DOC 条目
+- ✅ 创建 `scripts/capability-matrix-consistency-test.js` 自动化一致性测试
+- ✅ 所有测试通过，确保代码、README 和 CONVERSION_PATHS.md 三者一致
+
+**修改文件**：
+- `docs/product/CONVERSION_PATHS.md`: 拆分 DOC / DOCX 为两行
+- `scripts/product-matrix-docs-test.js`: 更新 inputNameToFormats 映射
+- `scripts/capability-matrix-consistency-test.js`: 新增自动化测试
+- `package.json`: 将新测试加入测试套件
+
+**验证结果**：
+- ✅ 14 种输入格式：MD, HTML, TXT, JSON, CSV, XML, DOCX, XLSX, PDF, EPUB, PPTX, PNG, DOC, OFD
+- ✅ 11 种输出格式：MD, HTML, TXT, JSON, CSV, XML, DOCX, XLSX, PDF, EPUB, PPTX
+- ✅ 所有转换路径在代码、README 和 CONVERSION_PATHS.md 中一致
+- ✅ `product-matrix-docs-test.js` 通过
+- ✅ `capability-matrix-consistency-test.js` 通过
+
 ### Phase 2: 按 DevDocsKit 规范整理项目（2-3天）
 
 #### 任务 2.1: 创建项目根文档

@@ -23,7 +23,8 @@ Trans2Former 区分两件事：
 | XML | Markdown、HTML、TXT、JSON、XML、PDF | XML 源保留可读结构、原始结构化表达和基础发布路径，不自动推断办公专属模型。 |
 | CSV | Markdown、CSV、XLSX、HTML、TXT、JSON、XML、PDF | 表格源只提供表格、网页、文本、XML 和 PDF 路径。 |
 | XLSX | Markdown、CSV、XLSX、HTML、TXT、JSON、XML、PDF | 表格源不提供 PPTX/DOCX 等不可靠跨类型输出。 |
-| DOC / DOCX | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 文档源不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
+| DOC | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 旧版 Word 文档（仅文本提取），不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
+| DOCX | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 文档源不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
 | EPUB | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、EPUB | 电子书源保留文档和发布路径。 |
 | PDF | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 当前主要是文本型 PDF 抽取，不提供表格/演示高保真输出。 |
 | PPTX | Markdown、HTML、TXT、JSON、XML、PDF、PPTX | 演示源可抽取为文档；PPTX 写出仅为重新生成的基础演示，不是原稿保真写回。 |
