@@ -84,21 +84,40 @@ export function createBrowserPdfPageRasterizer({ vendorUrl = VENDOR_PDFJS } = {}
     return pdfjsPromise;
   }
 
+  // PDF document 缓存：按 content 的弱标识缓存已打开的 document，避免多页扫描时重复解析
+  let cachedDocument = null;
+  let cachedContentRef = null;
+
+  async function getCachedDocument(pdfjs, content) {
+    // 简单缓存策略：如果 content 引用相同（多页扫描场景），复用 document
+    if (cachedDocument && cachedContentRef === content) {
+      return cachedDocument;
+    }
+    // 清理旧的 document
+    if (cachedDocument && typeof cachedDocument.destroy === "function") {
+      try {
+        cachedDocument.destroy();
+      } catch (error) {
+        // ignore cleanup errors
+      }
+    }
+    // 打开新 document 并缓存
+    cachedDocument = await openDocument(pdfjs, content);
+    cachedContentRef = content;
+    return cachedDocument;
+  }
+
   return Object.freeze({
     async countPages({ content }) {
       ensureBrowserRuntime();
       const pdfjs = await getPdfJs();
-      const document = await openDocument(pdfjs, content);
-      try {
-        return document.numPages;
-      } finally {
-        if (typeof document.destroy === "function") document.destroy();
-      }
+      const document = await getCachedDocument(pdfjs, content);
+      return document.numPages;
     },
     async rasterize({ content, pageIndex = 0, dpi = 144 }) {
       ensureBrowserRuntime();
       const pdfjs = await getPdfJs();
-      const document = await openDocument(pdfjs, content);
+      const document = await getCachedDocument(pdfjs, content);
       try {
         const page = await document.getPage(pageIndex + 1);
         try {
@@ -128,9 +147,20 @@ export function createBrowserPdfPageRasterizer({ vendorUrl = VENDOR_PDFJS } = {}
           code: "OCR_RASTERIZER_FAILED",
           details: { reason: "page-render-failed", pageIndex, cause: String(error?.name || error?.message || "unknown") },
         });
-      } finally {
-        if (typeof document.destroy === "function") document.destroy();
       }
+      // 注意：不在这里 destroy document，让它保持缓存供后续页面使用
+    },
+    // 显式清理接口，供外部在完成多页扫描后调用
+    dispose() {
+      if (cachedDocument && typeof cachedDocument.destroy === "function") {
+        try {
+          cachedDocument.destroy();
+        } catch (error) {
+          // ignore cleanup errors
+        }
+      }
+      cachedDocument = null;
+      cachedContentRef = null;
     },
   });
 }

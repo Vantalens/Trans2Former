@@ -109,43 +109,54 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
   let language = "";
   let modelVersion = "";
 
-  for (let pageIndex = 0; pageIndex < effectivePages; pageIndex += 1) {
-    // 检查是否已取消
-    if (ctx?.signal?.aborted) {
-      throw new Error("OCR已取消");
-    }
+  try {
+    for (let pageIndex = 0; pageIndex < effectivePages; pageIndex += 1) {
+      // 检查是否已取消
+      if (ctx?.signal?.aborted) {
+        throw new Error("OCR已取消");
+      }
 
-    let pageResult;
-    try {
-      const rendered = await rasterizer.rasterize({ content: ctx.content, pageIndex, dpi });
-      pageResult = await engine.recognize({ image: rendered.dataUrl, options: { language: requestedLanguage } });
-    } catch (error) {
-      enhanced.metadata = withWarnings(enhanced.metadata, [
-        createOCREngineFailedWarning({
-          engineId: engine.id,
-          manifestId: engine.manifestId || "",
-          reason: error?.code || "page-stage-failed",
-          cause: `page=${pageIndex}: ${error?.message || error}`,
-        }),
-      ]);
-      continue;
-    }
-    pageResults.push(pageResult);
-    runtimeMsTotal += pageResult?.runtimeMs || 0;
-    if (typeof pageResult?.averageConfidence === "number") aggregateConfidences.push(pageResult.averageConfidence);
-    language = language || pageResult?.language || "";
-    modelVersion = modelVersion || pageResult?.modelVersion || "";
-    const pageLines = Array.isArray(pageResult?.pages?.[0]?.lines) ? pageResult.pages[0].lines : [];
-    pageLines.forEach((line, lineIndex) => {
-      lines.push({
-        pageIndex,
-        lineIndex,
-        text: line.text || "",
-        confidence: typeof line.confidence === "number" ? line.confidence : 0,
-        bbox: line.bbox || null,
-        blockId: "",
+      let pageResult;
+      try {
+        const rendered = await rasterizer.rasterize({ content: ctx.content, pageIndex, dpi });
+        pageResult = await engine.recognize({ image: rendered.dataUrl, options: { language: requestedLanguage } });
+      } catch (error) {
+        enhanced.metadata = withWarnings(enhanced.metadata, [
+          createOCREngineFailedWarning({
+            engineId: engine.id,
+            manifestId: engine.manifestId || "",
+            reason: error?.code || "page-stage-failed",
+            cause: `page=${pageIndex}: ${error?.message || error}`,
+          }),
+        ]);
+        continue;
+      }
+      pageResults.push(pageResult);
+      runtimeMsTotal += pageResult?.runtimeMs || 0;
+      if (typeof pageResult?.averageConfidence === "number") aggregateConfidences.push(pageResult.averageConfidence);
+      language = language || pageResult?.language || "";
+      modelVersion = modelVersion || pageResult?.modelVersion || "";
+      const pageLines = Array.isArray(pageResult?.pages?.[0]?.lines) ? pageResult.pages[0].lines : [];
+      pageLines.forEach((line, lineIndex) => {
+        lines.push({
+          pageIndex,
+          lineIndex,
+          text: line.text || "",
+          confidence: typeof line.confidence === "number" ? line.confidence : 0,
+          bbox: line.bbox || null,
+          blockId: "",
+        });
       });
-    });
+    }
+  } finally {
+    // 清理 rasterizer 缓存的 PDF document
+    if (typeof rasterizer.dispose === "function") {
+      try {
+        rasterizer.dispose();
+      } catch (error) {
+        // ignore cleanup errors
+      }
+    }
   }
 
   const averageConfidence = aggregateConfidences.length > 0
