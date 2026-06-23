@@ -1,5 +1,7 @@
 :root {
   color-scheme: light;
+
+  /* 基础色板 */
   --bg: #f3f5f9;
   --surface: #ffffff;
   --surface-raised: #fbfcfd;
@@ -9,19 +11,64 @@
   --muted-strong: #334155;
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
+
+  /* 品牌色 */
   --accent: #0d9488;
   --accent-strong: #0f766e;
   --accent-soft: #ecfdf5;
   --accent-warm: #b56b16;
+
+  /* 角色色（语义） */
+  --color-success: #047857;
+  --color-success-soft: rgba(16, 185, 129, 0.12);
+  --color-success-strong: #065f46;
+  --color-warning: #b45309;
+  --color-warning-soft: rgba(245, 158, 11, 0.12);
+  --color-warning-strong: #92400e;
   --danger: #be123c;
+  --danger-soft: rgba(190, 18, 60, 0.12);
+  --danger-strong: #9f1239;
+
+  /* 焦点与阴影 */
   --focus: rgba(13, 148, 136, 0.18);
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.06);
   --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
+
+  /* 字体家族 */
   --font-ui: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --mono: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace;
+
+  /* 圆角 */
   --radius: 10px;
   --radius-sm: 6px;
   --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 999px;
+
+  /* 间距刻度（4px 基数） */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-7: 1.75rem;  /* 28px */
+  --space-8: 2rem;     /* 32px */
+
+  /* 字号梯度（rem 统一） */
+  --text-xs: 0.75rem;   /* 12px */
+  --text-sm: 0.875rem;  /* 14px */
+  --text-base: 1rem;    /* 16px */
+  --text-lg: 1.125rem;  /* 18px */
+  --text-xl: 1.25rem;   /* 20px */
+  --text-2xl: 1.5rem;   /* 24px */
+  --text-3xl: 1.875rem; /* 30px */
+
+  /* 动效时长 */
+  --duration-fast: 0.15s;
+  --duration-base: 0.2s;
+  --duration-slow: 0.3s;
+
   /* 按钮渐变 token（统一品牌视觉） */
   --btn-gradient-primary: linear-gradient(180deg, var(--accent), var(--accent-strong));
 }
