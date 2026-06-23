@@ -22,14 +22,14 @@ function isGitWorkTree() {
 
 const REQUIRED_FILES = [
   "README.md",
-  "INSTALL.md",
+  "docs/development/INSTALL.md",
   "CONTRIBUTING.md",
   "CHANGELOG.md",
-  "COMMIT_CHECKLIST.md",
+  "docs/checklists/COMMIT_CHECKLIST.md",
   "LICENSE",
   "package.json",
-  "docs/RELEASE_PREP.md",
-  "docs/DESKTOP_RELEASE_PLAN.md",
+  "docs/operations/RELEASE_PREP.md",
+  "docs/operations/DESKTOP_RELEASE_PLAN.md",
   "scripts/sync-pdfjs-vendor.js",
   "scripts/prepare-release.js",
   "public/vendor/pdfjs/pdf.min.mjs",
@@ -46,7 +46,7 @@ assert.equal(packageJson.scripts["vendor:tesseract"], "node scripts/sync-tessera
 assert.equal(packageJson.scripts["vendor:onnx"], "node scripts/sync-onnxruntime-vendor.js");
 assert.equal(packageJson.scripts["vendor:paddle"], "node scripts/sync-paddleocr-vendor.js");
 
-const releasePrep = await readFile("docs/RELEASE_PREP.md", "utf8");
+const releasePrep = await readFile("docs/operations/RELEASE_PREP.md", "utf8");
 for (const requiredText of [
   "local-only",
   "npm test",
@@ -83,7 +83,7 @@ if (isGitWorkTree()) {
   );
 }
 
-const releaseGuide = await readFile("RELEASE_GUIDE.md", "utf8");
+const releaseGuide = await readFile("docs/release/RELEASE_GUIDE.md", "utf8");
 assert.equal(releaseGuide.includes("Compress-Archive"), true, "release guide should include Windows PowerShell zip command");
 assert.equal(releaseGuide.includes("Get-FileHash"), true, "release guide should include Windows PowerShell checksum command");
 assert.equal(releaseGuide.includes("plugin-patches"), false);

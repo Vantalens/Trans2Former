@@ -156,7 +156,7 @@ async function assertCoreHasNoHeavyImports() {
 }
 
 async function assertBudgetPolicyDocumented() {
-  const policy = await readFile("docs/RESOURCE_BUDGET.md", "utf8");
+  const policy = await readFile("docs/architecture/RESOURCE_BUDGET.md", "utf8");
   for (const expected of ["core", "format-basic", "N * N", "免下载", "manifest", "云端文档处理", "不再提供插件安装"]) {
     assert.equal(policy.includes(expected), true, `resource budget doc should mention ${expected}`);
   }

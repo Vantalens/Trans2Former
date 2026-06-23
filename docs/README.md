@@ -84,6 +84,15 @@
 | 🇧🇷 Português | [README.pt-BR.md](i18n/README.pt-BR.md) |
 | 🇷🇺 Русский | [README.ru.md](i18n/README.ru.md) |
 
+### [operations/](operations/) - 运维和发布（3 个）
+运维和发布相关的文档。
+
+| 文档 | 说明 |
+|------|------|
+| [DESKTOP_RELEASE_PLAN.md](operations/DESKTOP_RELEASE_PLAN.md) | 桌面发布计划 |
+| [RELEASE_PREP.md](operations/RELEASE_PREP.md) | 发布准备 |
+| [VISUAL_COMPARISON_PLAN.md](operations/VISUAL_COMPARISON_PLAN.md) | 视觉对比计划 |
+
 ### [archived/](archived/) - 归档文档
 历史报告和临时文档的归档（不再维护）。
 

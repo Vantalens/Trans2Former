@@ -7,9 +7,9 @@ import {
   normalizeFormat,
 } from "../public/core/format-registry.js";
 
-const docs = await readFile("docs/CONVERSION_PATHS.md", "utf8");
+const docs = await readFile("docs/product/CONVERSION_PATHS.md", "utf8");
 const readme = await readFile("README.md", "utf8");
-const releaseGuide = await readFile("RELEASE_GUIDE.md", "utf8");
+const releaseGuide = await readFile("docs/release/RELEASE_GUIDE.md", "utf8");
 
 const inputNameToFormats = new Map([
   ["Markdown", ["md"]],

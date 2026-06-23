@@ -40,7 +40,7 @@ release/trans2former-<version>/RELEASE_MANIFEST.json
 
 ## P7 桌面发布
 
-桌面安装包、签名、checksum、平台 smoke、自动更新和文件关联规则见 [DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md)。
+桌面安装包、签名、checksum、平台 smoke、自动更新和文件关联规则见 [operations/DESKTOP_RELEASE_PLAN.md](DESKTOP_RELEASE_PLAN.md)。
 
 Windows 桌面安装包基线验证命令：
 

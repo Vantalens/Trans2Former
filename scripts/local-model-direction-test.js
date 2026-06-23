@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const files = {
-  tasks: await readFile("DEVELOPMENT_TASKS.md", "utf8"),
-  desktop: await readFile("docs/DESKTOP_APP_ARCHITECTURE.md", "utf8"),
-  release: await readFile("docs/DESKTOP_RELEASE_PLAN.md", "utf8"),
-  budget: await readFile("docs/RESOURCE_BUDGET.md", "utf8"),
-  strategy: await readFile("docs/PRODUCT_STRATEGY.md", "utf8"),
-  multiModel: await readFile("docs/MULTI_MODEL_ARCHITECTURE.md", "utf8"),
+  tasks: await readFile("docs/development/DEVELOPMENT_TASKS.md", "utf8"),
+  desktop: await readFile("docs/architecture/DESKTOP_APP_ARCHITECTURE.md", "utf8"),
+  release: await readFile("docs/operations/DESKTOP_RELEASE_PLAN.md", "utf8"),
+  budget: await readFile("docs/architecture/RESOURCE_BUDGET.md", "utf8"),
+  strategy: await readFile("docs/product/PRODUCT_STRATEGY.md", "utf8"),
+  multiModel: await readFile("docs/architecture/MULTI_MODEL_ARCHITECTURE.md", "utf8"),
   developmentStandards: [
     await readFile("docs/development-standards/00_README.md", "utf8"),
     await readFile("docs/development-standards/05_QUALITY_GATES.md", "utf8"),

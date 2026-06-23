@@ -7,7 +7,7 @@ import { convertContent } from "../public/browser-transformer.js";
 import { readJson } from "../public/formats/json.js";
 
 const PUBLIC_ROOT = path.resolve("public");
-const SECURITY_POLICY_PATH = path.resolve("docs", "SECURITY_POLICY.md");
+const SECURITY_POLICY_PATH = path.resolve("docs", "security", "SECURITY_POLICY.md");
 const APP_PATH = path.resolve("public", "app.js");
 
 const FORBIDDEN_PUBLIC_PATTERNS = [

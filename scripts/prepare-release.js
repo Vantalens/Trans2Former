@@ -62,7 +62,7 @@ await writeFile(path.join(releaseDir, "RELEASE_MANIFEST.json"), `${JSON.stringif
   localOnly: true,
   packageKinds: {
     webPreview: `${releaseName}/public`,
-    desktopInstaller: "Use docs/DESKTOP_RELEASE_PLAN.md naming and checksum rules for platform builds.",
+    desktopInstaller: "Use docs/operations/DESKTOP_RELEASE_PLAN.md naming and checksum rules for platform builds.",
   },
   preflight: [
     "Run npm test before publishing a GitHub release.",
