@@ -1456,8 +1456,9 @@ function convertWithWorker(payload) {
       isAsync: true,
       abortController,
       reject: (error) => {
+        // 修复 issue #184: 只需 abort，asyncPromise 会通过信号检查自然拒绝
         abortController.abort();
-        throw error;
+        // 不抛出错误，让 Promise 链正常处理取消
       }
     };
 
