@@ -384,14 +384,22 @@ function compareIdSets(previousIds = [], nextIds = []) {
   };
 }
 
-function getHistoryStorageKey() {
-  return `trans2former.output-history.${hashString([
+function updateCachedHistoryKey() {
+  cachedHistoryKey = `trans2former.output-history.${hashString([
     currentFileName,
     fromFormatSelect.value,
     toFormatSelect.value,
     markdownOutputProfile,
     getActiveInputContent(),
-  ].join("\u001f"))}`;
+  ].join(""))}`;
+}
+
+function getHistoryStorageKey() {
+  // 使用缓存避免重复计算哈希（issue #65, code review P2 #2）
+  if (!cachedHistoryKey) {
+    updateCachedHistoryKey();
+  }
+  return cachedHistoryKey;
 }
 
 function readPersistentHistory() {
@@ -1299,6 +1307,7 @@ function schedulePreviewUpdate() {
 
 async function handleInputText(rawContent, fileName = currentFileName, { renderInitialPreview = true } = {}) {
   currentFileName = fileName;
+  cachedHistoryKey = null; // 输入内容或文件名变化，使缓存失效
   currentInputContent = String(rawContent ?? "");
   inputContent.value = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName);
   syncInputEditorMode();
@@ -1659,6 +1668,7 @@ fileInput.addEventListener("change", (event) => {
 inputContent.addEventListener("input", () => {
   if (!inputContent.readOnly) {
     currentInputContent = inputContent.value;
+  cachedHistoryKey = null; // 输入内容变化，使缓存失效
   }
   schedulePreviewUpdate();
   updateWordCount();
@@ -1669,6 +1679,7 @@ inputContent.addEventListener("input", () => {
   }
 });
 
+  cachedHistoryKey = null; // Markdown 配置变化，使缓存失效
 markdownProfileSelect?.addEventListener("change", () => {
   markdownOutputProfile = markdownProfileSelect.value;
   writeMarkdownProfilePreference(markdownOutputProfile);
@@ -1721,6 +1732,7 @@ largePreviewModeSelect?.addEventListener("change", () => {
   renderPreviewWhenIdle();
 });
 
+  cachedHistoryKey = null; // 输入格式变化，使缓存失效
 fromFormatSelect.addEventListener("change", () => {
   syncInputEditorMode();
   syncFormatOptions();
@@ -1729,6 +1741,7 @@ fromFormatSelect.addEventListener("change", () => {
   updateFormatCapabilityNote();
   syncMarkdownProfileControl();
 });
+  cachedHistoryKey = null; // 输出格式变化，使缓存失效
 
 toFormatSelect.addEventListener("change", () => {
   syncPdfPaperControl();
