@@ -1668,7 +1668,7 @@ fileInput.addEventListener("change", (event) => {
 inputContent.addEventListener("input", () => {
   if (!inputContent.readOnly) {
     currentInputContent = inputContent.value;
-  cachedHistoryKey = null; // 输入内容变化，使缓存失效
+    cachedHistoryKey = null; // 输入内容变化，使缓存失效
   }
   schedulePreviewUpdate();
   updateWordCount();
@@ -1679,8 +1679,8 @@ inputContent.addEventListener("input", () => {
   }
 });
 
-  cachedHistoryKey = null; // Markdown 配置变化，使缓存失效
 markdownProfileSelect?.addEventListener("change", () => {
+  cachedHistoryKey = null; // Markdown 配置变化，使缓存失效
   markdownOutputProfile = markdownProfileSelect.value;
   writeMarkdownProfilePreference(markdownOutputProfile);
   updateFormatCapabilityNote();
@@ -1732,8 +1732,8 @@ largePreviewModeSelect?.addEventListener("change", () => {
   renderPreviewWhenIdle();
 });
 
-  cachedHistoryKey = null; // 输入格式变化，使缓存失效
 fromFormatSelect.addEventListener("change", () => {
+  cachedHistoryKey = null; // 输入格式变化，使缓存失效
   syncInputEditorMode();
   syncFormatOptions();
   lastRenderedPayload = "";
@@ -1741,9 +1741,9 @@ fromFormatSelect.addEventListener("change", () => {
   updateFormatCapabilityNote();
   syncMarkdownProfileControl();
 });
-  cachedHistoryKey = null; // 输出格式变化，使缓存失效
 
 toFormatSelect.addEventListener("change", () => {
+  cachedHistoryKey = null; // 输出格式变化，使缓存失效
   syncPdfPaperControl();
   updateOutputPreviewVisibility(toFormatSelect.value === "pdf");
   updateFormatCapabilityNote();
