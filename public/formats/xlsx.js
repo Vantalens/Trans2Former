@@ -96,9 +96,12 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
   const rows = [];
   const cells = [];
   const formulas = [];
-  for (const rowMatch of String(xml || "").matchAll(/<row\b[\s\S]*?<\/row>/g)) {
+  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #201, code review P2 #3）
+  const rowMatches = [...String(xml || "").matchAll(/<row\b[\s\S]*?<\/row>/g)];
+  for (const rowMatch of rowMatches) {
     const row = [];
-    for (const cellMatch of rowMatch[0].matchAll(/<c\b[\s\S]*?<\/c>/g)) {
+    const cellMatches = [...rowMatch[0].matchAll(/<c\b[\s\S]*?<\/c>/g)];
+    for (const cellMatch of cellMatches) {
       const cellXml = cellMatch[0];
       const ref = getAttr(cellXml.match(/<c\b[^>]*>/)?.[0] || "", "r");
       const formula = stripTags(cellXml.match(/<f\b[\s\S]*?<\/f>/)?.[0] || "");
