@@ -20,8 +20,8 @@
 
 ## 📁 文档分类
 
-### [development/](development/) - 开发文档（10 个）
-开发相关的所有文档，包括需求、架构、测试、进度等。
+### [development/](development/) - 开发文档（13 个）
+开发相关的所有文档，包括需求、架构、测试、进度、代码审核等。
 
 | 文档 | 说明 |
 |------|------|
@@ -35,6 +35,9 @@
 | [INSTALL.md](development/INSTALL.md) | 安装指南 |
 | [TESTING_GUIDE.md](development/TESTING_GUIDE.md) | 测试指南 |
 | [DEVELOPMENT_TASKS.md](development/DEVELOPMENT_TASKS.md) | 开发任务清单 |
+| [COMPREHENSIVE_CODE_REVIEW_2026-07-03.md](development/COMPREHENSIVE_CODE_REVIEW_2026-07-03.md) | 🔍 全面代码审核报告 |
+| [CODE_REVIEW_EXECUTIVE_SUMMARY.md](development/CODE_REVIEW_EXECUTIVE_SUMMARY.md) | 📊 代码审核执行摘要 |
+| [CODE_ISSUES_CHECKLIST.md](development/CODE_ISSUES_CHECKLIST.md) | ✅ 代码问题清单 |
 
 ### [architecture/](architecture/) - 架构设计（2 个）
 核心架构设计文档。
@@ -68,6 +71,7 @@
 |------|------|
 | [v1-document-model.md](formats/v1-document-model.md) | 📦 v1 单一模型当前实现（已归档） |
 | [CONVERSION_POLICY.md](product/CONVERSION_POLICY.md) | 📋 转换策略（含 v2 投影规则） |
+| [STIRLING_PDF_REFERENCE_PLAN.md](product/STIRLING_PDF_REFERENCE_PLAN.md) | 🔧 Stirling-PDF 参考方案与转换链路修复路线 |
 
 ### [release/](release/) - 发布文档（4 个）
 版本发布相关的文档和发布说明。
@@ -202,11 +206,11 @@
 ## 📊 文档统计
 
 - **根目录文档**: 6 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE, THIRD_PARTY_NOTICES.md）
-- **docs/ 文档**: 36 个
-  - development: 10 个
+- **docs/ 文档**: 40 个
+  - development: 13 个
   - architecture: 2 个（MULTI_DOMAIN_MODEL_DESIGN.md, MULTI_MODEL_ARCHITECTURE.md）
   - formats: 1 个（v1-document-model.md，归档）
-  - product: 1 个（CONVERSION_POLICY.md）
+  - product: 2 个（CONVERSION_POLICY.md, STIRLING_PDF_REFERENCE_PLAN.md）
   - release: 4 个
   - checklists: 2 个
   - reports: 2 个
@@ -216,10 +220,10 @@
   - README.md: 1 个
 - **samples/ 文档**: 4 个（corpus/README.md, fixtures/README.md, ofd/README.md, png/README.md）
 
-**总计**: 46 个文档（清晰分类，易于查找）
+**总计**: 50 个文档（清晰分类，易于查找）
 
 ---
 
-**文档版本**: v1.1.0  
-**最后更新**: 2026-06-23  
+**文档版本**: v1.2.0  
+**最后更新**: 2026-07-03  
 **维护者**: Trans2Former Team
