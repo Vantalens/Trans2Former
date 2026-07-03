@@ -1051,7 +1051,7 @@ function setTransformBusy(isBusy) {
   transformButton.disabled = isBusy;
   cancelTransformButton.disabled = !isBusy;
   cancelTransformButton.hidden = !isBusy;
-  if (!isBusy && conversionProgress.dataset.state !== "error" && conversionProgress.dataset.state !== "canceled") {
+  if (!isBusy && !["complete", "error", "canceled"].includes(conversionProgress.dataset.state)) {
     updateConversionProgress({ stage: "idle", progress: 0 });
   }
 }
