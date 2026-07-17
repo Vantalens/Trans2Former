@@ -144,7 +144,6 @@ let currentDocumentModel = null;
 let currentConversionQuality = null;
 let currentOutputFormat = "";
 let currentOutputMime = "";
-let currentOutputType = "none";
 let outputDraftCommitTimer = null;
 let markdownOutputProfile = "ai-ready";
 let historyPersistenceEnabled = false;
@@ -160,6 +159,7 @@ const LARGE_PREVIEW_BLOCK_LIMIT = 80;
 const WORKER_TRANSFERABLE_THRESHOLD_BYTES = 1024 * 1024;
 const VIRTUAL_LIST_ITEM_LIMIT = 160;
 const EDITABLE_OUTPUT_FORMATS = new Set(["md", "html", "txt", "json", "csv", "xml"]);
+const BINARY_OUTPUT_FORMATS = new Set(["docx", "xlsx", "pptx", "epub", "pdf"]);
 const INPUT_EDITOR_MIN_HEIGHT = 144;
 const INPUT_EDITOR_MAX_HEIGHT = 420;
 const BINARY_INPUT_EDITOR_MIN_HEIGHT = 118;
@@ -384,13 +384,23 @@ function compareIdSets(previousIds = [], nextIds = []) {
   };
 }
 
-function updateCachedHistoryKey() {
+function snapshotHistoryKeyInputs() {
+  return {
+    fileName: String(currentFileName || "document"),
+    fromFormat: String(fromFormatSelect.value || ""),
+    toFormat: String(toFormatSelect.value || ""),
+    markdownProfile: String(markdownOutputProfile || ""),
+    content: String(getActiveInputContent() || ""),
+  };
+}
+
+function updateCachedHistoryKey(snapshot = snapshotHistoryKeyInputs()) {
   cachedHistoryKey = `trans2former.output-history.${hashString([
-    currentFileName,
-    fromFormatSelect.value,
-    toFormatSelect.value,
-    markdownOutputProfile,
-    getActiveInputContent(),
+    snapshot.fileName,
+    snapshot.fromFormat,
+    snapshot.toFormat,
+    snapshot.markdownProfile,
+    snapshot.content,
   ].join(""))}`;
 }
 
@@ -665,11 +675,19 @@ function getOutputLineCount(output) {
 }
 
 function isEditableOutput() {
-  return currentOutputType === "text" && EDITABLE_OUTPUT_FORMATS.has(currentOutputFormat);
+  return getCurrentOutputType() === "text" && EDITABLE_OUTPUT_FORMATS.has(currentOutputFormat);
 }
 
 function getCurrentOutputContent() {
   return outputEditor ? outputEditor.value : "";
+}
+function getCurrentOutputType(format = currentOutputFormat) {
+
+  const normalized = String(format || "").toLowerCase();
+  if (!normalized) {
+    return "none";
+  }
+  return BINARY_OUTPUT_FORMATS.has(normalized) ? "binary" : "text";
 }
 
 function clearOutputHistory() {
@@ -690,7 +708,7 @@ function updateOutputVersionControls() {
   outputCheckpointButton.disabled = !editable || outputVersionIndex < 0;
 
   if (!editable) {
-    if (currentOutputType === "binary") {
+    if (getCurrentOutputType() === "binary") {
       outputDraftMeta.textContent = "二进制输出不提供文本编辑器";
     } else {
       outputDraftMeta.textContent = "等待转换";
@@ -711,7 +729,7 @@ function renderOutputPreview(content = "") {
 
   if (!isEditableOutput()) {
     outputPreviewNotice.hidden = true;
-    textOutputPreview.textContent = content || (currentOutputType === "binary" ? "二进制输出可直接下载" : "输出");
+    textOutputPreview.textContent = content || (getCurrentOutputType() === "binary" ? "二进制输出可直接下载" : "输出");
     return;
   }
 
@@ -746,7 +764,7 @@ function renderOutputPreview(content = "") {
 }
 
 function updateOutputDownloadLink(output) {
-  if (currentOutputType === "binary") {
+  if (getCurrentOutputType() === "binary") {
     return;
   }
 
@@ -799,9 +817,11 @@ function commitOutputVersion(output, { kind = "edit", forceNew = false } = {}) {
       const keepEdits = edits.slice(-keepEditCount);
       const keepAll = [...checkpoints, ...keepEdits].sort((a, b) => a.index - b.index);
 
-      sessionVersions = keepAll.map(item => item.version);
-      // 重新计算标签
-      sessionVersions.forEach((v, i) => { v.label = `v${i}`; });
+      // 创建新快照，避免修改仍被 UI 或事件闭包引用的旧版本对象（issue #187）。
+      sessionVersions = keepAll.map((item, i) => ({
+        ...item.version,
+        label: `v${i}`,
+      }));
       // 调整当前索引到新数组末尾
       outputVersionIndex = sessionVersions.length - 1;
     }
@@ -840,7 +860,6 @@ function scheduleOutputVersionCommit(kind = "edit") {
 }
 
 function initializeOutputDraft(result) {
-  currentOutputType = result.type;
   currentOutputFormat = result.format;
   currentOutputMime = result.mime;
   clearOutputHistory();
@@ -995,6 +1014,7 @@ function isBinaryInputFormat(format = fromFormatSelect.value) {
 }
 
 function getActiveInputContent() {
+  // 二进制输入的 textarea 只显示可读摘要；转换必须继续使用原始 data URL/载荷。
   return currentInputContent || inputContent.value;
 }
 
@@ -1030,7 +1050,6 @@ function resetGeneratedOutput(metaMessage = "尚未生成") {
   releaseConversionResources();
   currentOutputMime = "";
   currentOutputFormat = "";
-  currentOutputType = "none";
   currentConversionQuality = null;
   if (verificationReportPanel) {
     verificationReportPanel.hidden = true;
@@ -1082,11 +1101,12 @@ function updateDownloadState(enabled) {
 }
 
 async function openCurrentOutputInPreview() {
-  if (!currentOutputType || currentOutputType === "none") return;
+  const outputType = getCurrentOutputType();
+  if (outputType === "none") return;
 
   // 修复 issue #63: 对于二进制输出，从 Blob 生成 data URL 而非传递会失效的 blob URL
   let dataUrl = "";
-  if (currentOutputType === "binary" && currentOutputDownloadBlob) {
+  if (outputType === "binary" && currentOutputDownloadBlob) {
     try {
       dataUrl = await blobToDataUrl(currentOutputDownloadBlob);
     } catch (error) {
@@ -1100,7 +1120,7 @@ async function openCurrentOutputInPreview() {
       fileName: currentFileName || "",
     },
     output: {
-      type: currentOutputType,
+      type: outputType,
       format: currentOutputFormat || "",
       mime: currentOutputMime || "",
       text: outputEditor?.value || textOutputPreview?.textContent || "",
@@ -1143,9 +1163,9 @@ function updateOutputPreviewVisibility(isPdf) {
 
 function getPayloadKey() {
   return JSON.stringify({
-    content: getActiveInputContent(),
-    from: fromFormatSelect.value,
-    file: currentFileName,
+    content: String(getActiveInputContent() || ""),
+    from: String(fromFormatSelect.value || ""),
+    file: String(currentFileName || "document"),
   });
 }
 
@@ -1571,7 +1591,7 @@ async function transformContent() {
     currentDocumentModel = null;
     currentConversionQuality = result.quality || null;
     renderDocumentModelPanel(null);
-    currentOutputType = result.type;
+    // Output type is derived from currentOutputFormat.
     currentOutputFormat = result.format;
     currentOutputMime = result.mime;
     clearOutputHistory();
@@ -1579,7 +1599,6 @@ async function transformContent() {
     renderVerificationReport(currentConversionQuality);
 
     if (result.type === "binary") {
-      currentOutputType = "binary";
       currentOutputFormat = result.format;
       currentOutputMime = result.mime;
       clearOutputHistory();
@@ -1605,7 +1624,6 @@ async function transformContent() {
       return;
     }
 
-    currentOutputType = "text";
     currentOutputFormat = result.format;
     currentOutputMime = result.mime;
     downloadOutputButton.textContent = "下载输出";

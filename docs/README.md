@@ -2,6 +2,8 @@
 
 欢迎来到 Trans2Former 文档中心！本目录包含项目的所有开发文档、指南和报告。
 
+当前状态以 [development/progress.md](development/progress.md) 为唯一事实来源；完成报告和路线图报告均为生成当日的历史快照。
+
 ## 📚 快速导航
 
 ### 🚀 新手入门
@@ -79,7 +81,8 @@
 | 文档 | 说明 |
 |------|------|
 | [RELEASE_GUIDE.md](release/RELEASE_GUIDE.md) | 发布指南 |
-| [v2.3.0.md](release/v2.3.0.md) | v2.3.0 发布说明（最新） |
+| [v2.4.0.md](release/v2.4.0.md) | v2.4.0 稳定化发布说明（当前） |
+| [v2.3.0.md](release/v2.3.0.md) | v2.3.0 发布说明（历史） |
 | [v2.1.0.md](release/v2.1.0.md) | v2.1.0 发布说明 |
 | [v2.0.0.md](release/v2.0.0.md) | v2.0.0 发布说明 |
 

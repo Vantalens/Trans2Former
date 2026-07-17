@@ -131,8 +131,23 @@ export class RepairEngine {
   }
 
   reverifyModel({ before, after, ctx }) {
-    const refreshed = ensureDocumentAudit(after, {
-      content: ctx?.content || "",
+    const previousSpans = new Map(
+      (before?.blocks || [])
+        .filter((block) => block?.id && block?.sourceSpan)
+        .map((block) => [block.id, block.sourceSpan]),
+    );
+    const candidate = {
+      ...after,
+      blocks: (after?.blocks || []).map((block) => {
+        if (block?.sourceSpan || !block?.id || !previousSpans.has(block.id)) {
+          return block;
+        }
+        return { ...block, sourceSpan: previousSpans.get(block.id) };
+      }),
+    };
+    const sourceContextAvailable = typeof ctx?.content === "string" && ctx.content.length > 0;
+    const refreshed = ensureDocumentAudit(candidate, {
+      content: sourceContextAvailable ? ctx.content : "",
       reader: ctx?.from || "",
       writer: ctx?.to || "",
       targetFormat: ctx?.to || "",
@@ -143,7 +158,7 @@ export class RepairEngine {
     const afterQuality = summarizeQuality(refreshed);
     const verified = afterQuality.warningCount <= beforeQuality.warningCount
       && afterQuality.downgradeCount <= beforeQuality.downgradeCount;
-    return { refreshed, beforeQuality, afterQuality, verified };
+    return { refreshed, beforeQuality, afterQuality, verified, sourceContextAvailable };
   }
 
   reverifyRoundTrip({ output, model, ctx }) {

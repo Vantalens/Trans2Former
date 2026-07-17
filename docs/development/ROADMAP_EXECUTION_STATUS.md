@@ -1,5 +1,7 @@
 # 路线图执行状态报告
 
+> 历史快照（2026-06-23）：阶段结论仅代表生成当日；当前状态以 [progress.md](progress.md) 为准。
+
 **更新日期**: 2026-06-23  
 **执行者**: Claude Code (Opus 4.8) + Jack Yao  
 **基于文档**: POST_RESEARCH_ROADMAP.md v1.0.0

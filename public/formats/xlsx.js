@@ -96,7 +96,7 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
   const rows = [];
   const cells = [];
   const formulas = [];
-  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #201, code review P2 #3）
+  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #196, code review P2 #3）
   const rowMatches = [...String(xml || "").matchAll(/<row\b[\s\S]*?<\/row>/g)];
   for (const rowMatch of rowMatches) {
     const row = [];

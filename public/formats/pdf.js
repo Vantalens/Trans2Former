@@ -252,7 +252,7 @@ function parseUnicodeHex(value) {
 function parseToUnicodeCMap(source) {
   const cmap = new Map();
   const text = String(source || "");
-  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #201, code review P2 #3）
+  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #196, code review P2 #3）
   const bfcharSections = [...text.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)];
   for (const section of bfcharSections) {
     const rows = [...section[1].matchAll(/<([0-9A-Fa-f\s]+)>\s+<([0-9A-Fa-f\s]+)>/g)];

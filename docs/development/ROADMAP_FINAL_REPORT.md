@@ -1,5 +1,7 @@
 # Trans2Former 路线图完成报告
 
+> 历史快照（2026-06-23）：不得作为当前发布或迁移完成度依据；当前状态以 [progress.md](progress.md) 为准。
+
 **版本**: v1.0.0  
 **完成日期**: 2026-06-23  
 **执行者**: Claude Code (Opus 4.8) + Jack Yao  

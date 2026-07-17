@@ -1346,6 +1346,10 @@ test("CSV parser handles BOM, quoted commas, multiline cells, empty cells, and C
   assert.deepEqual(table.rows[0], ["A, one", "line 1\nline 2", ""]);
   assert.deepEqual(table.rows[1], ["B", "quoted \"value\"", ""]);
   assert.equal(csvModel.metadata.warnings.some((warning) => warning.severity === "info" && warning.code === "CSV_MULTILINE_FIELD"), true);
+
+  const trailingCommaModel = toDocumentModel("A,B,Empty\r\n1,2,\r\n", "csv", "trailing-comma");
+  assert.deepEqual(trailingCommaModel.blocks[0].headers, ["A", "B", "Empty"]);
+  assert.deepEqual(trailingCommaModel.blocks[0].rows, [["1", "2", ""]]);
 });
 
 test("XML and PNG inputs convert through the DocumentModel pipeline", () => {

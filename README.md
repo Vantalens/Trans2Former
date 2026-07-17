@@ -7,8 +7,8 @@
 Trans2Former 是一款桌面级文档转换工具：14 种输入格式、11 种输出格式，全部转换在本机完成。不上传文件、不依赖 Office / LibreOffice / Pandoc，并对每次转换生成可解释的质量检验报告。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-28%20scripts%20passing-brightgreen.svg)](#)
-[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-release%20suite%20passing-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](#)
 
 ---
 
@@ -41,10 +41,13 @@ Trans2Former 是一款桌面级文档转换工具：14 种输入格式、11 种�
 
 ## 快速开始
 
+开发和 CI 支持 Node.js 22 或 24；仓库默认版本见 `.nvmrc`（Node 24）。Node 25+ 当前不在支持范围。
+
 ```bash
 npm install   # 安装依赖
 npm start     # 启动，浏览器打开 http://localhost:3000
-npm test      # 运行测试套件（28 个脚本）
+npm test      # 运行完整测试套件（含真实浏览器转换矩阵）
+npm run coverage # 在受支持 Node 版本上运行覆盖率门禁
 ```
 
 桌面应用（Tauri 2）与发布包：

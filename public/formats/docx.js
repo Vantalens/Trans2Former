@@ -72,7 +72,7 @@ function scanBalanced(xml, tag) {
   const out = [];
   let depth = 0;
   let start = -1;
-  // 性能优化：缓存 matchAll 结果，避免每次迭代器创建（issue #202, code review P2 #4）
+  // 性能优化：缓存 matchAll 结果，避免每次迭代器创建（issue #197, code review P2 #4）
   const matches = [...source.matchAll(token)];
   for (const m of matches) {
     const isClose = m[0].startsWith("</");
@@ -97,7 +97,7 @@ function scanTopLevelBlocks(body) {
   const token = /<\/?w:(p|tbl)\b[^>]*?>/g;
   const blocks = [];
   let current = null;
-  // 性能优化：缓存 matchAll 结果，避免每次迭代器创建（issue #202, code review P2 #4）
+  // 性能优化：缓存 matchAll 结果，避免每次迭代器创建（issue #197, code review P2 #4）
   const matches = [...source.matchAll(token)];
   for (const m of matches) {
     const isClose = m[0].startsWith("</");

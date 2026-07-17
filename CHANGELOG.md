@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-07-17
+
+### 稳定性
+
+- 修复版本历史清理时原地修改版本对象、历史键依赖可变状态，以及输出类型重复状态可能失配的问题（#187、#188、#192、#194）。
+- 文档审计改为纯函数式元数据构造，修复审计过程删除调用方 `warnings` 的副作用（#189）。
+- Repair Engine 复核在缺少原始转换上下文时保留 `sourceSpan`，并显式报告上下文可用性（#190）。
+- 更正 PDF、XLSX、DOCX 修复注释中误写为 #201/#202 的 Issue 引用（实际为 #196/#197）。
+- 增加 Worker 大输入重复转换、CSV CRLF 尾行、审计纯度、修复上下文和浏览器用户路径回归测试。
+
+### 发布基线
+
+- 运行时明确支持 Node.js 22/24，并通过 `engines` 与 `.nvmrc` 固定开发环境；CI 在两个版本上执行覆盖率门禁。
+- 本次重新生成覆盖率：语句/行 81.82%，分支 74.62%，函数 86.56%；旧报告仅保留为历史快照。
+- 将 Express 4、qs 和 protobufjs 升级到同主版本安全修复版本，`npm audit` 为 0 个已知漏洞。
+- 新增真实浏览器发布矩阵：MD↔HTML、CSV/XLSX→MD、DOCX/PPTX→MD、PDF→TXT、MD→PDF、PNG OCR，以及下载和显式 OCR 失败结果。
+- Web、npm、Cargo 与 Tauri 版本统一为 2.4.0。
+
 ### 修复
 
 - **资源预算检查失效 (Issue #181)**: `_checkResourceBudget` 调用 `getCapabilities(f)` 期望返回对象但实际返回数组，导致预算检查总是提前返回。所有输入大小限制被绕过，用户可上传任意大小文件导致浏览器崩溃。修复为直接访问 `capabilityDetails.get(f)` 获取单个格式能力对象。新增 `resource-budget-validation-test.js` (7 个测试用例) 验证修复。

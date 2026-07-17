@@ -155,8 +155,9 @@ export function ensureDocumentAudit(model, {
     },
   }));
 
+  const { warnings: _previousWarnings, ...metadataBase } = model.metadata || {};
   const metadata = {
-    ...(model.metadata || {}),
+    ...metadataBase,
     conversion: {
       ...(model.metadata?.conversion || {}),
       reader: reader || model.sourceFormat || "",
@@ -176,13 +177,8 @@ export function ensureDocumentAudit(model, {
       warningsBySeverity: warningSummary(warnings),
       downgradeCount: warnings.filter((warning) => ["lossy", "unsupported"].includes(warning.severity)).length,
     },
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
-  if (warnings.length > 0) {
-    metadata.warnings = warnings;
-  } else {
-    delete metadata.warnings;
-  }
-
   return {
     ...model,
     blocks,

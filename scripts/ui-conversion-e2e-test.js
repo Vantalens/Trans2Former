@@ -69,6 +69,32 @@ try {
   assert.equal(result.downloadHref.startsWith("blob:"), true, "UI download link should point to a generated Blob URL");
   assert.equal(result.downloadName.endsWith(".html"), true, "UI download filename should use target extension");
   assert.equal(result.errorPanelHidden, true, "UI error panel should remain hidden after a successful conversion");
+  const largeMarker = "TRANSFERABLE_RETRY_MARKER";
+  const largeMarkdown = `# Large payload\n\n${"x".repeat(1024 * 1024)}\n\n${largeMarker}`;
+  await page.$eval("#inputContent", (element, value) => {
+    element.value = value;
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  }, largeMarkdown);
+  await page.select("#fromFormatSelect", "md");
+  await page.select("#toFormatSelect", "html");
+
+  let previousHref = result.downloadHref;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.click("#transformButton");
+    await page.waitForFunction(
+      (oldHref) => {
+        const progress = document.getElementById("conversionProgress")?.dataset.state;
+        const href = document.getElementById("downloadOutputButton")?.getAttribute("href") || "";
+        return progress === "complete" && href.startsWith("blob:") && href !== oldHref;
+      },
+      { timeout: 15000 },
+      previousHref,
+    );
+    previousHref = await page.$eval("#downloadOutputButton", (element) => element.getAttribute("href") || "");
+  }
+  const retainedInput = await page.$eval("#inputContent", (element) => element.value);
+  assert.equal(retainedInput.endsWith(largeMarker), true, "transferring a large payload must not detach the retry source");
+
   await page.$eval("#fileInput", (input) => { input.value = ""; });
   const fileInput = await page.$("#fileInput");
   await fileInput.uploadFile(SAMPLE_MARKDOWN_PATH);

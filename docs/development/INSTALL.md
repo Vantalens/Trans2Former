@@ -6,7 +6,7 @@ Trans2Former 现在定位为 Tauri 桌面壳 + Web-GUI 的本地格式转换工�
 
 ## 系统要求
 
-- Node.js 18 或更高版本
+- Node.js 22 或 24（推荐使用 `.nvmrc` 固定的 Node 24；Node 25+ 暂不支持）
 - npm 9 或更高版本
 - 现代浏览器：Chrome、Edge、Firefox 或 Safari
 - 桌面壳真实启动：Rust/Cargo 工具链和 Tauri CLI
@@ -71,6 +71,7 @@ npm run desktop:dev
 
 ```bash
 npm test
+npm run coverage
 ```
 
 当前测试会检查：
