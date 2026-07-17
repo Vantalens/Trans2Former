@@ -381,6 +381,11 @@ export {
 } from "./core/ocr/tesseract-engine.js";
 export { ensureTesseractBootstrap, rehydrateTesseractAvailability } from "./core/ocr/tesseract-bootstrap.js";
 export {
+  TESSERACT_VENDOR_FILES,
+  getTesseractVendorFileSpec,
+  verifyTesseractVendorFile,
+} from "./core/ocr/tesseract-model-manifest.js";
+export {
   paddleOcrEngine,
   PADDLE_OCR_MANIFEST_ID,
   PADDLE_OCR_MODEL_FILES,

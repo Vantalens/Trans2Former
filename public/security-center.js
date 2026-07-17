@@ -12,6 +12,8 @@ import {
   clearSeededTessdata,
   sha256Hex,
   tesseractOCREngine,
+  getTesseractVendorFileSpec,
+  verifyTesseractVendorFile,
   paddleOcrEngine,
   markPaddleOcrVendorReady,
   PADDLE_OCR_MODEL_FILES,
@@ -333,20 +335,36 @@ async function importTessdata(dialog, button) {
         setStatusMessage(dialog, `正在校验 ${file.name} (${(file.size / 1024).toFixed(0)} KB)…`, "info");
         const buffer = await file.arrayBuffer();
         const sha256 = await sha256Hex(buffer);
+
+        // SHA-256 完整性校验（针对已知的官方语言文件）
+        const knownSpec = getTesseractVendorFileSpec(language);
+        if (knownSpec) {
+          await verifyTesseractVendorFile(language, buffer);
+        }
+
         await defaultOCRStorage.put(`tesseract/${language}.traineddata`, buffer, { sha256 });
         if (typeof tesseractOCREngine.ensureProbe === "function") {
           await tesseractOCREngine.ensureProbe();
         }
         markTesseractVendorReady(true);
         defaultModelCache.setStatus(manifestId, STATUS_AVAILABLE, {
-          message: `已导入 ${language} (${(buffer.byteLength / (1024 * 1024)).toFixed(2)} MB, sha256=${sha256.slice(0, 12)}…)。注意：tessdata 由用户提供，SHA-256 已记录但未与官方值比对，请确保文件来源可信。`,
+          message: knownSpec
+            ? `已导入 ${language} (${(buffer.byteLength / (1024 * 1024)).toFixed(2)} MB, SHA-256 已匹配官方清单 ✅)`
+            : `已导入 ${language} (${(buffer.byteLength / (1024 * 1024)).toFixed(2)} MB, sha256=${sha256.slice(0, 12)}…)。注意：此语言文件由用户提供，SHA-256 已记录但未与官方值比对，请确保文件来源可信。`,
           language,
           sha256,
           size: buffer.byteLength,
+          verified: !!knownSpec,
         });
-        setStatusMessage(dialog, `${language}.traineddata 已就绪 (sha256=${sha256.slice(0, 12)}…)`, "success");
+        setStatusMessage(
+          dialog,
+          knownSpec
+            ? `${language}.traineddata 已就绪 (SHA-256 已验证 ✅)`
+            : `${language}.traineddata 已就绪 (sha256=${sha256.slice(0, 12)}…，未验证)`,
+          "success"
+        );
       } catch (error) {
-        defaultModelCache.setStatus(manifestId, STATUS_NOT_DOWNLOADED, {
+        defaultModelCache.setStatus(manifestId, error?.code === "MODEL_CHECKSUM_MISMATCH" ? STATUS_DEGRADED : STATUS_NOT_DOWNLOADED, {
           message: `导入失败：${error?.message || error}`,
         });
         setStatusMessage(dialog, `导入 ${language} 失败：${error?.message || error}`, "error");

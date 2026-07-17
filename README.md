@@ -7,8 +7,8 @@
 Trans2Former 是一款桌面级文档转换工具：14 种输入格式、11 种输出格式，全部转换在本机完成。不上传文件、不依赖 Office / LibreOffice / Pandoc，并对每次转换生成可解释的质量检验报告。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-28%20scripts%20passing-brightgreen.svg)](#)
-[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-release%20suite%20passing-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](#)
 
 ---
 
@@ -30,7 +30,7 @@ Trans2Former 是一款桌面级文档转换工具：14 种输入格式、11 种�
 | 文档 | Markdown、HTML、TXT、DOCX、PDF、EPUB | Markdown、HTML、TXT、DOCX、PDF、EPUB |
 | 数据 | JSON、CSV、XML、XLSX | JSON、CSV、XML、XLSX |
 | 演示 | PPTX | PPTX |
-| 图片 | PNG（OCR 识别） | — |
+| 图片 | PNG（OCR 识别） | （PNG → HTML、TXT、JSON、PDF 通过 OCR 识别后转换） |
 | 实验性 | DOC（仅文本提取）、OFD（L0 级：容器解析，战略攻坚格式） | — |
 
 常用路径：Markdown ↔ HTML · DOCX → Markdown · PDF → Markdown · XLSX ↔ CSV · HTML → PDF
@@ -41,10 +41,13 @@ Trans2Former 是一款桌面级文档转换工具：14 种输入格式、11 种�
 
 ## 快速开始
 
+开发和 CI 支持 Node.js 22 或 24；仓库默认版本见 `.nvmrc`（Node 24）。Node 25+ 当前不在支持范围。
+
 ```bash
 npm install   # 安装依赖
 npm start     # 启动，浏览器打开 http://localhost:3000
-npm test      # 运行测试套件（28 个脚本）
+npm test      # 运行完整测试套件（含真实浏览器转换矩阵）
+npm run coverage # 在受支持 Node 版本上运行覆盖率门禁
 ```
 
 桌面应用（Tauri 2）与发布包：
@@ -76,10 +79,16 @@ Trans2Former/
 
 增强能力直接内置于核心模块，不使用插件机制；模型资源不入 git，由 vendor 脚本按钉定来源下载并经 SHA-256 校验（[scripts/paddleocr-models.manifest.json](scripts/paddleocr-models.manifest.json)），随发布包分发、开箱即用。
 
-**架构演进**：
-- **当前（v1）**：单一 DocumentModel 承载所有格式 - 详见 [DOCUMENT_MODEL_SCHEMA.md](docs/formats/DOCUMENT_MODEL_SCHEMA.md)
-- **目标（v2）**：多域模型架构（SemanticDoc, WorkbookModel, SlideModel, FixedLayoutModel, AssetGraph）- 详见 [MULTI_MODEL_ARCHITECTURE.md](docs/architecture/MULTI_MODEL_ARCHITECTURE.md)
-- **迁移计划**：Phase 5 完成详细设计，Phase 6+ 分阶段实施
+**架构演进路径**：
+- **✅ v1（当前）**：单一 DocumentModel 统一承载所有格式
+  - 详见 [DOCUMENT_MODEL_SCHEMA.md](docs/formats/DOCUMENT_MODEL_SCHEMA.md)
+  - 9 种块类型（heading/paragraph/list/table/code/quote/image/asset/raw）
+  - 已验证支持 14 种输入 → 11 种输出转换矩阵
+- **🎯 v2（设计中）**：多域模型架构，语义解耦
+  - 五个规范模型：SemanticDoc（流式文档）、WorkbookModel（表格）、SlideModel（演示）、FixedLayoutModel（固定版式）、AssetGraph（共享资产）
+  - 详见 [MULTI_DOMAIN_MODEL_DESIGN.md](docs/architecture/MULTI_DOMAIN_MODEL_DESIGN.md) 和 [V2_MULTI_DOMAIN_MODELS.md](docs/V2_MULTI_DOMAIN_MODELS.md)
+  - 跨模型转换显式 mapper，降级可见
+- **⏱️ 迁移计划**：Phase 5 完成详细设计（✅已完成），Phase 6-11 分阶段实施（约 15 周），保证向下兼容
 
 **本地能力**：
 
@@ -118,7 +127,10 @@ npm run vendor:paddle
 | [INSTALL.md](INSTALL.md) | 安装指南 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本记录 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献与测试要求 |
-| [docs/MULTI_MODEL_ARCHITECTURE.md](docs/MULTI_MODEL_ARCHITECTURE.md) | 核心架构 |
+| [docs/BENCHMARK.md](docs/BENCHMARK.md) | 基准测试报告 |
+| [docs/architecture/MULTI_DOMAIN_MODEL_DESIGN.md](docs/architecture/MULTI_DOMAIN_MODEL_DESIGN.md) | v2 多域模型设计文档 |
+| [docs/V2_MULTI_DOMAIN_MODELS.md](docs/V2_MULTI_DOMAIN_MODELS.md) | v2 多域模型参考手册 |
+| [docs/V2_MIGRATION_GUIDE.md](docs/V2_MIGRATION_GUIDE.md) | v2 迁移指南 |
 | [docs/CONVERSION_ROUTING.md](docs/CONVERSION_ROUTING.md) | 转换路由 |
 | [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md) | 安全策略 |
 
@@ -142,6 +154,8 @@ npm run vendor:paddle
 ## 许可证
 
 MIT，详见 [LICENSE](LICENSE)。
+
+第三方依赖的许可证信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ---
 

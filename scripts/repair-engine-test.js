@@ -352,4 +352,35 @@ function buildCtx(overrides = {}) {
   assert.equal(audited.metadata.qualityReport.downgradeCount, 1);
 }
 
+// 14. Reverification without raw content preserves known spans and audit stays immutable.
+{
+  const span = {
+    startLine: 1,
+    endLine: 1,
+    startOffset: 0,
+    endOffset: 15,
+  };
+  const before = buildModel();
+  before.blocks[0].sourceSpan = span;
+  const after = structuredClone(before);
+  delete after.blocks[0].sourceSpan;
+
+  const verification = new RepairEngine().reverifyModel({
+    before,
+    after,
+    ctx: { from: "md", to: "md", fileName: "test.md", options: {} },
+  });
+  assert.equal(verification.sourceContextAvailable, false);
+  assert.deepEqual(verification.refreshed.blocks[0].sourceSpan, span);
+
+  const unaudited = buildModel();
+  const originalMetadata = structuredClone(unaudited.metadata);
+  const withoutWarnings = ensureDocumentAudit(unaudited, { content: "Hello old world" });
+  assert.deepEqual(unaudited.metadata, originalMetadata, "audit must not mutate input metadata");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(withoutWarnings.metadata, "warnings"),
+    false,
+    "empty warnings should be omitted without deleting from the input object",
+  );
+}
 console.log("Repair engine test passed: contract, engine unit, round-trip, fallback recommendation, failure and dedupe paths covered.");

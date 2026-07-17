@@ -36,8 +36,8 @@ jobs:
       #
       # Coverage gate (.c8rc.json): statements/lines >= 78%, functions >= 80%,
       # branches >= 64% over public/** (vendor excluded). These are ratchet
-      # floors pinned just below the current measured coverage (81.38/85.56/71.95)
-      # so coverage can only go up — raise them as the test rebuild lands.
+      # floors below the v2.4.0 stabilization baseline
+      # (81.82 statements/lines, 86.56 functions, 74.62 branches).
       - name: Run test suite with coverage gate
         run: npm run coverage
 

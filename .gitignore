@@ -80,6 +80,7 @@ Thumbs.db
 /audit-results/
 /CODE_REVIEW_REPORT.md
 /public/CODE_REVIEW_REPORT.md
+/benchmark-report.json
 
 # Generated sample corpus (programmatically regenerable; `npm run samples:generate`)
 /samples/generated/

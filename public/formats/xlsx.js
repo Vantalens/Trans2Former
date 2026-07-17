@@ -59,8 +59,16 @@ function readStyleFormats(zip) {
 function excelSerialDateToIso(serial) {
   const days = Number(serial);
   if (!Number.isFinite(days)) return String(serial ?? "");
-  const epoch = Date.UTC(1899, 11, 30);
-  const date = new Date(epoch + days * 86400000);
+
+  // 修正 Excel 1900 闰年 bug (issue #182)
+  // Excel 错误地将 1900 年视为闰年，序列号 60 代表不存在的 1900-02-29
+  // 对于序列号 > 60 的日期，需要减去 1 天以补偿
+  let adjustedDays = days;
+  if (days > 60) adjustedDays -= 1;
+
+  // 使用正确的 epoch：1899-12-31（Excel 序列号 1 = 1900-01-01）
+  const epoch = Date.UTC(1899, 11, 31);
+  const date = new Date(epoch + adjustedDays * 86400000);
   return date.toISOString().slice(0, 10);
 }
 
@@ -88,9 +96,12 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
   const rows = [];
   const cells = [];
   const formulas = [];
-  for (const rowMatch of String(xml || "").matchAll(/<row\b[\s\S]*?<\/row>/g)) {
+  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #196, code review P2 #3）
+  const rowMatches = [...String(xml || "").matchAll(/<row\b[\s\S]*?<\/row>/g)];
+  for (const rowMatch of rowMatches) {
     const row = [];
-    for (const cellMatch of rowMatch[0].matchAll(/<c\b[\s\S]*?<\/c>/g)) {
+    const cellMatches = [...rowMatch[0].matchAll(/<c\b[\s\S]*?<\/c>/g)];
+    for (const cellMatch of cellMatches) {
       const cellXml = cellMatch[0];
       const ref = getAttr(cellXml.match(/<c\b[^>]*>/)?.[0] || "", "r");
       const formula = stripTags(cellXml.match(/<f\b[\s\S]*?<\/f>/)?.[0] || "");

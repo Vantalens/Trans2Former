@@ -2,6 +2,8 @@
 
 欢迎来到 Trans2Former 文档中心！本目录包含项目的所有开发文档、指南和报告。
 
+当前状态以 [development/progress.md](development/progress.md) 为唯一事实来源；完成报告和路线图报告均为生成当日的历史快照。
+
 ## 📚 快速导航
 
 ### 🚀 新手入门
@@ -20,8 +22,8 @@
 
 ## 📁 文档分类
 
-### [development/](development/) - 开发文档（10 个）
-开发相关的所有文档，包括需求、架构、测试、进度等。
+### [development/](development/) - 开发文档（13 个）
+开发相关的所有文档，包括需求、架构、测试、进度、代码审核等。
 
 | 文档 | 说明 |
 |------|------|
@@ -35,6 +37,43 @@
 | [INSTALL.md](development/INSTALL.md) | 安装指南 |
 | [TESTING_GUIDE.md](development/TESTING_GUIDE.md) | 测试指南 |
 | [DEVELOPMENT_TASKS.md](development/DEVELOPMENT_TASKS.md) | 开发任务清单 |
+| [COMPREHENSIVE_CODE_REVIEW_2026-07-03.md](development/COMPREHENSIVE_CODE_REVIEW_2026-07-03.md) | 🔍 全面代码审核报告 |
+| [CODE_REVIEW_EXECUTIVE_SUMMARY.md](development/CODE_REVIEW_EXECUTIVE_SUMMARY.md) | 📊 代码审核执行摘要 |
+| [CODE_ISSUES_CHECKLIST.md](development/CODE_ISSUES_CHECKLIST.md) | ✅ 代码问题清单 |
+
+### [architecture/](architecture/) - 架构设计（2 个）
+核心架构设计文档。
+
+| 文档 | 说明 |
+|------|------|
+| [MULTI_DOMAIN_MODEL_DESIGN.md](architecture/MULTI_DOMAIN_MODEL_DESIGN.md) | 🎯 v2 多域模型详细设计文档（Phase 5，设计阶段） |
+| [MULTI_MODEL_ARCHITECTURE.md](architecture/MULTI_MODEL_ARCHITECTURE.md) | 多模型架构概述（待更新为 v2） |
+
+### 质量与基准
+性能基准和质量标准文档。
+
+| 文档 | 说明 |
+|------|------|
+| [BENCHMARK.md](BENCHMARK.md) | 📊 基准测试报告（转换正确性、性能、OCR 准确率） |
+| [V2_MULTI_DOMAIN_MODELS.md](V2_MULTI_DOMAIN_MODELS.md) | 📖 v2 多域模型参考手册（用户指南） |
+| [V2_MIGRATION_GUIDE.md](V2_MIGRATION_GUIDE.md) | 🔄 v2 迁移指南（从 v1 迁移到 v2） |
+
+### 测试样例
+测试样例库和 fixture 索引。
+
+| 文档 | 说明 |
+|------|------|
+| [samples/corpus/README.md](../samples/corpus/README.md) | 📦 样例库索引（basic/complex/edge-cases/real-world/benchmark 五层结构） |
+| [samples/fixtures/README.md](../samples/fixtures/README.md) | 🔧 P4 Fixture 分层索引（程序化生成样例） |
+
+### [formats/](formats/) - 格式规范（2 个）
+文档格式和数据模型规范。
+
+| 文档 | 说明 |
+|------|------|
+| [v1-document-model.md](formats/v1-document-model.md) | 📦 v1 单一模型当前实现（已归档） |
+| [CONVERSION_POLICY.md](product/CONVERSION_POLICY.md) | 📋 转换策略（含 v2 投影规则） |
+| [STIRLING_PDF_REFERENCE_PLAN.md](product/STIRLING_PDF_REFERENCE_PLAN.md) | 🔧 Stirling-PDF 参考方案与转换链路修复路线 |
 
 ### [release/](release/) - 发布文档（4 个）
 版本发布相关的文档和发布说明。
@@ -42,7 +81,8 @@
 | 文档 | 说明 |
 |------|------|
 | [RELEASE_GUIDE.md](release/RELEASE_GUIDE.md) | 发布指南 |
-| [v2.3.0.md](release/v2.3.0.md) | v2.3.0 发布说明（最新） |
+| [v2.4.0.md](release/v2.4.0.md) | v2.4.0 稳定化发布说明（当前） |
+| [v2.3.0.md](release/v2.3.0.md) | v2.3.0 发布说明（历史） |
 | [v2.1.0.md](release/v2.1.0.md) | v2.1.0 发布说明 |
 | [v2.0.0.md](release/v2.0.0.md) | v2.0.0 发布说明 |
 
@@ -84,6 +124,14 @@
 | 🇧🇷 Português | [README.pt-BR.md](i18n/README.pt-BR.md) |
 | 🇷🇺 Русский | [README.ru.md](i18n/README.ru.md) |
 
+### 根目录 - 许可证与法律声明
+项目许可证和第三方依赖声明。
+
+| 文档 | 说明 |
+|------|------|
+| [LICENSE](../LICENSE) | MIT 许可证 |
+| [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | 第三方依赖许可证声明 |
+
 ### [operations/](operations/) - 运维和发布（3 个）
 运维和发布相关的文档。
 
@@ -123,9 +171,10 @@
 
 ### 对于准备发布
 1. [TESTING_GUIDE.md](development/TESTING_GUIDE.md) - 运行测试
-2. [ACCEPTANCE_CHECKLIST.md](checklists/ACCEPTANCE_CHECKLIST.md) - 验收清单
-3. [RELEASE_GUIDE.md](release/RELEASE_GUIDE.md) - 发布流程
-4. [CHANGELOG.md](../CHANGELOG.md) - 更新变更日志
+2. [samples/corpus/README.md](../samples/corpus/README.md) - 样例库使用
+3. [ACCEPTANCE_CHECKLIST.md](checklists/ACCEPTANCE_CHECKLIST.md) - 验收清单
+4. [RELEASE_GUIDE.md](release/RELEASE_GUIDE.md) - 发布流程
+5. [CHANGELOG.md](../CHANGELOG.md) - 更新变更日志
 
 ---
 
@@ -141,6 +190,8 @@
 
 ### 新增文档时的归属
 - **开发文档** → `docs/development/`
+- **架构设计** → `docs/architecture/`
+- **格式规范** → `docs/formats/`
 - **发布说明** → `docs/release/`
 - **检查清单** → `docs/checklists/`
 - **项目报告** → `docs/reports/`
@@ -157,20 +208,25 @@
 
 ## 📊 文档统计
 
-- **根目录文档**: 5 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE）
-- **docs/ 文档**: 29 个
-  - development: 10 个
+- **根目录文档**: 6 个（CLAUDE.md, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE, THIRD_PARTY_NOTICES.md）
+- **docs/ 文档**: 40 个
+  - development: 13 个
+  - architecture: 2 个（MULTI_DOMAIN_MODEL_DESIGN.md, MULTI_MODEL_ARCHITECTURE.md）
+  - formats: 1 个（v1-document-model.md，归档）
+  - product: 2 个（CONVERSION_POLICY.md, STIRLING_PDF_REFERENCE_PLAN.md）
   - release: 4 个
   - checklists: 2 个
   - reports: 2 个
   - setup: 1 个
   - i18n: 9 个
+  - quality: 3 个（BENCHMARK.md, V2_MULTI_DOMAIN_MODELS.md, V2_MIGRATION_GUIDE.md）
   - README.md: 1 个
+- **samples/ 文档**: 4 个（corpus/README.md, fixtures/README.md, ofd/README.md, png/README.md）
 
-**总计**: 34 个文档（清晰分类，易于查找）
+**总计**: 50 个文档（清晰分类，易于查找）
 
 ---
 
-**文档版本**: v1.0.0  
-**最后更新**: 2026-06-23  
+**文档版本**: v1.2.0  
+**最后更新**: 2026-07-03  
 **维护者**: Trans2Former Team

@@ -252,13 +252,18 @@ function parseUnicodeHex(value) {
 function parseToUnicodeCMap(source) {
   const cmap = new Map();
   const text = String(source || "");
-  for (const section of text.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
-    for (const row of section[1].matchAll(/<([0-9A-Fa-f\s]+)>\s+<([0-9A-Fa-f\s]+)>/g)) {
+  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #196, code review P2 #3）
+  const bfcharSections = [...text.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)];
+  for (const section of bfcharSections) {
+    const rows = [...section[1].matchAll(/<([0-9A-Fa-f\s]+)>\s+<([0-9A-Fa-f\s]+)>/g)];
+    for (const row of rows) {
       cmap.set(normalizeHexCode(row[1]), parseUnicodeHex(row[2]));
     }
   }
-  for (const section of text.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
-    for (const row of section[1].matchAll(/<([0-9A-Fa-f\s]+)>\s+<([0-9A-Fa-f\s]+)>\s+(?:<([0-9A-Fa-f\s]+)>|\[([\s\S]*?)\])/g)) {
+  const bfrangeSections = [...text.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)];
+  for (const section of bfrangeSections) {
+    const rows = [...section[1].matchAll(/<([0-9A-Fa-f\s]+)>\s+<([0-9A-Fa-f\s]+)>\s+(?:<([0-9A-Fa-f\s]+)>|\[([\s\S]*?)\])/g)];
+    for (const row of rows) {
       const start = Number.parseInt(normalizeHexCode(row[1]), 16);
       const end = Number.parseInt(normalizeHexCode(row[2]), 16);
       if (!Number.isFinite(start) || !Number.isFinite(end) || end < start || end - start > 512) {

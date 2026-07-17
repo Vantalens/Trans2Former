@@ -95,17 +95,16 @@ Lines        : 81.38%
 
 **目标**: 解决研究报告指出的所有文档冲突，建立单一事实来源。
 
-#### 任务 1.1: 统一插件模式决策
+#### 任务 1.1: 统一插件模式决策 ✅
+- **状态**: ✅ 已完成（2026-06-23）
 - **冲突**: README vs PLUGIN_SECURITY_MODEL.md
-- **决策选项**:
-  - A. 保留插件模式，更新 README 说明
-  - B. 废弃插件模式，归档 PLUGIN_SECURITY_MODEL.md
-- **建议**: 选项 B（研究报告认为"增强能力直接并入核心"更符合产品路线）
-- **执行**:
-  1. 归档 `docs/PLUGIN_SECURITY_MODEL.md` → `docs/archive/`
-  2. 更新 `README.md` 明确"不使用插件机制"
-  3. 更新 `CONTRIBUTING.md` 删除插件相关规则
-  4. 搜索代码中 PluginManager 相关逻辑，标记为待清理
+- **决策**: 选项 B - 废弃插件模式
+- **执行结果**:
+  1. ✅ PLUGIN_SECURITY_MODEL.md 已不存在于文档树
+  2. ✅ 已创建 `docs/archive/PLUGIN_DEPRECATION.md` 说明废弃决策
+  3. ✅ `README.md` line 77 明确"不使用插件机制"
+  4. ✅ 代码中无 PluginManager 相关逻辑
+  5. ✅ 文档引用已更新为 PLUGIN_DEPRECATION.md
 
 #### 任务 1.2: 统一 OFD 路线
 - **冲突**: README vs P4_OUTPUTS.md

@@ -107,16 +107,16 @@ function applySelectFallbackRoute({ model, action, context }) {
 }
 
 function placeholderHandler(label) {
-  return ({ model }) => ({ ok: false, model, note: `handler-not-implemented:${label}` });
+  return ({ model }) => ({ ok: false, model, note: `handler-not-implemented:${label} (planned for Phase S3/S4)` });
 }
 
 export const DEFAULT_HANDLERS = Object.freeze({
   replaceTextRun: applyReplaceTextRun,
-  insertTextRun: placeholderHandler("insertTextRun"),
-  reorderBlocks: placeholderHandler("reorderBlocks"),
-  restoreTableGrid: placeholderHandler("restoreTableGrid"),
-  adjustBoundingBox: placeholderHandler("adjustBoundingBox"),
-  regeneratePageLayout: placeholderHandler("regeneratePageLayout"),
+  insertTextRun: placeholderHandler("insertTextRun"),          // 未实现：计划在 S3/S4 阶段
+  reorderBlocks: placeholderHandler("reorderBlocks"),          // 未实现：计划在 S3/S4 阶段
+  restoreTableGrid: placeholderHandler("restoreTableGrid"),    // 未实现：计划在 S3/S4 阶段
+  adjustBoundingBox: placeholderHandler("adjustBoundingBox"),  // 未实现：计划在 S3/S4 阶段
+  regeneratePageLayout: placeholderHandler("regeneratePageLayout"), // 未实现：计划在 S3/S4 阶段
   selectFallbackRoute: applySelectFallbackRoute,
 });
 

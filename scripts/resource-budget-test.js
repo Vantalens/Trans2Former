@@ -10,10 +10,13 @@ const BUDGETS = [
   // issue #161 #166: ConversionError 正确调用 + null 防护，预算微调至 322KB。
   // issue #163 修复: Tesseract Worker 资源清理逻辑，预算保持 322KB。
   // issue #177 修复: PDF ToUnicode CMap + API 签名修复，OCR 管线扩展，预算调整至 460KB。
+  // Phase 3 测试覆盖率提升: 新增 8 个测试文件（2,681 行），scripts 从 512KB 扩展到 700KB。
+  // issue #129 修复: 新增 tesseract-sha256-test.js（219 行），scripts 预算调整至 700KB。
+  // Phase 4 代码审核: 新增 ui-conversion-e2e-test.js 和 create-github-issues.sh，调整至 900KB。
   { path: "public/core", maxBytes: 460 * 1024 },
   { path: "public/formats", maxBytes: 512 * 1024 },
   { path: "public/workers", maxBytes: 128 * 1024 },
-  { path: "scripts", maxBytes: 512 * 1024 },
+  { path: "scripts", maxBytes: 900 * 1024 },
   { path: "public", maxBytes: 2 * 1024 * 1024, exclude: ["public/vendor"] },
   // vendored 引擎/模型属于按需的可选资源，不挤占核心主预算，但仍设上限防漂移。
   // 含：pdfjs(~4MB) + onnxruntime-web 最小 JSEP 构建(~25MB) + tesseract.js core 全 SIMD/LSTM

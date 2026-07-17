@@ -44,23 +44,36 @@ export function createOCRResult({
     // 引擎边界传入的 tesseract 码（chi_sim/eng）在此归一化为 canonical 码；
     // validateOCRResult 本身不放松，未知值原样进入校验并被拒绝。
     language: normalizeOCRLanguage(language),
-    pages: Array.isArray(pages) ? pages.map((page) => ({
-      pageIndex: page?.pageIndex ?? 0,
-      width: page?.width ?? 0,
-      height: page?.height ?? 0,
-      lines: Array.isArray(page?.lines) ? page.lines.map((line) => ({
-        text: String(line?.text ?? ""),
-        confidence: line?.confidence ?? 0,
-        bbox: line?.bbox
-          ? {
-              x: line.bbox.x ?? 0,
-              y: line.bbox.y ?? 0,
-              w: line.bbox.w ?? 0,
-              h: line.bbox.h ?? 0,
-            }
-          : null,
-      })) : [],
-    })) : pages,
+    pages: Array.isArray(pages) ? pages.map((page) => {
+      const mappedPage = {
+        pageIndex: page?.pageIndex ?? 0,
+        width: page?.width ?? 0,
+        height: page?.height ?? 0,
+        lines: Array.isArray(page?.lines) ? page.lines.map((line) => ({
+          text: String(line?.text ?? ""),
+          confidence: line?.confidence ?? 0,
+          bbox: line?.bbox
+            ? {
+                x: line.bbox.x ?? 0,
+                y: line.bbox.y ?? 0,
+                w: line.bbox.w ?? 0,
+                h: line.bbox.h ?? 0,
+              }
+            : null,
+        })) : [],
+      };
+      // 保留坐标系元数据（用于 deskew 后的坐标系一致性）
+      if (page?.coordinateSystem) {
+        mappedPage.coordinateSystem = page.coordinateSystem;
+      }
+      if (page?.originalDimensions) {
+        mappedPage.originalDimensions = {
+          width: page.originalDimensions.width ?? 0,
+          height: page.originalDimensions.height ?? 0,
+        };
+      }
+      return mappedPage;
+    }) : pages,
     fullText: String(fullText || ""),
     averageConfidence,
     runtimeMs,

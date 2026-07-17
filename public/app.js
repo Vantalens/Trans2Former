@@ -64,6 +64,7 @@ const copyErrorDiagnosticsButton = document.getElementById("copyErrorDiagnostics
 const outputMeta = document.getElementById("outputMeta");
 const markdownProfileSelect = document.getElementById("markdownProfileSelect");
 const persistHistoryCheckbox = document.getElementById("persistHistoryCheckbox");
+const applyFallbackCheckbox = document.getElementById("applyFallbackCheckbox");
 const clearHistoryButton = document.getElementById("clearHistoryButton");
 const refreshPreviewButton = document.getElementById("refreshPreviewButton");
 const largePreviewModeSelect = document.getElementById("largePreviewModeSelect");
@@ -82,12 +83,6 @@ const retryFailedButton = document.getElementById("retryFailedButton");
 const outputDirectoryButton = document.getElementById("outputDirectoryButton");
 const exportNamingInput = document.getElementById("exportNamingInput");
 // 修复 issue #39: 删除 documentModelPreview（面板已移除）
-const warningsList = document.getElementById("warningsList");
-const resolveWarningsButton = document.getElementById("resolveWarningsButton");
-const clearResolvedWarningsButton = document.getElementById("clearResolvedWarningsButton");
-const qualityReportList = document.getElementById("qualityReportList");
-const diffSummary = document.getElementById("diffSummary");
-const versionsList = document.getElementById("versionsList");
 const verificationReportPanel = document.getElementById("verificationReportPanel");
 const verificationReportBadge = document.getElementById("verificationReportBadge");
 const verificationRepair = document.getElementById("verificationRepair");
@@ -149,10 +144,8 @@ let currentDocumentModel = null;
 let currentConversionQuality = null;
 let currentOutputFormat = "";
 let currentOutputMime = "";
-let currentOutputType = "none";
 let outputDraftCommitTimer = null;
 let markdownOutputProfile = "ai-ready";
-let currentResolvedWarnings = new Set();
 let historyPersistenceEnabled = false;
 let cachedHistoryKey = null; // 缓存历史存储键，避免每次提交重新计算（issue #65）
 
@@ -166,6 +159,7 @@ const LARGE_PREVIEW_BLOCK_LIMIT = 80;
 const WORKER_TRANSFERABLE_THRESHOLD_BYTES = 1024 * 1024;
 const VIRTUAL_LIST_ITEM_LIMIT = 160;
 const EDITABLE_OUTPUT_FORMATS = new Set(["md", "html", "txt", "json", "csv", "xml"]);
+const BINARY_OUTPUT_FORMATS = new Set(["docx", "xlsx", "pptx", "epub", "pdf"]);
 const INPUT_EDITOR_MIN_HEIGHT = 144;
 const INPUT_EDITOR_MAX_HEIGHT = 420;
 const BINARY_INPUT_EDITOR_MIN_HEIGHT = 118;
@@ -390,14 +384,32 @@ function compareIdSets(previousIds = [], nextIds = []) {
   };
 }
 
+function snapshotHistoryKeyInputs() {
+  return {
+    fileName: String(currentFileName || "document"),
+    fromFormat: String(fromFormatSelect.value || ""),
+    toFormat: String(toFormatSelect.value || ""),
+    markdownProfile: String(markdownOutputProfile || ""),
+    content: String(getActiveInputContent() || ""),
+  };
+}
+
+function updateCachedHistoryKey(snapshot = snapshotHistoryKeyInputs()) {
+  cachedHistoryKey = `trans2former.output-history.${hashString([
+    snapshot.fileName,
+    snapshot.fromFormat,
+    snapshot.toFormat,
+    snapshot.markdownProfile,
+    snapshot.content,
+  ].join(""))}`;
+}
+
 function getHistoryStorageKey() {
-  return `trans2former.output-history.${hashString([
-    currentFileName,
-    fromFormatSelect.value,
-    toFormatSelect.value,
-    markdownOutputProfile,
-    getActiveInputContent(),
-  ].join("\u001f"))}`;
+  // 使用缓存避免重复计算哈希（issue #65, code review P2 #2）
+  if (!cachedHistoryKey) {
+    updateCachedHistoryKey();
+  }
+  return cachedHistoryKey;
 }
 
 function readPersistentHistory() {
@@ -430,7 +442,6 @@ function writePersistentHistory() {
     window.localStorage.setItem(getHistoryStorageKey(), JSON.stringify({
       sessionVersions: versionsToStore,
       outputVersionIndex: Math.min(outputVersionIndex, versionsToStore.length - 1),
-      currentResolvedWarnings: [...currentResolvedWarnings],
       markdownOutputProfile,
     }));
   } catch {
@@ -507,47 +518,11 @@ function applyPersistentHistoryIfAny() {
     Math.max(0, Number(persisted.outputVersionIndex || 0)),
     Math.max(0, sessionVersions.length - 1)
   );
-  currentResolvedWarnings = new Set(Array.isArray(persisted.currentResolvedWarnings) ? persisted.currentResolvedWarnings : []);
   if (markdownProfileSelect && typeof persisted.markdownOutputProfile === "string") {
     markdownOutputProfile = persisted.markdownOutputProfile;
     markdownProfileSelect.value = markdownOutputProfile;
   }
   return sessionVersions.length > 0;
-}
-
-function updateWarningsResolvedControls(model = currentDocumentModel) {
-  const warningCount = getCurrentWarningSignatures(model).length;
-  const resolvedCount = [...currentResolvedWarnings].filter((signature) => getCurrentWarningSignatures(model).includes(signature)).length;
-  if (resolveWarningsButton) {
-    resolveWarningsButton.disabled = warningCount === 0;
-  }
-  if (clearResolvedWarningsButton) {
-    clearResolvedWarningsButton.disabled = currentResolvedWarnings.size === 0;
-  }
-  if (warningsList && warningCount > 0) {
-    warningsList.dataset.resolvedCount = String(resolvedCount);
-  }
-}
-
-function markCurrentWarningsResolved() {
-  const warningSignatures = getCurrentWarningSignatures();
-  if (!warningSignatures.length) {
-    setStatus("当前没有可标记的 warnings", "info");
-    return;
-  }
-  warningSignatures.forEach((signature) => currentResolvedWarnings.add(signature));
-  updateWarningsResolvedControls();
-  renderBottomReports(currentDocumentModel, getCurrentOutputContent());
-  writePersistentHistory();
-  setStatus("已标记当前 warnings 为已处理", "success");
-}
-
-function clearWarningsResolved() {
-  currentResolvedWarnings.clear();
-  updateWarningsResolvedControls();
-  renderBottomReports(currentDocumentModel, getCurrentOutputContent());
-  writePersistentHistory();
-  setStatus("已清除 warnings 已处理标记", "info");
 }
 
 function renderDocumentModelPanel(model = null) {
@@ -570,71 +545,6 @@ function renderVirtualTextList(target, rows, emptyText) {
   target.textContent = omitted > 0
     ? [...visibleRows, `... 已隐藏 ${omitted} 条，滚动/筛选视图将在后续批量任务中心加载`].join("\n")
     : visibleRows.join("\n");
-}
-
-function renderBottomReports(model = null, output = "") {
-  if (!warningsList || !qualityReportList || !diffSummary || !versionsList) {
-    return;
-  }
-  if (!model) {
-    renderVirtualTextList(warningsList, [], "无");
-    renderVirtualTextList(qualityReportList, [], "等待转换");
-    diffSummary.textContent = currentOutputType === "text" ? "尚无版本差异" : "非文本输出不参与文本 diff";
-    renderVirtualTextList(versionsList,
-      sessionVersions.map((item) => `${item.label}${item.kind === "checkpoint" ? " · checkpoint" : ""} · ${item.outputLength} chars · ${item.lineCount} lines`),
-      currentOutputType === "text" ? "v0 等待初始转换" : "当前输出不是可编辑文本，暂无会话版本历史"
-    );
-    updateWarningsResolvedControls(model);
-    return;
-  }
-
-  const warnings = model.metadata?.warnings || [];
-  renderVirtualTextList(
-    warningsList,
-    warnings.map((warning) => {
-      const signature = getWarningSignature(warning);
-      const resolved = currentResolvedWarnings.has(signature) ? "✓ 已处理" : "待处理";
-      return `${resolved} · ${warning.severity || "info"} · ${warning.code}: ${warning.message}`;
-    }),
-    "无"
-  );
-
-  const quality = summarizeQualityReport(model);
-  const qualityLines = [
-    `warnings: ${quality.warningCount}`,
-    `structure: ${quality.structureFidelity}`,
-    `asset: ${quality.assetFidelity}`,
-    `text: ${quality.textFidelity}`,
-  ];
-
-  // 添加 Repair Engine recommendations（如果有）
-  const autoRepair = quality.autoRepair || {};
-  const recommendations = autoRepair.recommendations || [];
-  if (recommendations.length > 0) {
-    qualityLines.push(`repair recommendations: ${recommendations.length} 条`);
-    recommendations.forEach((rec, index) => {
-      const actionDesc = rec.actionType || "unknown";
-      const noteDesc = rec.note ? ` (${rec.note})` : "";
-      qualityLines.push(`  [${index + 1}] ${actionDesc}${noteDesc}`);
-    });
-  }
-
-  renderVirtualTextList(qualityReportList, qualityLines, "等待转换");
-
-  const current = sessionVersions.at(outputVersionIndex) || sessionVersions.at(-1);
-  const previous = outputVersionIndex > 0 ? sessionVersions.at(outputVersionIndex - 1) : null;
-  const blockDiff = current && previous ? compareIdSets(previous.blockIds, current.blockIds) : null;
-  const textDiff = current && previous
-    ? `${previous.label} -> ${current.label}: ${Math.abs(current.outputLength - previous.outputLength)} chars, ${Math.abs(current.lineCount - previous.lineCount)} lines`
-    : (current ? "初始转换结果" : (currentOutputType === "text" ? "尚无版本差异" : "非文本输出不参与文本 diff"));
-  diffSummary.textContent = blockDiff
-    ? `${textDiff}\nblock ids: +${blockDiff.added} / -${blockDiff.removed} / =${blockDiff.shared}`
-    : textDiff;
-  renderVirtualTextList(versionsList,
-    sessionVersions.map((item) => `${item.label}${item.kind === "checkpoint" ? " · checkpoint" : ""} · ${item.outputLength} chars · ${item.lineCount} lines · ${item.blockIds?.length || 0} blocks`),
-    currentOutputType === "text" ? "v0 等待初始转换" : "当前输出不是可编辑文本，暂无会话版本历史"
-  );
-  updateWarningsResolvedControls(model);
 }
 
 function describeRuleDiff(ruleDiff, verification) {
@@ -684,9 +594,39 @@ function renderVerificationReport(quality = currentConversionQuality) {
 
   const repairStatus = report.repairStatus || (autoRepair.attempted ? "verified" : "not-attempted");
   const finalDecision = report.finalDecision || autoRepair.finalDecision || "pending";
+
+  // 构建修复状态文本，包含 recommendations
+  let repairText = `${repairStatus} · 结论 ${finalDecision}`;
+  const recommendations = autoRepair.recommendations || [];
+  const applied = autoRepair.applied || [];
+  const rejected = autoRepair.rejected || [];
+
+  if (recommendations.length > 0) {
+    repairText += ` · 推荐 ${recommendations.length} 项`;
+    // 添加推荐详情（最多显示前3项）
+    const displayCount = Math.min(3, recommendations.length);
+    for (let i = 0; i < displayCount; i++) {
+      const rec = recommendations[i];
+      const actionDesc = rec.actionType || "unknown";
+      const targetDesc = rec.fallbackTo ? ` → ${rec.fallbackTo}` : "";
+      repairText += ` [${i + 1}] ${actionDesc}${targetDesc}`;
+    }
+    if (recommendations.length > 3) {
+      repairText += ` (还有 ${recommendations.length - 3} 项)`;
+    }
+  }
+
+  if (applied.length > 0) {
+    repairText += ` · 已应用 ${applied.length} 项`;
+  }
+
+  if (rejected.length > 0) {
+    repairText += ` · 已拒绝 ${rejected.length} 项`;
+  }
+
   applyVerificationRow(verificationRepair, {
     state: finalDecision === "verified" ? "ok" : (finalDecision === "failed-quality-gate" ? "drift" : "skip"),
-    text: `${repairStatus} · 结论 ${finalDecision}`,
+    text: repairText,
   });
 
   applyVerificationRow(verificationRuleDiff, describeRuleDiff(report.ruleDiff, verification));
@@ -735,11 +675,19 @@ function getOutputLineCount(output) {
 }
 
 function isEditableOutput() {
-  return currentOutputType === "text" && EDITABLE_OUTPUT_FORMATS.has(currentOutputFormat);
+  return getCurrentOutputType() === "text" && EDITABLE_OUTPUT_FORMATS.has(currentOutputFormat);
 }
 
 function getCurrentOutputContent() {
   return outputEditor ? outputEditor.value : "";
+}
+function getCurrentOutputType(format = currentOutputFormat) {
+
+  const normalized = String(format || "").toLowerCase();
+  if (!normalized) {
+    return "none";
+  }
+  return BINARY_OUTPUT_FORMATS.has(normalized) ? "binary" : "text";
 }
 
 function clearOutputHistory() {
@@ -760,7 +708,7 @@ function updateOutputVersionControls() {
   outputCheckpointButton.disabled = !editable || outputVersionIndex < 0;
 
   if (!editable) {
-    if (currentOutputType === "binary") {
+    if (getCurrentOutputType() === "binary") {
       outputDraftMeta.textContent = "二进制输出不提供文本编辑器";
     } else {
       outputDraftMeta.textContent = "等待转换";
@@ -781,7 +729,7 @@ function renderOutputPreview(content = "") {
 
   if (!isEditableOutput()) {
     outputPreviewNotice.hidden = true;
-    textOutputPreview.textContent = content || (currentOutputType === "binary" ? "二进制输出可直接下载" : "输出");
+    textOutputPreview.textContent = content || (getCurrentOutputType() === "binary" ? "二进制输出可直接下载" : "输出");
     return;
   }
 
@@ -816,7 +764,7 @@ function renderOutputPreview(content = "") {
 }
 
 function updateOutputDownloadLink(output) {
-  if (currentOutputType === "binary") {
+  if (getCurrentOutputType() === "binary") {
     return;
   }
 
@@ -869,14 +817,15 @@ function commitOutputVersion(output, { kind = "edit", forceNew = false } = {}) {
       const keepEdits = edits.slice(-keepEditCount);
       const keepAll = [...checkpoints, ...keepEdits].sort((a, b) => a.index - b.index);
 
-      sessionVersions = keepAll.map(item => item.version);
-      // 重新计算标签
-      sessionVersions.forEach((v, i) => { v.label = `v${i}`; });
+      // 创建新快照，避免修改仍被 UI 或事件闭包引用的旧版本对象（issue #187）。
+      sessionVersions = keepAll.map((item, i) => ({
+        ...item.version,
+        label: `v${i}`,
+      }));
       // 调整当前索引到新数组末尾
       outputVersionIndex = sessionVersions.length - 1;
     }
   }
-  renderBottomReports(currentDocumentModel, normalized);
   updateOutputVersionControls();
   writePersistentHistory();
 }
@@ -890,7 +839,6 @@ function applyOutputVersion(index) {
   outputEditor.value = snapshot.content;
   renderOutputPreview(snapshot.content);
   updateOutputDownloadLink(snapshot.content);
-  renderBottomReports(currentDocumentModel, snapshot.content);
   updateOutputVersionControls();
   writePersistentHistory();
   setStatus(`已切换到 ${snapshot.label}`, "info");
@@ -912,7 +860,6 @@ function scheduleOutputVersionCommit(kind = "edit") {
 }
 
 function initializeOutputDraft(result) {
-  currentOutputType = result.type;
   currentOutputFormat = result.format;
   currentOutputMime = result.mime;
   clearOutputHistory();
@@ -928,7 +875,6 @@ function initializeOutputDraft(result) {
         renderOutputPreview(snapshot.content);
         updateOutputDownloadLink(snapshot.content);
         updateOutputVersionControls();
-        renderBottomReports(currentDocumentModel, snapshot.content);
         setOutputMeta(`已恢复 ${sessionVersions.length} 个历史版本 · ${outputDirectoryLabel}`);
         return;
       }
@@ -1068,6 +1014,7 @@ function isBinaryInputFormat(format = fromFormatSelect.value) {
 }
 
 function getActiveInputContent() {
+  // 二进制输入的 textarea 只显示可读摘要；转换必须继续使用原始 data URL/载荷。
   return currentInputContent || inputContent.value;
 }
 
@@ -1103,8 +1050,6 @@ function resetGeneratedOutput(metaMessage = "尚未生成") {
   releaseConversionResources();
   currentOutputMime = "";
   currentOutputFormat = "";
-  currentOutputType = "none";
-  currentResolvedWarnings = new Set();
   currentConversionQuality = null;
   if (verificationReportPanel) {
     verificationReportPanel.hidden = true;
@@ -1133,7 +1078,7 @@ function setTransformBusy(isBusy) {
   transformButton.disabled = isBusy;
   cancelTransformButton.disabled = !isBusy;
   cancelTransformButton.hidden = !isBusy;
-  if (!isBusy && conversionProgress.dataset.state !== "error" && conversionProgress.dataset.state !== "canceled") {
+  if (!isBusy && !["complete", "error", "canceled"].includes(conversionProgress.dataset.state)) {
     updateConversionProgress({ stage: "idle", progress: 0 });
   }
 }
@@ -1156,11 +1101,12 @@ function updateDownloadState(enabled) {
 }
 
 async function openCurrentOutputInPreview() {
-  if (!currentOutputType || currentOutputType === "none") return;
+  const outputType = getCurrentOutputType();
+  if (outputType === "none") return;
 
   // 修复 issue #63: 对于二进制输出，从 Blob 生成 data URL 而非传递会失效的 blob URL
   let dataUrl = "";
-  if (currentOutputType === "binary" && currentOutputDownloadBlob) {
+  if (outputType === "binary" && currentOutputDownloadBlob) {
     try {
       dataUrl = await blobToDataUrl(currentOutputDownloadBlob);
     } catch (error) {
@@ -1174,7 +1120,7 @@ async function openCurrentOutputInPreview() {
       fileName: currentFileName || "",
     },
     output: {
-      type: currentOutputType,
+      type: outputType,
       format: currentOutputFormat || "",
       mime: currentOutputMime || "",
       text: outputEditor?.value || textOutputPreview?.textContent || "",
@@ -1217,9 +1163,9 @@ function updateOutputPreviewVisibility(isPdf) {
 
 function getPayloadKey() {
   return JSON.stringify({
-    content: getActiveInputContent(),
-    from: fromFormatSelect.value,
-    file: currentFileName,
+    content: String(getActiveInputContent() || ""),
+    from: String(fromFormatSelect.value || ""),
+    file: String(currentFileName || "document"),
   });
 }
 
@@ -1324,7 +1270,6 @@ function renderLargeDocumentPreview(rawContent, fileName = currentFileName) {
       },
     },
   });
-  renderBottomReports(model);
   lastRenderedPayload = getPayloadKey();
   setStatus(`大文件${rawContent.length >= LARGE_DEGRADED_PREVIEW_BYTES ? "降级" : "渐进"}预览已更新`, "success");
 }
@@ -1352,7 +1297,6 @@ function renderPreview() {
   htmlPreview.innerHTML = bodyHtml;
   renderMathIn(htmlPreview);
   renderDocumentModelPanel(model);
-  renderBottomReports(model);
   lastRenderedPayload = payloadKey;
   setStatus(`浏览器端预览已更新 (${Date.now() - renderStart}ms)`, "success");
 }
@@ -1383,6 +1327,7 @@ function schedulePreviewUpdate() {
 
 async function handleInputText(rawContent, fileName = currentFileName, { renderInitialPreview = true } = {}) {
   currentFileName = fileName;
+  cachedHistoryKey = null; // 输入内容或文件名变化，使缓存失效
   currentInputContent = String(rawContent ?? "");
   inputContent.value = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName);
   syncInputEditorMode();
@@ -1392,7 +1337,6 @@ async function handleInputText(rawContent, fileName = currentFileName, { renderI
   currentDocumentModel = null;
   resetGeneratedOutput();
   renderDocumentModelPanel(null);
-  renderBottomReports(null);
   lastRenderedPayload = "";
   clearErrorDetails();
   updateWordCount();
@@ -1541,8 +1485,9 @@ function convertWithWorker(payload) {
       isAsync: true,
       abortController,
       reject: (error) => {
+        // 修复 issue #184: 只需 abort，asyncPromise 会通过信号检查自然拒绝
         abortController.abort();
-        throw error;
+        // 不抛出错误，让 Promise 链正常处理取消
       }
     };
 
@@ -1622,6 +1567,9 @@ async function transformContent() {
     const title = getBaseName(currentFileName);
     const options = {
       profile: markdownOutputProfile,
+      repair: {
+        applyFallback: applyFallbackCheckbox?.checked || false,
+      },
     };
 
     // 如果输出为 PDF，读取纸张格式选项
@@ -1637,22 +1585,20 @@ async function transformContent() {
     // 1. 双倍解析开销（大文件时主线程阻塞数秒）
     // 2. 主线程解析的 model 未经过 OCR stage，与实际输出 model 不一致
     //
-    // currentDocumentModel 主要用于 renderBottomReports 和 renderDocumentModelPanel，
-    // 但这两个面板的 DOM 元素已被移除（issue #34, #39），函数会立即 early return。
+    // currentDocumentModel 主要用于 renderDocumentModelPanel，
+    // 该函数只保留状态赋值（面板已删除，但状态被其他功能依赖）。
     // 因此暂时设为 null，等待未来如果需要展示 model 时，让 worker 返回序列化的 model。
     currentDocumentModel = null;
     currentConversionQuality = result.quality || null;
     renderDocumentModelPanel(null);
-    currentOutputType = result.type;
+    // Output type is derived from currentOutputFormat.
     currentOutputFormat = result.format;
     currentOutputMime = result.mime;
     clearOutputHistory();
     updateOutputVersionControls();
-    renderBottomReports(currentDocumentModel, result.type === "text" ? result.data : "");
     renderVerificationReport(currentConversionQuality);
 
     if (result.type === "binary") {
-      currentOutputType = "binary";
       currentOutputFormat = result.format;
       currentOutputMime = result.mime;
       clearOutputHistory();
@@ -1678,7 +1624,6 @@ async function transformContent() {
       return;
     }
 
-    currentOutputType = "text";
     currentOutputFormat = result.format;
     currentOutputMime = result.mime;
     downloadOutputButton.textContent = "下载输出";
@@ -1741,6 +1686,7 @@ fileInput.addEventListener("change", (event) => {
 inputContent.addEventListener("input", () => {
   if (!inputContent.readOnly) {
     currentInputContent = inputContent.value;
+    cachedHistoryKey = null; // 输入内容变化，使缓存失效
   }
   schedulePreviewUpdate();
   updateWordCount();
@@ -1752,6 +1698,7 @@ inputContent.addEventListener("input", () => {
 });
 
 markdownProfileSelect?.addEventListener("change", () => {
+  cachedHistoryKey = null; // Markdown 配置变化，使缓存失效
   markdownOutputProfile = markdownProfileSelect.value;
   writeMarkdownProfilePreference(markdownOutputProfile);
   updateFormatCapabilityNote();
@@ -1773,8 +1720,6 @@ persistHistoryCheckbox?.addEventListener("change", () => {
 clearHistoryButton?.addEventListener("click", () => {
   clearPersistentHistory();
   clearOutputHistory();
-  currentResolvedWarnings.clear();
-  updateWarningsResolvedControls();
   updateOutputVersionControls();
   setOutputMeta("已清除本地历史记录");
   setStatus("已清除本地历史记录", "info");
@@ -1806,6 +1751,7 @@ largePreviewModeSelect?.addEventListener("change", () => {
 });
 
 fromFormatSelect.addEventListener("change", () => {
+  cachedHistoryKey = null; // 输入格式变化，使缓存失效
   syncInputEditorMode();
   syncFormatOptions();
   lastRenderedPayload = "";
@@ -1815,6 +1761,7 @@ fromFormatSelect.addEventListener("change", () => {
 });
 
 toFormatSelect.addEventListener("change", () => {
+  cachedHistoryKey = null; // 输出格式变化，使缓存失效
   syncPdfPaperControl();
   updateOutputPreviewVisibility(toFormatSelect.value === "pdf");
   updateFormatCapabilityNote();
@@ -1871,30 +1818,6 @@ retryFailedButton.addEventListener("click", retryFailedQueueItems);
 outputDirectoryButton.addEventListener("click", () => {
   chooseOutputDirectory().catch((error) => setStatus(error.message, "error"));
 });
-document.getElementById("bottomReportPanel")?.addEventListener("click", (event) => {
-  const drawerTab = event.target.closest("[data-drawer-tab]");
-  if (drawerTab) {
-    activateDrawerTab(drawerTab.dataset.drawerTab);
-  }
-});
-
-function activateDrawerTab(targetId) {
-  const drawer = document.getElementById("bottomReportPanel");
-  if (!drawer) return;
-  drawer.querySelectorAll(".drawer-tab").forEach((tab) => {
-    tab.classList.toggle("is-active", tab.dataset.drawerTab === targetId);
-  });
-  drawer.querySelectorAll(".drawer-group").forEach((group) => {
-    group.classList.toggle("is-active", group.id === targetId);
-  });
-}
-
-function openDrawerOnTab(targetId) {
-  const drawer = document.getElementById("bottomReportPanel");
-  if (!drawer) return;
-  drawer.open = true;
-  activateDrawerTab(targetId);
-}
 workbenchTabs.addEventListener("click", (event) => {
   const button = event.target.closest("[data-tab-target]");
   if (button) {
@@ -1920,12 +1843,6 @@ workbenchTabs.addEventListener("keydown", (event) => {
 });
 copyErrorDiagnosticsButton.addEventListener("click", () => {
   copyErrorDiagnostics().catch((error) => setStatus(error.message, "error"));
-});
-resolveWarningsButton?.addEventListener("click", () => {
-  markCurrentWarningsResolved();
-});
-clearResolvedWarningsButton?.addEventListener("click", () => {
-  clearWarningsResolved();
 });
 cancelTransformButton.addEventListener("click", () => {
   if (!activeConversion) {

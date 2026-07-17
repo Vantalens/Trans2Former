@@ -156,6 +156,13 @@ try {
   assert.equal(appJs.includes("renderLargeDocumentPreview"), true, "P2 should render large-file summary/sample previews without full parse");
   assert.equal(appJs.includes("releaseConversionResources"), true, "P2 should centralize Worker and ObjectURL lifecycle cleanup");
   assert.equal(appJs.includes("BINARY_INPUT_FORMATS"), true, "binary formats should avoid text decoding");
+  assert.equal(appJs.includes("snapshotHistoryKeyInputs"), true, "history keys should use one type-safe state snapshot");
+  assert.equal(appJs.includes("String(currentFileName || \"document\")"), true, "history and preview keys should normalize file names");
+  assert.equal(appJs.includes("function getCurrentOutputType"), true, "output type should be derived from output format");
+  assert.equal(appJs.includes("let currentOutputType"), false, "output type must not be maintained as parallel mutable state");
+  assert.equal(appJs.includes("sessionVersions = keepAll.map((item, i) => ({"), true, "version cleanup should clone retained snapshots");
+  assert.equal(appJs.includes("sessionVersions.forEach((v, i) => { v.label"), false, "version cleanup must not relabel referenced objects in place");
+  assert.equal(appJs.includes("二进制输入的 textarea 只显示可读摘要"), true, "active input helper should document its binary payload contract");
   assert.equal(appJs.includes("getAllowedOutputFormats"), true, "main app should filter output formats by supported conversion paths");
   assert.equal(appJs.includes("toConversionDocumentModel"), true, "quality panel should render the routed model with conversion-loss warnings");
   assert.equal(appJs.includes("currentInputContent"), true, "binary uploads should keep raw conversion payload separate from editor display text");
@@ -168,7 +175,7 @@ try {
   assert.equal(appJs.includes("registerQueuedFileState"), true, "main app should delegate queued file state to a reusable module");
   assert.equal(fileQueueJs.includes("createQueueItem"), true, "file queue module should track queued files as reusable workbench state");
   assert.equal(appJs.includes("renderDocumentModelPanel"), true, "main app should render DocumentModel inspection");
-  assert.equal(appJs.includes("renderBottomReports"), true, "main app should render warnings, quality, diff, and versions");
+  assert.equal(appJs.includes("renderBottomReports"), false, "bottom report panel has been removed (issue #34)");
   assert.equal(appJs.includes("chooseOutputDirectory"), true, "main app should expose explicit output directory selection");
   assert.equal(appJs.includes("outputDirectoryHandle"), true, "output directory selection should keep the directory handle");
   assert.equal(appJs.includes("writeBlobToDirectory"), true, "main app should write generated output into the selected directory");

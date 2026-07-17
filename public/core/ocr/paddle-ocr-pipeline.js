@@ -482,12 +482,14 @@ export async function runPaddlePipeline({
   // 去倾斜：从 det 概率图估倾斜角，超阈值则把图旋正后重检（仅倾斜图付二次检测代价；
   // 正立图估计≈0 不重检）。识别仍只跑一次（在最终图上）。options.deskew: true(默认)|false。
   let skewApplied = 0;
+  let coordinateSystem = "original"; // 记录坐标系基准：original 或 deskewed
   const minSkew = typeof options.minSkew === "number" ? options.minSkew : 3;
   if (options.deskew !== false) {
     const est = estimateSkewAngle(det.pd, det.mw, det.mh, options.skew || {});
     if (Math.abs(est) >= minSkew) {
       workImage = rotateImageDataByAngle(workImage, -est);
       skewApplied = est;
+      coordinateSystem = "deskewed";
       det = await detect(workImage);
     }
   }
@@ -575,6 +577,7 @@ export async function runPaddlePipeline({
     denoised,
     noiseLevel,
     skewApplied,
+    coordinateSystem,
     grade: averageConfidence >= 0.9 && lowConfidenceLines === 0
       ? "high"
       : (averageConfidence >= 0.7 ? "medium" : "low"),
@@ -588,9 +591,13 @@ export async function runPaddlePipeline({
     pages: [
       {
         pageIndex: 0,
-        width: imageData.width,
-        height: imageData.height,
+        // 使用实际工作图像的尺寸（deskew 后可能扩大）
+        width: workImage.width,
+        height: workImage.height,
         lines,
+        // 记录坐标系元数据，供下游使用
+        coordinateSystem,
+        originalDimensions: skewApplied !== 0 ? { width: imageData.width, height: imageData.height } : undefined,
       },
     ],
     fullText: lines.map((l) => l.text).join("\n"),

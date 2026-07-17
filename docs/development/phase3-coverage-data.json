@@ -1,0 +1,146 @@
+{
+  "phase": 3,
+  "date": "2026-06-23",
+  "title": "测试覆盖率提升",
+  "baseline": {
+    "statements": 80.9,
+    "branches": 71.95,
+    "functions": 85.52,
+    "lines": 80.9
+  },
+  "current": {
+    "statements": 82.07,
+    "branches": 74.58,
+    "functions": 86.56,
+    "lines": 82.07
+  },
+  "improvement": {
+    "statements": 1.17,
+    "branches": 2.63,
+    "functions": 1.04,
+    "lines": 1.17
+  },
+  "targets": {
+    "statements": 85.0,
+    "branches": 80.0,
+    "functions": 80.0
+  },
+  "gap": {
+    "statements": 2.93,
+    "branches": 5.42,
+    "functions": 0.0
+  },
+  "newTestFiles": [
+    {
+      "file": "scripts/core-workbench-state-test.js",
+      "targetModule": "public/core/workbench-state.js",
+      "baselineCoverage": 40.42,
+      "testCases": 13
+    },
+    {
+      "file": "scripts/core-repair-handlers-test.js",
+      "targetModule": "public/core/repair-handlers.js",
+      "baselineCoverage": 54.33,
+      "testCases": 10
+    },
+    {
+      "file": "scripts/core-indexeddb-storage-test.js",
+      "targetModule": "public/core/ocr/indexeddb-storage.js",
+      "baselineCoverage": 16.57,
+      "testCases": 12
+    },
+    {
+      "file": "scripts/workers-convert-worker-test.js",
+      "targetModule": "public/workers/convert-worker.js",
+      "baselineCoverage": 54.54,
+      "testCases": 12
+    },
+    {
+      "file": "scripts/core-zip-container-test.js",
+      "targetModule": "public/core/zip-container.js",
+      "baselineCoverage": 67.5,
+      "testCases": 12
+    },
+    {
+      "file": "scripts/formats-text-utils-test.js",
+      "targetModule": "public/formats/text-utils.js",
+      "baselineCoverage": 66.1,
+      "currentCoverage": 100.0,
+      "testCases": 12
+    },
+    {
+      "file": "scripts/formats-json-test.js",
+      "targetModule": "public/formats/json.js",
+      "baselineCoverage": 77.01,
+      "testCases": 12
+    }
+  ],
+  "totalNewTests": 7,
+  "totalNewTestCases": 89,
+  "lowCoverageModules": [
+    {
+      "module": "public/core/ocr/pdf-rasterizer-browser.js",
+      "coverage": 5.42,
+      "reason": "需要浏览器API",
+      "priority": "P2"
+    },
+    {
+      "module": "public/core/ocr/indexeddb-storage.js",
+      "coverage": 16.57,
+      "reason": "需要IndexedDB环境",
+      "priority": "P2"
+    },
+    {
+      "module": "public/router.js",
+      "coverage": 19.9,
+      "reason": "需要浏览器环境",
+      "priority": "P1"
+    },
+    {
+      "module": "public/landing-view.js",
+      "coverage": 28.67,
+      "reason": "UI模块需要浏览器",
+      "priority": "P1"
+    },
+    {
+      "module": "public/core/ocr/paddle-ocr-runtime.js",
+      "coverage": 48.43,
+      "reason": "需要ONNX Runtime",
+      "priority": "P2"
+    },
+    {
+      "module": "public/core/ocr/tesseract-runtime.js",
+      "coverage": 49.01,
+      "reason": "需要Tesseract.js",
+      "priority": "P2"
+    },
+    {
+      "module": "public/workers/convert-worker.js",
+      "coverage": 54.54,
+      "reason": "需要Worker环境",
+      "priority": "P1"
+    }
+  ],
+  "nextActions": [
+    {
+      "action": "补充PDF处理模块测试",
+      "target": "public/formats/pdf.js",
+      "expectedImprovement": "+10%"
+    },
+    {
+      "action": "增加分支覆盖率测试",
+      "target": "全局",
+      "expectedImprovement": "+5.42%"
+    },
+    {
+      "action": "引入Puppeteer端到端测试",
+      "target": "UI和浏览器模块",
+      "expectedImprovement": "+15%"
+    }
+  ],
+  "status": {
+    "overallCoverage": "approaching",
+    "branchCoverage": "improving",
+    "functionCoverage": "achieved"
+  }
+}

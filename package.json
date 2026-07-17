@@ -1,6 +1,6 @@
 {
   "name": "trans2former",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Trans2Former: Browser-first multi-format document transformer.",
   "type": "module",
   "main": "src/web-server.js",
@@ -9,15 +9,17 @@
     "web": "node src/web-server.js",
     "vendor:pdfjs": "node scripts/sync-pdfjs-vendor.js",
     "vendor:tesseract": "node scripts/sync-tesseract-vendor.js",
-    "vendor:onnx": "node scripts/sync-onnxruntime-vendor.js",
-    "vendor:paddle": "node scripts/sync-paddleocr-vendor.js",
+    "vendor:onnx": "node scripts/vendor-onnx.js",
+    "vendor:paddle": "node scripts/vendor-paddle.js",
     "samples:generate": "node scripts/generate-samples.js",
+    "benchmark": "node scripts/run-benchmark.js",
     "coverage": "c8 npm test",
     "release:prepare": "node scripts/sync-pdfjs-vendor.js && node scripts/sync-tesseract-vendor.js && node scripts/sync-onnxruntime-vendor.js && node scripts/sync-paddleocr-vendor.js && node scripts/prepare-release.js",
     "desktop:check": "node scripts/desktop-shell-test.js",
     "desktop:dev": "npm exec @tauri-apps/cli -- dev",
     "desktop:build": "npm exec @tauri-apps/cli -- build",
-    "test": "node scripts/r0-p0-data-integrity-test.js && node scripts/server-hardening-test.js && node scripts/smoke-test.js && node scripts/conversion-snapshot-test.js && node scripts/conversion-capability-audit-test.js && node scripts/product-matrix-docs-test.js && node scripts/conversion-quality-test.js && node scripts/format-integrity-test.js && node scripts/format-validation-test.js && node scripts/worker-payload-test.js && node scripts/browser-smoke-test.js && node scripts/workbench-queue-test.js && node scripts/ui-accessibility-test.js && node scripts/desktop-shell-test.js && node scripts/local-security-test.js && node scripts/local-model-direction-test.js && node scripts/repair-engine-test.js && node scripts/rule-diff-test.js && node scripts/ssim-verification-test.js && node scripts/ocr-readback-test.js && node scripts/sample-corpus-test.js && node scripts/paddle-ocr-pipeline-test.js && node scripts/paddle-ocr-integration-test.js && node scripts/ocr-structure-test.js && node scripts/latex-math-test.js && node scripts/model-cache-test.js && node scripts/ocr-baseline-test.js && node scripts/resource-budget-test.js && node scripts/pdf-reader-test.js && node scripts/xlsx-writer-performance-test.js && node scripts/tesseract-worker-cleanup-test.js && node scripts/p2-responsiveness-test.js && node scripts/p4-p5-p6-test.js && node scripts/p7-release-productization-test.js && node scripts/release-readiness-test.js"
+    "test": "node scripts/r0-p0-data-integrity-test.js && node scripts/server-hardening-test.js && node scripts/smoke-test.js && node scripts/conversion-snapshot-test.js && node scripts/conversion-capability-audit-test.js && node scripts/product-matrix-docs-test.js && node scripts/capability-matrix-consistency-test.js && node scripts/conversion-quality-test.js && node scripts/format-integrity-test.js && node scripts/format-validation-test.js && node scripts/worker-payload-test.js && node scripts/browser-smoke-test.js && node scripts/ui-conversion-e2e-test.js && node scripts/workbench-queue-test.js && node scripts/ui-accessibility-test.js && node scripts/desktop-shell-test.js && node scripts/local-security-test.js && node scripts/local-model-direction-test.js && node scripts/repair-engine-test.js && node scripts/rule-diff-test.js && node scripts/ssim-verification-test.js && node scripts/ocr-readback-test.js && node scripts/sample-corpus-test.js && node scripts/corpus-validation-test.js && node scripts/paddle-ocr-pipeline-test.js && node scripts/paddle-ocr-integration-test.js && node scripts/ocr-structure-test.js && node scripts/latex-math-test.js && node scripts/model-cache-test.js && node scripts/tesseract-sha256-test.js && node scripts/ocr-baseline-test.js && node scripts/resource-budget-test.js && node scripts/pdf-reader-test.js && node scripts/xlsx-writer-performance-test.js && node scripts/tesseract-worker-cleanup-test.js && node scripts/p2-responsiveness-test.js && node scripts/p4-p5-p6-test.js && node scripts/p7-release-productization-test.js && node scripts/release-readiness-test.js && node scripts/text-utils-test.js && node scripts/repair-handlers-test.js && node scripts/binary-text-extraction-test.js && node scripts/document-schema-test.js && node scripts/repair-actions-test.js && node scripts/ocr-result-test.js && node scripts/conversion-error-test.js && node scripts/release-user-path-e2e-test.js",
+    "release:user-path-e2e": "node scripts/release-user-path-e2e-test.js"
   },
   "keywords": [
     "converter",
@@ -30,8 +32,11 @@
   ],
   "author": "Trans2Former Team",
   "license": "MIT",
+  "engines": {
+    "node": ">=22 <25"
+  },
   "dependencies": {
-    "express": "^4.21.2",
+    "express": "^4.22.2",
     "puppeteer": "^25.1.0"
   },
   "repository": {
