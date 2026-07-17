@@ -109,7 +109,12 @@ const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "trans2former-release
 const marker = "RELEASE-MATRIX-MARKER";
 const markdown = `# Release Matrix\n\n${marker}\n\n| Name | Score |\n| --- | --- |\n| Alpha | 10 |`;
 const csv = `Name,Score\n${marker},10\n`;
-const browser = await puppeteer.launch({ headless: "new" });
+const browser = await puppeteer.launch({
+  headless: "new",
+  ...(process.env.CI && process.platform === "linux"
+    ? { args: ["--no-sandbox", "--disable-setuid-sandbox"] }
+    : {}),
+});
 const { server, port } = await startWebServer(await findPort());
 
 try {

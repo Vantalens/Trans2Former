@@ -30,7 +30,12 @@ async function findPort() {
 
 const { server, port } = await startWebServer(await findPort());
 const baseUrl = `http://127.0.0.1:${port}`;
-const browser = await puppeteer.launch({ headless: "new" });
+const browser = await puppeteer.launch({
+  headless: "new",
+  ...(process.env.CI && process.platform === "linux"
+    ? { args: ["--no-sandbox", "--disable-setuid-sandbox"] }
+    : {}),
+});
 
 try {
   const page = await browser.newPage();
