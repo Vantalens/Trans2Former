@@ -1148,6 +1148,86 @@ function updateDownloadState(enabled) {
   }
 }
 
+function getOutputPickerTypes() {
+  const extension = getOutputExtension(currentOutputFormat || "txt");
+  const mime = currentOutputMime || "application/octet-stream";
+  return [{
+    description: `Trans2Former ${String(currentOutputFormat || "output").toUpperCase()} 文件`,
+    accept: { [mime]: [`.${extension}`] },
+  }];
+}
+
+async function saveOutputWithFilePicker() {
+  if (typeof window.showSaveFilePicker !== "function" || !currentOutputDownloadBlob) {
+    return false;
+  }
+
+  try {
+    const fileHandle = await window.showSaveFilePicker({
+      suggestedName: currentOutputFileName,
+      types: getOutputPickerTypes(),
+    });
+    const writable = await fileHandle.createWritable();
+    try {
+      await writable.write(currentOutputDownloadBlob);
+    } finally {
+      await writable.close();
+    }
+    setOutputMeta(`已保存 ${currentOutputFileName}`);
+    setStatus(`文件已保存：${currentOutputFileName}`, "success");
+    return true;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      setStatus("已取消文件保存", "info");
+      return true;
+    }
+    throw error;
+  }
+}
+
+function triggerBrowserDownload() {
+  if (!currentOutputBlobUrl || !currentOutputFileName) {
+    throw new Error("当前没有可下载的转换结果");
+  }
+  const anchor = document.createElement("a");
+  anchor.href = currentOutputBlobUrl;
+  anchor.download = currentOutputFileName;
+  anchor.rel = "noopener";
+  anchor.hidden = true;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+async function downloadCurrentOutput(event) {
+  event?.preventDefault();
+  if (downloadOutputButton.classList.contains("disabled")) {
+    setStatus("请先完成一次转换再下载结果", "info");
+    return;
+  }
+  if (!currentOutputDownloadBlob) {
+    setStatus("当前没有可下载的转换结果", "error");
+    return;
+  }
+  if (outputDirectoryHandle) {
+    try {
+      await writeOutputToSelectedDirectory();
+    } catch (error) {
+      setStatus(`写入输出目录失败：${error.message}`, "error");
+    }
+    return;
+  }
+  try {
+    if (await saveOutputWithFilePicker()) {
+      return;
+    }
+    triggerBrowserDownload();
+    setStatus(`下载已开始：${currentOutputFileName}`, "success");
+  } catch (error) {
+    setStatus(`下载失败：${error.message}`, "error");
+  }
+}
+
 async function openCurrentOutputInPreview() {
   const outputType = getCurrentOutputType();
   if (outputType === "none") return;
@@ -1969,17 +2049,9 @@ outputCheckpointButton?.addEventListener("click", () => {
 });
 
 downloadOutputButton.addEventListener("click", (event) => {
-  if (downloadOutputButton.classList.contains("disabled")) {
-    event.preventDefault();
-    setStatus("请先完成一次转换再下载结果", "info");
-    return;
-  }
-  if (outputDirectoryHandle) {
-    event.preventDefault();
-    writeOutputToSelectedDirectory().catch((error) => {
-      setStatus(`写入输出目录失败：${error.message}`, "error");
-    });
-  }
+  downloadCurrentOutput(event).catch((error) => {
+    setStatus(`下载失败：${error.message}`, "error");
+  });
 });
 
 document.addEventListener("click", (event) => {

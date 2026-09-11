@@ -49,6 +49,9 @@ assert.match(markdownResult.data, /\n---\n?$/, "Markdown thematic break should r
 const appSource = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 const indexSource = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
 assert.match(appSource, /function renderBinaryOutputPreview/, "binary outputs should have an in-workbench preview strategy");
+assert.match(appSource, /function downloadCurrentOutput/, "download clicks should use an explicit output download flow");
+assert.match(appSource, /showSaveFilePicker/, "desktop-compatible downloads should support a system save picker");
+assert.match(appSource, /function triggerBrowserDownload/, "browser downloads should have an explicit Blob anchor fallback");
 assert.match(indexSource, /id="workflowSteps"/, "workbench should expose a compact workflow guide");
 assert.equal(indexSource.includes("id=\"openPdfPreviewButton\""), false, "duplicate PDF preview control should be removed");
 
