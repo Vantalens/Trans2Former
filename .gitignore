@@ -39,10 +39,15 @@ desktop-dist/
 *.tmp
 *.temp
 *.cache
+*.pid
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.nyc_output/
+.eslintcache
+test-results.txt
+测试结果.txt
 .DS_Store
 Thumbs.db
 
