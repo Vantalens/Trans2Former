@@ -1,6 +1,7 @@
 const UTF8_BOM = [0xef, 0xbb, 0xbf];
 const UTF16LE_BOM = [0xff, 0xfe];
 const UTF16BE_BOM = [0xfe, 0xff];
+const STREAM_CHUNK_BYTES = 1024 * 1024;
 
 const EXTENSION_ENCODING_HINTS = new Map([
   ["csv", ["utf-8", "gb18030", "big5"]],
@@ -163,6 +164,37 @@ export function decodeTextBytes(bytesLike, { fileName = "", mime = "", encoding 
 }
 
 export async function readBlobAsDecodedText(blob, { fileName = blob?.name || "", mime = blob?.type || "" } = {}) {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  return decodeTextBytes(bytes, { fileName, mime });
+  if (!blob || typeof blob.arrayBuffer !== "function") {
+    return decodeTextBytes(new Uint8Array(), { fileName, mime });
+  }
+
+  // 小文件保留单次解码路径；大文件按块读取，避免同时持有完整字节数组和完整文本
+  // 两份峰值内存。解析器仍会得到完整字符串，但读取阶段不再额外复制整个输入。
+  if (typeof blob.size !== "number" || blob.size <= STREAM_CHUNK_BYTES || typeof blob.slice !== "function") {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    return decodeTextBytes(bytes, { fileName, mime });
+  }
+
+  const firstBytes = new Uint8Array(await blob.slice(0, STREAM_CHUNK_BYTES).arrayBuffer());
+  const detected = decodeTextBytes(firstBytes, { fileName, mime });
+  const encoding = detected.encoding || "utf-8";
+  let decoder;
+  try {
+    decoder = new TextDecoder(encoding, { fatal: false });
+  } catch {
+    decoder = new TextDecoder("utf-8", { fatal: false });
+  }
+
+  let text = "";
+  for (let offset = 0; offset < blob.size; offset += STREAM_CHUNK_BYTES) {
+    const chunk = new Uint8Array(await blob.slice(offset, offset + STREAM_CHUNK_BYTES).arrayBuffer());
+    text += decoder.decode(chunk, { stream: true });
+  }
+  text += decoder.decode();
+  return {
+    text,
+    encoding,
+    bom: detected.bom,
+    hadReplacement: countReplacement(text) > 0,
+  };
 }

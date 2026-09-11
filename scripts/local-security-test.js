@@ -29,6 +29,9 @@ const ALLOWED_PUBLIC_FILES = new Set([
   // 两者均不联网，不上传任何文档内容，所有 URL 必须以 blob:/同源资源为限。
   path.normalize("public/router.js"),
   path.normalize("public/preview.js"),
+  // P9-E.1 工作区恢复：workspace-storage.js 仅在用户开启本地工作区缓存后使用
+  // IndexedDB/localStorage，不联网、不上传文档内容。
+  path.normalize("public/core/workspace-storage.js"),
   // P9-A.2 OCR runtime：ocr-storage.js 抽象 IndexedDB tessdata 缓存接口；
   // indexeddb-storage.js 落地真实 IDB I/O；tesseract-engine.js / tesseract-bootstrap.js
   // / tesseract-runtime.js 通过同源 vendor 资源加载 tesseract.js；png-ocr.js 通过 reader
@@ -151,6 +154,7 @@ const STRICT_LOCAL_ONLY_FILES = new Set([
   path.normalize("public/security-center.js"),
   path.normalize("public/router.js"),
   path.normalize("public/preview.js"),
+  path.normalize("public/core/workspace-storage.js"),
   path.normalize("public/core/ocr/tesseract-engine.js"),
   path.normalize("public/core/ocr/tesseract-bootstrap.js"),
   path.normalize("public/core/ocr/tesseract-runtime.js"),

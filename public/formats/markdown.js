@@ -6,6 +6,7 @@ import {
   createList,
   createParagraph,
   createQuote,
+  createRawBlock,
   createTable,
 } from "../core/document-model.js";
 import {
@@ -28,6 +29,17 @@ function blockTextToMarkdown(block) {
 
 function blockTextToHtml(block) {
   return inlinesToHtml(getInlineTokens(block));
+}
+
+function tableCellInlines(block, rowIndex, cellIndex, cell) {
+  const source = rowIndex < 0 ? block.headerInlines?.[cellIndex] : block.rowInlines?.[rowIndex]?.[cellIndex];
+  return Array.isArray(source) && source.length > 0
+    ? source
+    : [{ type: "text", value: String(cell ?? "") }];
+}
+
+function tableCellToMarkdown(block, rowIndex, cellIndex, cell) {
+  return escapeTableCell(inlinesToMarkdown(tableCellInlines(block, rowIndex, cellIndex, cell)));
 }
 
 // 转义感知的表格行切分：`\|` 是转义的字面管道（issue #83），与 writer 的
@@ -91,8 +103,27 @@ function getListDepth(rawIndent) {
   return Math.floor(spaces / 2);
 }
 
+function parseFrontMatter(lines) {
+  if (lines[0]?.trim() !== "---") return { start: 0, values: null };
+  const closingIndex = lines.slice(1).findIndex((line) => ["---", "..."].includes(line.trim()));
+  if (closingIndex < 0) return { start: 0, values: null };
+
+  const values = {};
+  for (const line of lines.slice(1, closingIndex + 1)) {
+    const match = line.match(/^\s*([A-Za-z][\w.-]*)\s*:\s*(.*?)\s*$/);
+    if (!match) continue;
+    const raw = match[2];
+    if (/^(true|false)$/i.test(raw)) values[match[1]] = raw.toLowerCase() === "true";
+    else if (/^-?\d+(?:\.\d+)?$/.test(raw)) values[match[1]] = Number(raw);
+    else if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) values[match[1]] = raw.slice(1, -1);
+    else values[match[1]] = raw;
+  }
+  return { start: closingIndex + 2, values };
+}
+
 export function readMarkdown({ content, title = "document", format = "md" }) {
   const lines = normalizeNewlines(content).split("\n");
+  const frontMatter = parseFrontMatter(lines);
   const blocks = [];
   let paragraph = [];
   let listItems = [];
@@ -126,7 +157,7 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
     codeLanguage = "";
   }
 
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+  for (let lineIndex = frontMatter.start; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     // 围栏语义对齐 CommonMark（issue #52/#57）：开围栏 ≥3 反引号 + info string
     //（不含反引号，language 取首个空白分隔 token，支持 objective-c/c++ 等）；
@@ -155,6 +186,16 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
     if (!line.trim()) {
       flushParagraph();
       flushList();
+      continue;
+    }
+
+    // Thematic breaks are syntax, not ordinary prose. There is no dedicated
+    // block in the compact document model, so preserve the original Markdown
+    // as a raw block for round-trip writers while keeping it out of text runs.
+    if (/^\s{0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/.test(line)) {
+      flushParagraph();
+      flushList();
+      blocks.push(createRawBlock("md", line.trim()));
       continue;
     }
 
@@ -254,11 +295,15 @@ export function readMarkdown({ content, title = "document", format = "md" }) {
     flushCode();
   }
 
+  const metadata = withWarnings({}, warnings);
+  if (frontMatter.values && Object.keys(frontMatter.values).length > 0) {
+    metadata.frontMatter = frontMatter.values;
+  }
   return createDocumentModel({
     title,
     sourceFormat: format,
     blocks,
-    metadata: withWarnings({}, warnings),
+    metadata,
   });
 }
 
@@ -303,7 +348,7 @@ export function writeMarkdown({ model, options = {} }) {
         return `${fence}${lang}\n${block.code}\n${fence}`;
       }
       if (block.type === "table") {
-        const headers = `| ${block.headers.map(escapeTableCell).join(" | ")} |`;
+        const headers = `| ${block.headers.map((cell, index) => tableCellToMarkdown(block, -1, index, cell)).join(" | ")} |`;
         const separator = `| ${block.headers.map((_, index) => {
           const alignment = block.alignments?.[index] || "";
           if (alignment === "left") return ":---";
@@ -311,7 +356,7 @@ export function writeMarkdown({ model, options = {} }) {
           if (alignment === "right") return "---:";
           return "---";
         }).join(" | ")} |`;
-        const rows = block.rows.map((row) => `| ${row.map(escapeTableCell).join(" | ")} |`);
+        const rows = block.rows.map((row, rowIndex) => `| ${row.map((cell, cellIndex) => tableCellToMarkdown(block, rowIndex, cellIndex, cell)).join(" | ")} |`);
         return [headers, separator, ...rows].join("\n");
       }
       if (block.type === "image") {
@@ -356,10 +401,20 @@ export function writeMarkdown({ model, options = {} }) {
     ].join("\n")
     : "";
 
+  const frontMatter = model.metadata?.frontMatter;
+  const frontMatterText = frontMatter && typeof frontMatter === "object" && Object.keys(frontMatter).length > 0
+    ? [
+      "---",
+      ...Object.entries(frontMatter).map(([key, value]) => `${key}: ${typeof value === "string" && /[:#\n]/.test(value) ? JSON.stringify(value) : String(value)}`),
+      "---",
+      "",
+    ].join("\n")
+    : "";
+
   return {
     type: "text",
     format: "md",
-    data: `${markdown.trim()}${archiveSummary}${strictHints}\n`,
+    data: `${frontMatterText}${markdown.trim()}${archiveSummary}${strictHints}\n`,
     mime: "text/markdown;charset=utf-8",
   };
 }
@@ -388,12 +443,12 @@ export function blockToHtml(block) {
     };
     const head = [
       "  <thead>",
-      `    <tr>${block.headers.map((cell, index) => `<th${alignAttr(index)}>${escapeHtml(cell)}</th>`).join("")}</tr>`,
+      `    <tr>${block.headers.map((cell, index) => `<th${alignAttr(index)}>${inlinesToHtml(tableCellInlines(block, -1, index, cell))}</th>`).join("")}</tr>`,
       "  </thead>",
     ].join("\n");
     const body = [
       "  <tbody>",
-      ...block.rows.map((row) => `    <tr>${row.map((cell, index) => `<td${alignAttr(index)}>${escapeHtml(cell)}</td>`).join("")}</tr>`),
+      ...block.rows.map((row, rowIndex) => `    <tr>${row.map((cell, index) => `<td${alignAttr(index)}>${inlinesToHtml(tableCellInlines(block, rowIndex, index, cell))}</td>`).join("")}</tr>`),
       "  </tbody>",
     ].join("\n");
     return `<table>\n${head}\n${body}\n</table>`;

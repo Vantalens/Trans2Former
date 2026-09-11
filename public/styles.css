@@ -180,6 +180,49 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
   gap: 6px;
 }
 
+.workflow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 10px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.workflow-steps span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface-soft);
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.workflow-steps span.is-current {
+  color: var(--accent-strong);
+  border-color: rgba(13, 148, 136, 0.35);
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+.binary-preview-summary,
+.binary-preview-fallback {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+  font-size: var(--text-sm);
+}
+
+.binary-preview-content {
+  min-height: 0;
+}
+
 .model-cache-card .security-card-header {
   display: flex;
   justify-content: space-between;
