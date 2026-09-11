@@ -116,6 +116,32 @@ function assertDeflateOutputWithinDeclaredSize(output, expectedSize) {
   }
 }
 
+class DeflateOutput {
+  constructor(expectedSize) {
+    const initialSize = Number.isInteger(expectedSize) && expectedSize > 0 ? expectedSize : 1024;
+    this.bytes = new Uint8Array(initialSize);
+    this.length = 0;
+  }
+
+  push(value) {
+    if (this.length >= this.bytes.length) {
+      const next = new Uint8Array(Math.max(1, this.bytes.length * 2));
+      next.set(this.bytes);
+      this.bytes = next;
+    }
+    this.bytes[this.length] = value;
+    this.length += 1;
+  }
+
+  at(index) {
+    return this.bytes[index];
+  }
+
+  toUint8Array() {
+    return this.bytes.slice(0, this.length);
+  }
+}
+
 function copyDistance(output, distance, length, expectedSize) {
   if (!Number.isInteger(distance) || distance <= 0 || distance > output.length) {
     throw new ConversionError("ZIP deflate distance is invalid", {
@@ -125,7 +151,7 @@ function copyDistance(output, distance, length, expectedSize) {
     });
   }
   for (let index = 0; index < length; index += 1) {
-    output.push(output[output.length - distance]);
+    output.push(output.at(output.length - distance));
     assertDeflateOutputWithinDeclaredSize(output, expectedSize);
   }
 }
@@ -207,7 +233,10 @@ function dynamicHuffmanTrees(reader) {
 
 function inflateDeflateRaw(bytes, expectedSize) {
   const reader = new BitReader(bytes);
-  const output = [];
+  // The ZIP header gives us the exact output size for normal entries. Use it
+  // as the initial capacity so LZ77 expansion does not repeatedly resize an
+  // array; unknown/empty sizes still grow safely on demand (issue #198).
+  const output = new DeflateOutput(expectedSize);
   let isFinal = false;
   while (!isFinal) {
     isFinal = reader.readBits(1) === 1;
@@ -249,7 +278,7 @@ function inflateDeflateRaw(bytes, expectedSize) {
       format: "zip",
     });
   }
-  return new Uint8Array(output);
+  return output.toUint8Array();
 }
 
 function normalizeEntryPath(name) {

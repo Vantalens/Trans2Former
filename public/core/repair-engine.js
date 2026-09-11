@@ -146,8 +146,18 @@ export class RepairEngine {
       }),
     };
     const sourceContextAvailable = typeof ctx?.content === "string" && ctx.content.length > 0;
+    if (!sourceContextAvailable) {
+      // A re-verification without the original source cannot infer new spans.
+      // Keep the repaired model and any spans already carried by it intact
+      // instead of auditing every block against an empty string (issue #190).
+      const beforeQuality = summarizeQuality(before);
+      const afterQuality = summarizeQuality(candidate);
+      const verified = afterQuality.warningCount <= beforeQuality.warningCount
+        && afterQuality.downgradeCount <= beforeQuality.downgradeCount;
+      return { refreshed: candidate, beforeQuality, afterQuality, verified, sourceContextAvailable };
+    }
     const refreshed = ensureDocumentAudit(candidate, {
-      content: sourceContextAvailable ? ctx.content : "",
+      content: ctx.content,
       reader: ctx?.from || "",
       writer: ctx?.to || "",
       targetFormat: ctx?.to || "",

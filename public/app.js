@@ -35,70 +35,76 @@ import { expandPdfContentForTextExtraction } from "./formats/pdf.js";
 import { openPreview } from "./router.js";
 import { renderMathIn } from "./katex-render.js";
 
-const inputContent = document.getElementById("inputContent");
-const sourcePane = document.querySelector(".source-pane");
-const fileInput = document.getElementById("fileInput");
-const dropZone = document.getElementById("dropZone");
-const fileMeta = document.getElementById("fileMeta");
-const statusText = document.getElementById("statusText");
-const htmlPreview = document.getElementById("htmlPreview");
-const pdfPreview = document.getElementById("pdfPreview");
-const textOutputPreview = document.getElementById("textOutputPreview");
-const outputEditorPanel = document.getElementById("outputEditorPanel");
-const outputEditor = document.getElementById("outputEditor");
-const outputDraftMeta = document.getElementById("outputDraftMeta");
-const outputPreviewNotice = document.getElementById("outputPreviewNotice");
-const outputUndoButton = document.getElementById("outputUndoButton");
-const outputRedoButton = document.getElementById("outputRedoButton");
-const outputCheckpointButton = document.getElementById("outputCheckpointButton");
-const openPdfPreviewButton = document.getElementById("openPdfPreviewButton");
-const openStandalonePreviewButton = document.getElementById("openStandalonePreviewButton");
-const errorDetailsPanel = document.getElementById("errorDetailsPanel");
-const errorDetailsSummary = document.getElementById("errorDetailsSummary");
-const errorCategory = document.getElementById("errorCategory");
-const errorCode = document.getElementById("errorCode");
-const errorFormat = document.getElementById("errorFormat");
-const errorMessageText = document.getElementById("errorMessageText");
-const errorDebugText = document.getElementById("errorDebugText");
-const copyErrorDiagnosticsButton = document.getElementById("copyErrorDiagnosticsButton");
-const outputMeta = document.getElementById("outputMeta");
-const markdownProfileSelect = document.getElementById("markdownProfileSelect");
-const persistHistoryCheckbox = document.getElementById("persistHistoryCheckbox");
-const applyFallbackCheckbox = document.getElementById("applyFallbackCheckbox");
-const clearHistoryButton = document.getElementById("clearHistoryButton");
-const refreshPreviewButton = document.getElementById("refreshPreviewButton");
-const largePreviewModeSelect = document.getElementById("largePreviewModeSelect");
-const transformButton = document.getElementById("transformButton");
-const cancelTransformButton = document.getElementById("cancelTransformButton");
-const downloadOutputButton = document.getElementById("downloadOutputButton");
-const conversionProgress = document.getElementById("conversionProgress");
-const progressStage = document.getElementById("progressStage");
-const progressPercent = document.getElementById("progressPercent");
-const progressFill = document.getElementById("progressFill");
-const loadSampleButton = document.getElementById("loadSampleButton");
-const fileQueuePanel = document.getElementById("fileQueuePanel");
-const fileQueueList = document.getElementById("fileQueueList");
-const selectAllQueueButton = document.getElementById("selectAllQueueButton");
-const retryFailedButton = document.getElementById("retryFailedButton");
-const outputDirectoryButton = document.getElementById("outputDirectoryButton");
-const exportNamingInput = document.getElementById("exportNamingInput");
+// 一次收集带 id 的节点，避免启动阶段为每个控件执行独立 DOM 查询（issue #195）。
+const elementsById = Object.fromEntries(
+  [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
+);
+const byId = (id) => elementsById[id] || null;
+const inputContent = byId("inputContent");
+const sourcePane = inputContent?.closest(".source-pane");
+const fileInput = byId("fileInput");
+const dropZone = byId("dropZone");
+const fileMeta = byId("fileMeta");
+const statusText = byId("statusText");
+const htmlPreview = byId("htmlPreview");
+const pdfPreview = byId("pdfPreview");
+const textOutputPreview = byId("textOutputPreview");
+const outputEditorPanel = byId("outputEditorPanel");
+const outputEditor = byId("outputEditor");
+const outputDraftMeta = byId("outputDraftMeta");
+const outputPreviewNotice = byId("outputPreviewNotice");
+const outputUndoButton = byId("outputUndoButton");
+const outputRedoButton = byId("outputRedoButton");
+const outputCheckpointButton = byId("outputCheckpointButton");
+const openPdfPreviewButton = byId("openPdfPreviewButton");
+const openStandalonePreviewButton = byId("openStandalonePreviewButton");
+const errorDetailsPanel = byId("errorDetailsPanel");
+const errorDetailsSummary = byId("errorDetailsSummary");
+const errorCategory = byId("errorCategory");
+const errorCode = byId("errorCode");
+const errorFormat = byId("errorFormat");
+const errorMessageText = byId("errorMessageText");
+const errorDebugText = byId("errorDebugText");
+const copyErrorDiagnosticsButton = byId("copyErrorDiagnosticsButton");
+const retryConversionButton = byId("retryConversionButton");
+const outputMeta = byId("outputMeta");
+const markdownProfileSelect = byId("markdownProfileSelect");
+const persistHistoryCheckbox = byId("persistHistoryCheckbox");
+const applyFallbackCheckbox = byId("applyFallbackCheckbox");
+const clearHistoryButton = byId("clearHistoryButton");
+const refreshPreviewButton = byId("refreshPreviewButton");
+const largePreviewModeSelect = byId("largePreviewModeSelect");
+const transformButton = byId("transformButton");
+const cancelTransformButton = byId("cancelTransformButton");
+const downloadOutputButton = byId("downloadOutputButton");
+const conversionProgress = byId("conversionProgress");
+const progressStage = byId("progressStage");
+const progressPercent = byId("progressPercent");
+const progressFill = byId("progressFill");
+const loadSampleButton = byId("loadSampleButton");
+const fileQueuePanel = byId("fileQueuePanel");
+const fileQueueList = byId("fileQueueList");
+const selectAllQueueButton = byId("selectAllQueueButton");
+const retryFailedButton = byId("retryFailedButton");
+const outputDirectoryButton = byId("outputDirectoryButton");
+const exportNamingInput = byId("exportNamingInput");
 // 修复 issue #39: 删除 documentModelPreview（面板已移除）
-const verificationReportPanel = document.getElementById("verificationReportPanel");
-const verificationReportBadge = document.getElementById("verificationReportBadge");
-const verificationRepair = document.getElementById("verificationRepair");
-const verificationRuleDiff = document.getElementById("verificationRuleDiff");
-const verificationSsim = document.getElementById("verificationSsim");
-const verificationOcrReadback = document.getElementById("verificationOcrReadback");
-const verificationOcrRecognition = document.getElementById("verificationOcrRecognition");
-const verificationOcrRecognitionRow = document.getElementById("verificationOcrRecognitionRow");
-const verificationWarnings = document.getElementById("verificationWarnings");
-const securityCenterButton = document.getElementById("securityCenterButton");
-const workbenchTabs = document.getElementById("workbenchTabs");
-const wordCountEl = document.getElementById("wordCount");
-const lineCountEl = document.getElementById("lineCount");
-const fromFormatSelect = document.getElementById("fromFormatSelect");
-const toFormatSelect = document.getElementById("toFormatSelect");
-const paperFormatSelect = document.getElementById("paperFormatSelect");
+const verificationReportPanel = byId("verificationReportPanel");
+const verificationReportBadge = byId("verificationReportBadge");
+const verificationRepair = byId("verificationRepair");
+const verificationRuleDiff = byId("verificationRuleDiff");
+const verificationSsim = byId("verificationSsim");
+const verificationOcrReadback = byId("verificationOcrReadback");
+const verificationOcrRecognition = byId("verificationOcrRecognition");
+const verificationOcrRecognitionRow = byId("verificationOcrRecognitionRow");
+const verificationWarnings = byId("verificationWarnings");
+const securityCenterButton = byId("securityCenterButton");
+const workbenchTabs = byId("workbenchTabs");
+const wordCountEl = byId("wordCount");
+const lineCountEl = byId("lineCount");
+const fromFormatSelect = byId("fromFormatSelect");
+const toFormatSelect = byId("toFormatSelect");
+const paperFormatSelect = byId("paperFormatSelect");
 const paperField = paperFormatSelect?.closest(".paper-field");
 
 const formatCapabilities = getFormatCapabilities();
@@ -147,7 +153,6 @@ let currentOutputMime = "";
 let outputDraftCommitTimer = null;
 let markdownOutputProfile = "ai-ready";
 let historyPersistenceEnabled = false;
-let cachedHistoryKey = null; // 缓存历史存储键，避免每次提交重新计算（issue #65）
 
 const PREVIEW_DEBOUNCE_MS = 300;
 const LARGE_DOC_THRESHOLD = 12000;
@@ -394,22 +399,14 @@ function snapshotHistoryKeyInputs() {
   };
 }
 
-function updateCachedHistoryKey(snapshot = snapshotHistoryKeyInputs()) {
-  cachedHistoryKey = `trans2former.output-history.${hashString([
+function getHistoryStorageKey(snapshot = snapshotHistoryKeyInputs()) {
+  return `trans2former.output-history.${hashString([
     snapshot.fileName,
     snapshot.fromFormat,
     snapshot.toFormat,
     snapshot.markdownProfile,
     snapshot.content,
   ].join(""))}`;
-}
-
-function getHistoryStorageKey() {
-  // 使用缓存避免重复计算哈希（issue #65, code review P2 #2）
-  if (!cachedHistoryKey) {
-    updateCachedHistoryKey();
-  }
-  return cachedHistoryKey;
 }
 
 function readPersistentHistory() {
@@ -1076,8 +1073,14 @@ function resetGeneratedOutput(metaMessage = "尚未生成") {
 
 function setTransformBusy(isBusy) {
   transformButton.disabled = isBusy;
+  transformButton.toggleAttribute("aria-busy", isBusy);
+  transformButton.dataset.loading = isBusy ? "true" : "false";
+  transformButton.textContent = isBusy ? "转换中…" : "转换";
   cancelTransformButton.disabled = !isBusy;
   cancelTransformButton.hidden = !isBusy;
+  if (retryConversionButton) {
+    retryConversionButton.disabled = isBusy;
+  }
   if (!isBusy && !["complete", "error", "canceled"].includes(conversionProgress.dataset.state)) {
     updateConversionProgress({ stage: "idle", progress: 0 });
   }
@@ -1184,7 +1187,7 @@ function syncMarkdownProfileControl() {
 }
 
 function updateFormatCapabilityNote() {
-  const noteEl = document.getElementById("formatCapabilityNote");
+  const noteEl = byId("formatCapabilityNote");
   if (!noteEl) {
     return;
   }
@@ -1327,7 +1330,6 @@ function schedulePreviewUpdate() {
 
 async function handleInputText(rawContent, fileName = currentFileName, { renderInitialPreview = true } = {}) {
   currentFileName = fileName;
-  cachedHistoryKey = null; // 输入内容或文件名变化，使缓存失效
   currentInputContent = String(rawContent ?? "");
   inputContent.value = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName);
   syncInputEditorMode();
@@ -1437,8 +1439,14 @@ function createConvertWorker() {
 function buildWorkerPayload(payload) {
   const workerPayload = { ...payload };
   const transferList = [];
-  if (typeof payload.content === "string" && payload.content.length >= WORKER_TRANSFERABLE_THRESHOLD_BYTES) {
-    const bytes = new TextEncoder().encode(payload.content);
+  const existingBuffer = payload.contentBuffer instanceof ArrayBuffer
+    ? new Uint8Array(payload.contentBuffer)
+    : (ArrayBuffer.isView(payload.contentBuffer) ? new Uint8Array(payload.contentBuffer.buffer, payload.contentBuffer.byteOffset, payload.contentBuffer.byteLength) : null);
+  if (existingBuffer || (typeof payload.content === "string" && payload.content.length >= WORKER_TRANSFERABLE_THRESHOLD_BYTES)) {
+    // Always transfer a fresh copy. The caller may retry the same payload after a
+    // Worker failure, so handing ownership of its original buffer would detach it
+    // and make the retry receive an empty input (issue #185).
+    const bytes = existingBuffer ? new Uint8Array(existingBuffer) : new TextEncoder().encode(payload.content);
     workerPayload.contentBuffer = bytes.buffer;
     workerPayload.contentEncoding = "utf-8";
     workerPayload.content = "";
@@ -1686,7 +1694,6 @@ fileInput.addEventListener("change", (event) => {
 inputContent.addEventListener("input", () => {
   if (!inputContent.readOnly) {
     currentInputContent = inputContent.value;
-    cachedHistoryKey = null; // 输入内容变化，使缓存失效
   }
   schedulePreviewUpdate();
   updateWordCount();
@@ -1698,7 +1705,6 @@ inputContent.addEventListener("input", () => {
 });
 
 markdownProfileSelect?.addEventListener("change", () => {
-  cachedHistoryKey = null; // Markdown 配置变化，使缓存失效
   markdownOutputProfile = markdownProfileSelect.value;
   writeMarkdownProfilePreference(markdownOutputProfile);
   updateFormatCapabilityNote();
@@ -1751,7 +1757,6 @@ largePreviewModeSelect?.addEventListener("change", () => {
 });
 
 fromFormatSelect.addEventListener("change", () => {
-  cachedHistoryKey = null; // 输入格式变化，使缓存失效
   syncInputEditorMode();
   syncFormatOptions();
   lastRenderedPayload = "";
@@ -1761,7 +1766,6 @@ fromFormatSelect.addEventListener("change", () => {
 });
 
 toFormatSelect.addEventListener("change", () => {
-  cachedHistoryKey = null; // 输出格式变化，使缓存失效
   syncPdfPaperControl();
   updateOutputPreviewVisibility(toFormatSelect.value === "pdf");
   updateFormatCapabilityNote();
@@ -1843,6 +1847,12 @@ workbenchTabs.addEventListener("keydown", (event) => {
 });
 copyErrorDiagnosticsButton.addEventListener("click", () => {
   copyErrorDiagnostics().catch((error) => setStatus(error.message, "error"));
+});
+retryConversionButton?.addEventListener("click", () => {
+  if (!lastErrorDiagnostics || transformButton.disabled) {
+    return;
+  }
+  transformContent();
 });
 cancelTransformButton.addEventListener("click", () => {
   if (!activeConversion) {

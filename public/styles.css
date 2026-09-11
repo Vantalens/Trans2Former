@@ -465,6 +465,35 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
   transform: translateY(1px);
 }
 
+.primary-button:focus-visible,
+.ghost-button:focus-visible,
+.mini-button:focus-visible,
+.menu-button:focus-visible,
+.auxiliary-actions > summary:focus-visible,
+.output-settings > summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.primary-button[data-loading="true"] {
+  cursor: wait;
+}
+
+.primary-button[data-loading="true"]::before {
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.5em;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  content: "";
+  animation: buttonSpinner 0.75s linear infinite;
+}
+
+@keyframes buttonSpinner {
+  to { transform: rotate(360deg); }
+}
+
 /* 渐变变体（Landing 和 Preview 页面使用） */
 .primary-button.btn-gradient {
   background: var(--btn-gradient-primary);
@@ -845,6 +874,17 @@ button:disabled {
   color: #394856;
   cursor: pointer;
   text-align: left;
+}
+
+.queue-item:hover {
+  background: #f3faf8;
+}
+
+.queue-item:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
 }
 
 .queue-item.is-active {
@@ -1439,6 +1479,13 @@ button:disabled {
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.error-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .error-details-header strong,

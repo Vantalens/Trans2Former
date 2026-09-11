@@ -65,6 +65,7 @@ try {
   assert.equal(indexHtml.includes("id=\"htmlPreview\""), true, "main app should expose preview panel");
   assert.equal(indexHtml.includes("id=\"errorDetailsPanel\""), true, "main app should expose error details panel");
   assert.equal(indexHtml.includes("id=\"copyErrorDiagnosticsButton\""), true, "main app should expose sanitized diagnostics copy control");
+  assert.equal(indexHtml.includes("id=\"retryConversionButton\""), true, "main app should expose in-place conversion retry");
   assert.equal(indexHtml.includes("id=\"conversionProgress\""), true, "main app should expose conversion progress element");
   assert.equal(indexHtml.includes("id=\"progressStage\""), true, "main app should expose progress stage label");
   assert.equal(indexHtml.includes("id=\"fileQueuePanel\""), true, "P0 workbench should expose file queue panel");
@@ -148,6 +149,7 @@ try {
   assert.equal(appJs.includes("LARGE_FILE_PREVIEW_BYTES"), true, "large file preview policy should be explicit");
   assert.equal(appJs.includes("WORKER_TRANSFERABLE_THRESHOLD_BYTES"), true, "P2 should define when large payloads move to Worker Transferable");
   assert.equal(appJs.includes("buildWorkerPayload"), true, "P2 should prepare Worker payloads for transferable ArrayBuffer delivery");
+  assert.equal(appJs.includes("Always transfer a fresh copy"), true, "Worker retries must transfer an independent buffer copy");
   assert.equal(appJs.includes("worker.postMessage({ id, payload: workerPayload }, transferList)"), true, "P2 should transfer ArrayBuffer ownership to the Worker");
   assert.equal(appJs.includes("VIRTUAL_LIST_ITEM_LIMIT"), true, "P2 should virtualize long report and version lists");
   assert.equal(appJs.includes("renderVirtualTextList"), true, "P2 should centralize virtual list rendering");
@@ -157,6 +159,8 @@ try {
   assert.equal(appJs.includes("releaseConversionResources"), true, "P2 should centralize Worker and ObjectURL lifecycle cleanup");
   assert.equal(appJs.includes("BINARY_INPUT_FORMATS"), true, "binary formats should avoid text decoding");
   assert.equal(appJs.includes("snapshotHistoryKeyInputs"), true, "history keys should use one type-safe state snapshot");
+  assert.equal(appJs.includes("function getHistoryStorageKey(snapshot = snapshotHistoryKeyInputs())"), true, "history keys must be computed from a fresh state snapshot");
+  assert.equal(appJs.includes("cachedHistoryKey"), false, "history keys must not use stale mutable cache state");
   assert.equal(appJs.includes("String(currentFileName || \"document\")"), true, "history and preview keys should normalize file names");
   assert.equal(appJs.includes("function getCurrentOutputType"), true, "output type should be derived from output format");
   assert.equal(appJs.includes("let currentOutputType"), false, "output type must not be maintained as parallel mutable state");
@@ -167,6 +171,7 @@ try {
   assert.equal(appJs.includes("toConversionDocumentModel"), true, "quality panel should render the routed model with conversion-loss warnings");
   assert.equal(appJs.includes("currentInputContent"), true, "binary uploads should keep raw conversion payload separate from editor display text");
   assert.equal(appJs.includes("getActiveInputContent"), true, "conversion and preview should read the active raw payload, not textarea display text");
+  assert.equal(appJs.includes('transformButton.toggleAttribute("aria-busy", isBusy)'), true, "transform busy state should be exposed to assistive technology");
   assert.equal(appJs.includes("currentPrintHtml"), false, "unreachable print-output state should stay removed");
   assert.equal(appJs.includes('result.type === "print"'), false, "unreachable print-output branch should stay removed");
   assert.equal(appJs.includes("fitInputEditorHeight"), true, "short source text should not leave a full-height empty editor area");

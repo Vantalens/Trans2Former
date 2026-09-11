@@ -157,6 +157,11 @@
   border-color: rgba(15, 118, 110, 0.45);
 }
 
+.landing-cta-ghost:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
 .landing-hero-badges {
   list-style: none;
   padding: 0;
