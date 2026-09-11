@@ -177,7 +177,10 @@ export function ensureDocumentAudit(model, {
       warningsBySeverity: warningSummary(warnings),
       downgradeCount: warnings.filter((warning) => ["lossy", "unsupported"].includes(warning.severity)).length,
     },
-    ...(warnings.length > 0 ? { warnings } : {}),
+    // Keep the audit envelope shape stable even when no warnings exist. This
+    // makes the result explicit and avoids consumers inferring audit state from
+    // a property that may disappear (issue #189).
+    warnings,
   };
   return {
     ...model,

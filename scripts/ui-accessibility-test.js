@@ -13,6 +13,7 @@ assert.match(html, /id="inputPreviewTab"[^>]*role="tab"[^>]*aria-selected="true"
 assert.match(html, /id="outputPreviewTab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*aria-controls="outputPreviewPanel"[^>]*tabindex="-1"/);
 assert.match(html, /id="inputPreviewPanel"[^>]*role="tabpanel"[^>]*aria-labelledby="inputPreviewTab"/);
 assert.match(html, /id="outputPreviewPanel"[^>]*role="tabpanel"[^>]*aria-labelledby="outputPreviewTab"[^>]*hidden/);
+assert.match(html, /id="retryConversionButton"[^>]*type="button"/);
 
 assert.match(app, /dropZone\.addEventListener\("keydown"/);
 assert.match(app, /fileInput\.click\(\)/);
@@ -27,5 +28,8 @@ assert.match(css, /\.mini-button\s*\{[^}]*min-height:\s*44px/s);
 assert.match(css, /\.tab-button\s*\{[^}]*min-height:\s*44px/s);
 assert.match(css, /\.toggle-label\s*\{[^}]*min-height:\s*44px/s);
 assert.match(css, /\.toggle-label input\s*\{[^}]*width:\s*20px;[^}]*height:\s*20px/s);
+assert.match(css, /\.queue-item:hover\s*\{/);
+assert.match(css, /\.queue-item:focus-visible\s*\{/);
+assert.match(css, /\.primary-button\[data-loading="true"\]/);
 
 console.log("UI accessibility test passed: upload keyboard access, ARIA tabs, disabled download state, details dismissal, and touch targets are covered.");

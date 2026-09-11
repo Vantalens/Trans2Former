@@ -379,8 +379,9 @@ function buildCtx(overrides = {}) {
   assert.deepEqual(unaudited.metadata, originalMetadata, "audit must not mutate input metadata");
   assert.equal(
     Object.prototype.hasOwnProperty.call(withoutWarnings.metadata, "warnings"),
-    false,
-    "empty warnings should be omitted without deleting from the input object",
+    true,
+    "audit results should expose an explicit warnings array without mutating the input object",
   );
+  assert.deepEqual(withoutWarnings.metadata.warnings, []);
 }
 console.log("Repair engine test passed: contract, engine unit, round-trip, fallback recommendation, failure and dedupe paths covered.");

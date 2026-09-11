@@ -11,6 +11,7 @@ function parseCsvRecords(content) {
   let current = "";
   let inQuotes = false;
   let sawQuotedNewline = false;
+  let endedWithRecordSeparator = false;
 
   function pushCell() {
     row.push(current);
@@ -36,11 +37,13 @@ function parseCsvRecords(content) {
     }
     if (char === "," && !inQuotes) {
       pushCell();
+      endedWithRecordSeparator = false;
       continue;
     }
     if ((char === "\n" || char === "\r") && !inQuotes) {
       pushCell();
       pushRow();
+      endedWithRecordSeparator = true;
       if (char === "\r" && next === "\n") {
         i += 1;
       }
@@ -54,17 +57,21 @@ function parseCsvRecords(content) {
       }
       continue;
     }
+    endedWithRecordSeparator = false;
     current += char;
   }
 
-  if (current.length > 0 || row.length > 0 || source.endsWith(",")) {
+  // A trailing comma is already represented by the pending row/cell. Do not
+  // inspect the raw source suffix: doing so disagrees with CRLF consumption
+  // and can drop or invent the final record (issue #186).
+  if (current.length > 0 || row.length > 0) {
     pushCell();
     pushRow();
   }
 
   return {
     rows: records.filter((record, index) => {
-      const isFinalEmpty = index === records.length - 1 && record.length === 1 && record[0] === "" && /[\r\n]$/.test(source);
+      const isFinalEmpty = index === records.length - 1 && record.length === 1 && record[0] === "" && endedWithRecordSeparator;
       return !isFinalEmpty;
     }),
     sawQuotedNewline,
