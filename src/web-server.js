@@ -53,7 +53,9 @@ function createApp() {
     res.json({ ok: true, mode: "browser-first" });
   });
 
-  app.get("*", async (req, res, next) => {
+  // Express 5 uses path-to-regexp v8, where a bare `*` is invalid. The
+  // braced wildcard still includes the root path and preserves SPA fallback.
+  app.get("/{*splat}", async (req, res, next) => {
     if (hasFileExtension(req.path)) {
       res.status(404).type("text").send("Not found");
       return;

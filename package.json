@@ -36,7 +36,7 @@
     "node": ">=22 <25"
   },
   "dependencies": {
-    "express": "^4.22.2",
+    "express": "^5.2.1",
     "puppeteer": "^25.1.0"
   },
   "repository": {
@@ -49,12 +49,14 @@
   "homepage": "https://github.com/Vantalens/Trans2Former#readme",
   "optionalDependencies": {
     "onnxruntime-web": "^1.26.0",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "^6.3.289",
     "tesseract.js": "^5.1.1"
   },
   "devDependencies": {
-    "c8": "^11.0.0",
-    "onnxruntime-node": "^1.20.1",
+    "c8": "^12.0.0",
     "pngjs": "^7.0.0"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.9"
   }
 }
