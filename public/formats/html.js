@@ -311,6 +311,7 @@ function extractTableRows(events, start, closeIndex) {
       const trClose = findClosingIndex(events, index + 1, "tr");
       const end = trClose === -1 ? closeIndex : trClose;
       const cells = [];
+      const cellInlines = [];
       const cellTypes = [];
       let cursor = index + 1;
       while (cursor < end) {
@@ -318,15 +319,16 @@ function extractTableRows(events, start, closeIndex) {
         if (cellEvent.type === "open" && (cellEvent.tag === "td" || cellEvent.tag === "th")) {
           const cellClose = findClosingIndex(events, cursor + 1, cellEvent.tag);
           const cellEnd = cellClose === -1 ? end : cellClose;
-          // 表格单元格暂时只输出 plain text；行内格式在 P8-M3 表格升级时再细化
-          cells.push(inlinesPlainTextTrimmed(sliceInline(events, cursor + 1, cellEnd)));
+          const inlines = sliceInline(events, cursor + 1, cellEnd);
+          cells.push(inlinesPlainTextTrimmed(inlines));
+          cellInlines.push(inlines);
           cellTypes.push(cellEvent.tag);
           cursor = cellEnd + 1;
           continue;
         }
         cursor += 1;
       }
-      if (cells.length > 0) rows.push({ cells, types: cellTypes });
+      if (cells.length > 0) rows.push({ cells, types: cellTypes, inlines: cellInlines });
       index = end + 1;
       continue;
     }
@@ -434,7 +436,10 @@ function readBlocksFromEvents(events) {
           } else {
             headers = allRows[0].cells.map((_, i) => `列${i + 1}`);
           }
-          blocks.push(createTable(headers, bodyRows.map((row) => row.cells)));
+          const table = createTable(headers, bodyRows.map((row) => row.cells));
+          table.headerInlines = allRows[0].inlines || [];
+          table.rowInlines = bodyRows.map((row) => row.inlines || []);
+          blocks.push(table);
         }
       } else if (tag === "p") {
         const inlines = sliceInline(events, index + 1, end);

@@ -39,12 +39,17 @@ const EXT_TO_FORMAT = {
 
 const registry = new ConverterRegistry();
 
+// 轻量文本格式采用分块读取 + Worker 转换，允许更大的输入；结构化二进制格式
+// 继续使用各自更严格的资源预算，避免一次解压把浏览器内存打满。
+const LARGE_TEXT_RESOURCE_BUDGET = { maxInputBytes: 128 * 1024 * 1024, maxRuntimeMemoryMb: 768 };
+
 registry.registerFormat("md", {
   read: readMarkdown,
   write: writeMarkdown,
   extension: "md",
   mime: "text/markdown;charset=utf-8",
   label: "Markdown",
+  resourceBudget: LARGE_TEXT_RESOURCE_BUDGET,
   inputModels: ["SemanticDoc"],
   outputModels: ["SemanticDoc"],
 });
@@ -55,6 +60,7 @@ registry.registerFormat("html", {
   extension: "html",
   mime: "text/html;charset=utf-8",
   label: "HTML",
+  resourceBudget: LARGE_TEXT_RESOURCE_BUDGET,
   inputModels: ["SemanticDoc"],
   outputModels: ["SemanticDoc"],
 });
@@ -65,6 +71,7 @@ registry.registerFormat("txt", {
   extension: "txt",
   mime: "text/plain;charset=utf-8",
   label: "TXT",
+  resourceBudget: LARGE_TEXT_RESOURCE_BUDGET,
   inputModels: ["SemanticDoc"],
   outputModels: ["SemanticDoc"],
 });
@@ -75,6 +82,7 @@ registry.registerFormat("json", {
   extension: "json",
   mime: "application/json;charset=utf-8",
   label: "JSON",
+  resourceBudget: LARGE_TEXT_RESOURCE_BUDGET,
   inputModels: ["SemanticDoc"],
   outputModels: ["SemanticDoc"],
 });
@@ -86,6 +94,7 @@ registry.registerFormat("csv", {
   mime: "text/csv;charset=utf-8",
   label: "CSV",
   note: "以第一行作为表头导入 DocumentModel table",
+  resourceBudget: LARGE_TEXT_RESOURCE_BUDGET,
   producesModels: ["WorkbookModel", "SemanticDoc"],
   primaryModel: "WorkbookModel",
   acceptsModels: ["SemanticDoc"],
@@ -98,6 +107,7 @@ registry.registerFormat("xml", {
   mime: "application/xml;charset=utf-8",
   label: "XML",
   note: "当前保留 raw XML 并提取可读文本结构",
+  resourceBudget: LARGE_TEXT_RESOURCE_BUDGET,
   inputModels: ["SemanticDoc"],
   outputModels: ["SemanticDoc"],
 });

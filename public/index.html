@@ -115,6 +115,12 @@
               <span id="lineCount">行数: 0</span>
             </div>
           </div>
+          <nav id="workflowSteps" class="workflow-steps" aria-label="转换流程">
+            <span data-workflow-step="input" class="is-current">1 导入</span>
+            <span data-workflow-step="preview">2 预览</span>
+            <span data-workflow-step="convert">3 转换</span>
+            <span data-workflow-step="output">4 输出</span>
+          </nav>
 
           <textarea id="inputContent" spellcheck="false" placeholder="上传文件或粘贴内容"></textarea>
         </section>
@@ -144,7 +150,7 @@
                   </label>
                   <label class="toggle-label">
                     <input id="persistHistoryCheckbox" type="checkbox" />
-                    关闭后保留版本历史
+                    保存本地工作区与版本历史
                   </label>
                   <label class="toggle-label" title="自动修复建议降级到更安全格式时是否应用（默认仅推荐）">
                     <input id="applyFallbackCheckbox" type="checkbox" />
@@ -186,8 +192,7 @@
               <div class="viewer-card-header">
                 <span>转换结果</span>
                 <div class="viewer-card-actions">
-                  <button id="openStandalonePreviewButton" class="mini-button" type="button" title="在独立预览窗口打开当前输出" disabled>独立预览</button>
-                  <button id="openPdfPreviewButton" class="mini-button" type="button" title="在新窗口打开 PDF 预览">打开 PDF</button>
+                  <button id="openStandalonePreviewButton" class="mini-button" type="button" title="在新窗口预览当前输出" disabled>新窗口预览</button>
                 </div>
               </div>
               <section id="outputEditorPanel" class="output-editor-panel" hidden>

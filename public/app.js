@@ -31,6 +31,11 @@ import {
   summarizeQualityReport,
 } from "./core/workbench-state.js";
 import { readBlobAsDecodedText } from "./core/text-decoding.js";
+import {
+  clearWorkspaceSnapshot,
+  readWorkspaceSnapshot,
+  saveWorkspaceSnapshot,
+} from "./core/workspace-storage.js";
 import { expandPdfContentForTextExtraction } from "./formats/pdf.js";
 import { openPreview } from "./router.js";
 import { renderMathIn } from "./katex-render.js";
@@ -56,7 +61,6 @@ const outputPreviewNotice = byId("outputPreviewNotice");
 const outputUndoButton = byId("outputUndoButton");
 const outputRedoButton = byId("outputRedoButton");
 const outputCheckpointButton = byId("outputCheckpointButton");
-const openPdfPreviewButton = byId("openPdfPreviewButton");
 const openStandalonePreviewButton = byId("openStandalonePreviewButton");
 const errorDetailsPanel = byId("errorDetailsPanel");
 const errorDetailsSummary = byId("errorDetailsSummary");
@@ -100,6 +104,7 @@ const verificationOcrRecognitionRow = byId("verificationOcrRecognitionRow");
 const verificationWarnings = byId("verificationWarnings");
 const securityCenterButton = byId("securityCenterButton");
 const workbenchTabs = byId("workbenchTabs");
+const workflowSteps = [...document.querySelectorAll("[data-workflow-step]")];
 const wordCountEl = byId("wordCount");
 const lineCountEl = byId("lineCount");
 const fromFormatSelect = byId("fromFormatSelect");
@@ -152,7 +157,9 @@ let currentOutputFormat = "";
 let currentOutputMime = "";
 let outputDraftCommitTimer = null;
 let markdownOutputProfile = "ai-ready";
-let historyPersistenceEnabled = false;
+let historyPersistenceEnabled = true;
+let workspaceRevision = 0;
+let workspaceSaveTimer = null;
 
 const PREVIEW_DEBOUNCE_MS = 300;
 const LARGE_DOC_THRESHOLD = 12000;
@@ -409,6 +416,14 @@ function getHistoryStorageKey(snapshot = snapshotHistoryKeyInputs()) {
   ].join(""))}`;
 }
 
+function setWorkflowStep(activeStep) {
+  for (const step of workflowSteps) {
+    const isCurrent = step.dataset.workflowStep === activeStep;
+    step.classList.toggle("is-current", isCurrent);
+    step.setAttribute("aria-current", isCurrent ? "step" : "false");
+  }
+}
+
 function readPersistentHistory() {
   if (!historyPersistenceEnabled || typeof window.localStorage === "undefined") {
     return null;
@@ -459,12 +474,13 @@ function clearPersistentHistory() {
 
 function readHistoryPersistencePreference() {
   if (typeof window.localStorage === "undefined") {
-    return false;
+    return true;
   }
   try {
-    return window.localStorage.getItem(HISTORY_PREFERENCE_KEY) === "true";
+    const value = window.localStorage.getItem(HISTORY_PREFERENCE_KEY);
+    return value === null || value === "true";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -503,6 +519,37 @@ function writeHistoryPersistencePreference(enabled) {
   } catch {
     // ignore
   }
+}
+
+function scheduleWorkspaceSnapshot() {
+  if (!historyPersistenceEnabled) return;
+  window.clearTimeout(workspaceSaveTimer);
+  workspaceSaveTimer = window.setTimeout(() => {
+    workspaceSaveTimer = null;
+    saveWorkspaceSnapshot({
+      fileName: currentFileName,
+      fromFormat: fromFormatSelect.value,
+      toFormat: toFormatSelect.value,
+      content: currentInputContent,
+      savedAt: Date.now(),
+    }).catch(() => {
+      setStatus("本地工作区保存失败，当前内容仍保留在页面中", "info");
+    });
+  }, 350);
+}
+
+async function restoreWorkspaceSnapshot() {
+  if (!historyPersistenceEnabled) return false;
+  const snapshot = await readWorkspaceSnapshot();
+  if (!snapshot || workspaceRevision > 0 || !snapshot.content) return false;
+  if (!getAllowedOutputFormats(snapshot.fromFormat).includes(snapshot.toFormat)) return false;
+  fromFormatSelect.value = snapshot.fromFormat;
+  syncFormatOptions();
+  toFormatSelect.value = snapshot.toFormat;
+  syncPdfPaperControl();
+  await handleInputText(snapshot.content, snapshot.fileName, { renderInitialPreview: false });
+  setStatus(`已恢复本地工作区：${snapshot.fileName}`, "success");
+  return true;
 }
 
 function applyPersistentHistoryIfAny() {
@@ -1091,14 +1138,12 @@ function updateDownloadState(enabled) {
     downloadOutputButton.classList.remove("disabled");
     downloadOutputButton.removeAttribute("aria-disabled");
     downloadOutputButton.removeAttribute("tabindex");
-    openPdfPreviewButton.disabled = !lastOutputIsPdf;
     if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = false;
   } else {
     downloadOutputButton.classList.add("disabled");
     downloadOutputButton.href = "#";
     downloadOutputButton.setAttribute("aria-disabled", "true");
     downloadOutputButton.tabIndex = -1;
-    openPdfPreviewButton.disabled = true;
     if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = true;
   }
 }
@@ -1154,14 +1199,38 @@ function updateOutputPreviewVisibility(isPdf) {
   lastOutputIsPdf = isPdf;
   if (isPdf) {
     pdfPreview.style.display = "block";
-    openPdfPreviewButton.style.display = "block";
-    openPdfPreviewButton.textContent = "打开 PDF 预览";
     textOutputPreview.style.display = "none";
   } else {
     pdfPreview.style.display = "none";
-    openPdfPreviewButton.style.display = "none";
     textOutputPreview.style.display = "block";
   }
+}
+
+function renderBinaryOutputPreview(result) {
+  updateOutputPreviewVisibility(false);
+  textOutputPreview.replaceChildren();
+  const summary = document.createElement("div");
+  summary.className = "binary-preview-summary";
+  summary.textContent = `${String(result.format || "文件").toUpperCase()} 已生成 · ${formatFileSize(new Blob([dataUrlToBytes(result.data)]).size)} · 可预览内容如下；完整文件请使用下载按钮。`;
+  textOutputPreview.appendChild(summary);
+
+  try {
+    const preview = document.createElement("div");
+    preview.className = "binary-preview-content";
+    preview.innerHTML = renderPreviewHtml(result.data, result.format, currentFileName);
+    if (preview.textContent?.trim() || preview.querySelector("img, table, pre, h1, h2, p")) {
+      textOutputPreview.appendChild(preview);
+      renderMathIn(preview);
+      return;
+    }
+  } catch (error) {
+    console.warn(`[app] ${result.format} binary preview failed:`, error);
+  }
+
+  const fallback = document.createElement("p");
+  fallback.className = "binary-preview-fallback";
+  fallback.textContent = "当前格式无法生成可视化摘要，但文件已成功生成，可直接下载后使用本地应用打开。";
+  textOutputPreview.appendChild(fallback);
 }
 
 function getPayloadKey() {
@@ -1329,6 +1398,8 @@ function schedulePreviewUpdate() {
 }
 
 async function handleInputText(rawContent, fileName = currentFileName, { renderInitialPreview = true } = {}) {
+  workspaceRevision += 1;
+  setWorkflowStep("preview");
   currentFileName = fileName;
   currentInputContent = String(rawContent ?? "");
   inputContent.value = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName);
@@ -1354,6 +1425,7 @@ async function handleInputText(rawContent, fileName = currentFileName, { renderI
   } else {
     setStatus("大文件已载入，预览保持手动刷新以避免卡顿", "info");
   }
+  scheduleWorkspaceSnapshot();
 }
 
 function readFileAsDataUrl(file) {
@@ -1565,6 +1637,7 @@ async function transformContent() {
   const to = toFormatSelect.value;
 
   setTransformBusy(true);
+  setWorkflowStep("convert");
   updateConversionProgress({ stage: "read", progress: 0.05, message: "准备读取输入" });
   setStatus("正在浏览器端执行转换...");
   resetGeneratedOutput("正在生成");
@@ -1616,14 +1689,14 @@ async function transformContent() {
       downloadOutputButton.href = outputUrl;
       downloadOutputButton.download = currentOutputFileName;
       downloadOutputButton.textContent = "下载二进制输出";
-      textOutputPreview.textContent = `已生成 ${result.format.toUpperCase()} 二进制输出，可直接下载。`;
       if (result.format === "pdf") {
         pdfPreview.src = outputUrl;
         updateOutputPreviewVisibility(true);
       } else {
-        updateOutputPreviewVisibility(false);
+        renderBinaryOutputPreview(result);
       }
       showWorkbenchTab("outputPreviewPanel");
+      setWorkflowStep("output");
       updateDownloadState(true);
       setOutputMeta(`二进制输出已生成 · ${result.mime} · ${outputDirectoryLabel}`);
       updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
@@ -1640,6 +1713,7 @@ async function transformContent() {
     updateDownloadState(true);
     renderOutputPreview(result.data);
     showWorkbenchTab("outputPreviewPanel");
+    setWorkflowStep("output");
     updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
     updateActiveQueueItem({ status: "done" });
     setStatus("浏览器端转换成功", "success");
@@ -1651,19 +1725,12 @@ async function transformContent() {
       updateActiveQueueItem({ status: "failed", error: error.message });
       renderErrorDetails(error);
       updateConversionProgress({ stage: "error", progress: 0, message: "转换失败" });
+      setWorkflowStep("input");
       setStatus(error.message, "error");
     }
   } finally {
     setTransformBusy(false);
   }
-}
-
-function printCurrentPdf() {
-  if (currentOutputBlobUrl) {
-    window.open(currentOutputBlobUrl, "_blank");
-    return;
-  }
-  setStatus("当前没有可预览的 PDF", "error");
 }
 
 fileInput.addEventListener("change", (event) => {
@@ -1695,6 +1762,9 @@ inputContent.addEventListener("input", () => {
   if (!inputContent.readOnly) {
     currentInputContent = inputContent.value;
   }
+  workspaceRevision += 1;
+  setWorkflowStep("input");
+  scheduleWorkspaceSnapshot();
   schedulePreviewUpdate();
   updateWordCount();
   fitInputEditorHeight();
@@ -1716,19 +1786,22 @@ persistHistoryCheckbox?.addEventListener("change", () => {
   writeHistoryPersistencePreference(historyPersistenceEnabled);
   if (!historyPersistenceEnabled) {
     clearPersistentHistory();
-    setStatus("已关闭本地历史持久化", "info");
+    clearWorkspaceSnapshot();
+    setStatus("已关闭本地工作区缓存", "info");
     return;
   }
   writePersistentHistory();
-  setStatus("已开启本地历史持久化", "success");
+  scheduleWorkspaceSnapshot();
+  setStatus("已开启本地工作区缓存", "success");
 });
 
 clearHistoryButton?.addEventListener("click", () => {
   clearPersistentHistory();
+  clearWorkspaceSnapshot();
   clearOutputHistory();
   updateOutputVersionControls();
-  setOutputMeta("已清除本地历史记录");
-  setStatus("已清除本地历史记录", "info");
+  setOutputMeta("已清除本地工作区记录");
+  setStatus("已清除本地工作区记录", "info");
 });
 
 if (outputEditor) {
@@ -1763,6 +1836,7 @@ fromFormatSelect.addEventListener("change", () => {
   schedulePreviewUpdate();
   updateFormatCapabilityNote();
   syncMarkdownProfileControl();
+  scheduleWorkspaceSnapshot();
 });
 
 toFormatSelect.addEventListener("change", () => {
@@ -1770,6 +1844,7 @@ toFormatSelect.addEventListener("change", () => {
   updateOutputPreviewVisibility(toFormatSelect.value === "pdf");
   updateFormatCapabilityNote();
   syncMarkdownProfileControl();
+  scheduleWorkspaceSnapshot();
 });
 
 dropZone.addEventListener("dragover", (event) => {
@@ -1868,7 +1943,6 @@ cancelTransformButton.addEventListener("click", () => {
   updateConversionProgress({ stage: "canceled", progress: 0, message: "转换已取消" });
   setStatus("转换已取消", "info");
 });
-openPdfPreviewButton.addEventListener("click", printCurrentPdf);
 if (openStandalonePreviewButton) {
   openStandalonePreviewButton.addEventListener("click", openCurrentOutputInPreview);
 }
@@ -1958,6 +2032,7 @@ function bootstrapInitialSample() {
   updateWordCount();
   renderPreview();
   setStatus("示例已加载，当前转换在浏览器端执行", "success");
+  setWorkflowStep("preview");
 }
 
 syncFormatOptions();
@@ -1970,9 +2045,9 @@ if (markdownProfileSelect) {
   markdownProfileSelect.value = markdownOutputProfile;
 }
 bootstrapInitialSample();
+restoreWorkspaceSnapshot().catch(() => {});
 syncMarkdownProfileControl();
 syncPdfPaperControl();
-openPdfPreviewButton.disabled = true;
 if (openStandalonePreviewButton) openStandalonePreviewButton.disabled = true;
 updateConversionProgress({ stage: "idle", progress: 0 });
 

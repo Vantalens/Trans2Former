@@ -389,14 +389,34 @@ function binaryStringToBytes(value) {
   return bytes;
 }
 
-function appendTextFragment(buffer, fragment) {
-  const text = String(fragment || "");
-  if (!text) return buffer;
-  if (!buffer) return text;
-  const last = buffer.at(-1);
-  const first = text[0];
-  const needsSpace = /[A-Za-z0-9]/.test(last) && /[A-Za-z0-9]/.test(first);
-  return `${buffer}${needsSpace ? " " : ""}${text}`;
+function shouldSeparatePdfItems(previous, current) {
+  const previousText = String(previous?.str || "");
+  const currentText = String(current?.str || "");
+  if (!previousText || !currentText || /\s$/.test(previousText) || /^\s/.test(currentText)) return false;
+
+  // PDF.js often returns one text item per glyph/word and omits literal spaces.
+  // Use the measured horizontal gap when available, with an alphanumeric fallback
+  // for synthetic PDFs whose width/position fields are zero.
+  const previousEnd = Number(previous?.x || 0) + Number(previous?.width || 0);
+  const currentStart = Number(current?.x || 0);
+  const gap = currentStart - previousEnd;
+  const height = Math.max(Number(previous?.height || 0), Number(current?.height || 0), 12);
+  if (gap > Math.max(1.5, height * 0.12)) return true;
+  return /[A-Za-z0-9]$/.test(previousText) && /^[A-Za-z0-9]/.test(currentText);
+}
+
+function joinPdfItems(items, separator = " ") {
+  let output = "";
+  let previous = null;
+  for (const item of items || []) {
+    const text = String(item?.str || "");
+    if (!text) continue;
+    if (previous && shouldSeparatePdfItems(previous, item)) output += separator;
+    output += text;
+    if (item?.hasEOL) output += "\n";
+    previous = item;
+  }
+  return output.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").trim();
 }
 
 async function loadPdfJs() {
@@ -463,10 +483,11 @@ async function extractTextWithPdfJs(content) {
           width: Number(item.width) || 0,
           height: item.height || Math.abs(item.transform?.[3] ?? 0) || 12,
           fontName: String(item.fontName || ""),
+          hasEOL: Boolean(item.hasEOL),
         }));
       const pageBlocks = analyzePageLayout(items);
       const fallbackText = pageBlocks.length === 0
-        ? (textContent.items || []).map((item) => (typeof item.str === "string" ? item.str : "")).join(" ").replace(/\s+/g, " ").trim()
+        ? joinPdfItems(items)
         : "";
       // P8-M4：同时收集 FixedLayoutModel 的 textRuns + page size，供 model.fixedLayout 使用。
       const textRuns = items.map((item) => ({
@@ -553,7 +574,7 @@ function analyzePageLayout(items) {
   }
   for (const line of lines) {
     line.items.sort((a, b) => a.x - b.x);
-    line.text = line.items.map((i) => i.str).join("").replace(/\s+/g, " ").trim();
+    line.text = joinPdfItems(line.items);
     line.inlines = itemsToInlines(line.items);
   }
   const validLines = lines.filter((line) => line.text);
@@ -631,6 +652,7 @@ function analyzePageLayout(items) {
 // 常见 PDF 字体名约定如 "Times-Bold" / "Helvetica-Oblique" / "Arial,BoldItalic"。
 function itemsToInlines(items) {
   const segments = [];
+  let previous = null;
   for (const item of items) {
     const text = String(item.str || "");
     if (!text) continue;
@@ -638,12 +660,14 @@ function itemsToInlines(items) {
     const bold = /bold|bd\b|black|heavy/i.test(fontName);
     const italic = /italic|oblique/i.test(fontName);
     const key = `${bold ? "b" : ""}${italic ? "i" : ""}`;
+    const prefix = previous && shouldSeparatePdfItems(previous, item) ? " " : "";
     const last = segments[segments.length - 1];
     if (last && last.key === key) {
-      last.text += text;
+      last.text += `${prefix}${text}`;
     } else {
-      segments.push({ key, text });
+      segments.push({ key, text: `${prefix}${text}` });
     }
+    previous = item;
   }
   return segments.map(({ key, text }) => {
     if (key === "bi") {
