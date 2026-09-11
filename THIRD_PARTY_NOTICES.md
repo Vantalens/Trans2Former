@@ -7,7 +7,7 @@ Trans2Former makes use of the following open-source projects. We are grateful to
 ## 1. PDF.js
 
 **Project**: Mozilla PDF.js  
-**Version**: 5.7.284  
+**Version**: 6.3.289  
 **License**: Apache License 2.0  
 **Copyright**: Copyright 2012 Mozilla Foundation  
 **Repository**: https://github.com/mozilla/pdf.js
@@ -226,7 +226,7 @@ SOFTWARE.
 ### 6.1 Express
 
 **Project**: Express  
-**Version**: 4.22.1  
+**Version**: 5.2.1  
 **License**: MIT License  
 **Copyright**: Copyright (c) 2009-2014 TJ Holowaychuk <tj@vision-media.ca>, Copyright (c) 2013-2014 Roman Shtylman <shtylman+expressjs@gmail.com>, Copyright (c) 2014-2015 Douglas Christopher Wilson <doug@somethingdoug.com>  
 **Repository**: https://github.com/expressjs/express
@@ -264,7 +264,7 @@ Headless Chrome Node.js API. Used for server-side HTML to PDF conversion.
 ### 6.3 ONNX Runtime Node
 
 **Project**: ONNX Runtime Node  
-**Version**: 1.26.0  
+**Version**: Optional test dependency (not installed by default)  
 **License**: MIT License  
 **Copyright**: Copyright (c) Microsoft Corporation  
 **Repository**: https://github.com/microsoft/onnxruntime
@@ -273,9 +273,9 @@ Headless Chrome Node.js API. Used for server-side HTML to PDF conversion.
 ONNX Runtime Node.js binding for running ONNX models on Node.js with native performance.
 
 #### Usage in Trans2Former
-- Server-side OCR processing (when Node.js backend is used)
-- Model inference optimization
-- Optional dependency for enhanced performance
+- Optional real-model OCR integration tests
+- Local model inference diagnostics
+- Not part of the default runtime or desktop bundle
 
 ---
 
@@ -301,7 +301,7 @@ Simple PNG encoder/decoder for Node.js with no native dependencies.
 ### 6.5 c8
 
 **Project**: c8  
-**Version**: 11.0.0  
+**Version**: 12.0.0  
 **License**: ISC License  
 **Copyright**: Copyright (c) 2019, Contributors  
 **Repository**: https://github.com/bcoe/c8
