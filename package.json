@@ -6,6 +6,7 @@
   "main": "src/web-server.js",
   "scripts": {
     "start": "node src/web-server.js",
+    "dev": "node src/web-server.js",
     "web": "node src/web-server.js",
     "vendor:pdfjs": "node scripts/sync-pdfjs-vendor.js",
     "vendor:tesseract": "node scripts/sync-tesseract-vendor.js",

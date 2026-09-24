@@ -114,6 +114,29 @@
   color: #cbd5e1;
 }
 
+/* Primary actions — 暗色顶栏/空状态下保持品牌渐变与对比度 */
+.preview-tool-button.btn-gradient {
+  background: var(--btn-gradient-primary);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.preview-tool-button.btn-gradient:hover:not(:disabled) {
+  background: var(--btn-gradient-primary);
+  filter: brightness(1.08);
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.4);
+}
+
+.preview-tool-button.btn-gradient:focus-visible,
+.preview-empty .btn-gradient:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.preview-empty .btn-gradient {
+  background: var(--btn-gradient-primary);
+}
+
 .preview-stage {
   display: flex;
   align-items: stretch;

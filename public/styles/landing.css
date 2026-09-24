@@ -13,13 +13,13 @@
 }
 
 .landing-section {
-  padding: 80px 24px;
+  padding: calc(var(--space-8) * 2) var(--space-6);
   max-width: 1200px;
   margin: 0 auto;
 }
 
 .landing-section-heading {
-  margin-bottom: 40px;
+  margin-bottom: var(--space-8);
   max-width: 720px;
 }
 
@@ -41,6 +41,7 @@
   font-size: var(--text-3xl);
   line-height: 1.2;
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 
@@ -61,7 +62,8 @@
 /* Hero ----------------------------------------------------------- */
 .landing-hero {
   position: relative;
-  padding: 96px 24px 64px;
+  /* 垂直节奏收紧：96/64 → 72/48，视觉重心上移，首屏留白减少 */
+  padding: calc(var(--space-8) * 2.25) var(--space-6) calc(var(--space-8) * 1.5);
   max-width: 1200px;
   margin: 0 auto;
   overflow: hidden;
@@ -97,7 +99,7 @@
   font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.05em;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
 }
 
 .landing-hero-title {
@@ -122,11 +124,17 @@
 }
 
 .landing-hero-sub {
-  margin: var(--space-6) 0 var(--space-8);
+  margin: var(--space-5) 0 var(--space-6);
   font-size: var(--text-lg);
   line-height: 1.7;
   color: var(--muted-strong);
   max-width: 720px;
+  text-wrap: balance;
+}
+
+/* 副标题按语义分组整体换行，避免「处理阶段禁联网」被拆开留下单字孤行 */
+.landing-hero-sub .keep-together {
+  white-space: nowrap;
 }
 
 .landing-hero-actions {
@@ -134,7 +142,7 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--space-6);
 }
 
 
@@ -180,6 +188,12 @@
   font-size: var(--text-xs);
   font-weight: 500;
   backdrop-filter: blur(8px);
+  transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease;
+}
+
+.landing-hero-badges li:hover {
+  border-color: rgba(15, 118, 110, 0.42);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 /* Features -------------------------------------------------------- */
@@ -205,6 +219,11 @@
   border-color: rgba(15, 118, 110, 0.45);
 }
 
+.landing-feature-card:hover .landing-feature-icon {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.22), rgba(56, 189, 248, 0.26));
+}
+
 .landing-feature-icon {
   display: inline-flex;
   align-items: center;
@@ -215,6 +234,7 @@
   background: linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(56, 189, 248, 0.18));
   color: var(--accent-strong);
   margin-bottom: var(--space-4);
+  transition: transform var(--duration-base) ease, background var(--duration-base) ease;
 }
 
 .landing-feature-card h4 {
@@ -247,12 +267,14 @@
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(148, 163, 184, 0.22);
-  transition: background var(--duration-base) ease, border-color var(--duration-base) ease;
+  transition: background var(--duration-base) ease, border-color var(--duration-base) ease, box-shadow var(--duration-base) ease, transform var(--duration-base) ease;
 }
 
 .landing-format-row:hover {
   background: #ffffff;
   border-color: rgba(15, 118, 110, 0.35);
+  box-shadow: 0 12px 30px -22px rgba(15, 118, 110, 0.4);
+  transform: translateY(-1px);
 }
 
 .landing-format-input {
@@ -325,6 +347,13 @@
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(148, 163, 184, 0.22);
+  transition: transform var(--duration-base) ease, box-shadow var(--duration-base) ease, border-color var(--duration-base) ease;
+}
+
+.landing-workflow-step:hover {
+  transform: translateY(-2px);
+  border-color: rgba(15, 118, 110, 0.35);
+  box-shadow: 0 14px 30px -24px rgba(15, 118, 110, 0.4);
 }
 
 .landing-workflow-index {
@@ -356,12 +385,24 @@
 
 /* CTA ------------------------------------------------------------- */
 .landing-cta {
+  position: relative;
+  overflow: hidden;
   text-align: center;
-  padding: 80px 24px 96px;
+  padding: calc(var(--space-8) * 2) var(--space-6) calc(var(--space-8) * 2.5);
   background: linear-gradient(180deg, rgba(15, 118, 110, 0.05) 0%, rgba(15, 118, 110, 0.12) 100%);
+  border: 1px solid rgba(15, 118, 110, 0.16);
   border-radius: var(--radius-xl);
-  margin: 40px auto 80px;
+  margin: var(--space-8) auto calc(var(--space-8) * 2);
   max-width: 1100px;
+}
+
+/* 顶部品牌渐变条，与主按钮共用同一渐变 token */
+.landing-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--btn-gradient-primary);
 }
 
 .landing-cta h3 {
@@ -380,15 +421,29 @@
 
 
 /* Scroll reveal --------------------------------------------------- */
+/* reveal-armed 门控：只有 JS 成功武装 IntersectionObserver 后，
+   未 reveal 的区块才会被隐藏；fullPage 截图、打印、JS 未执行等
+   场景下所有内容默认可见。 */
 .reveal-on-scroll {
+  transition: opacity var(--duration-slow) ease, transform var(--duration-slow) ease;
+}
+
+.reveal-armed .reveal-on-scroll:not(.is-revealed) {
   opacity: 0;
   transform: translateY(16px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
 }
 
 .reveal-on-scroll.is-revealed {
   opacity: 1;
   transform: translateY(0);
+}
+
+@media print {
+  .reveal-armed .reveal-on-scroll:not(.is-revealed) {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
 }
 
 /* Animations ------------------------------------------------------ */
@@ -409,17 +464,27 @@
     animation: none !important;
     transition: none !important;
   }
+  .reveal-armed .reveal-on-scroll,
   .reveal-on-scroll {
-    opacity: 1;
-    transform: none;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 
 /* Responsive ------------------------------------------------------ */
 @media (max-width: 820px) {
-  .landing-section { padding: 56px 18px; }
-  .landing-hero { padding: 72px 18px 48px; }
+  .landing-section { padding: calc(var(--space-8) * 1.5) var(--space-4); }
+  .landing-hero { padding: calc(var(--space-8) * 1.75) var(--space-4) calc(var(--space-8) * 1.25); }
   .landing-section-heading h3 { font-size: 26px; }
-  .landing-format-row { grid-template-columns: 1fr; gap: 10px; }
-  .landing-cta { margin: 24px 12px 60px; padding: 56px 18px 64px; }
+  .landing-format-row { grid-template-columns: 1fr; gap: var(--space-2); }
+  .landing-cta {
+    margin: var(--space-6) var(--space-3) calc(var(--space-8) * 1.75);
+    padding: calc(var(--space-8) * 1.5) var(--space-4) calc(var(--space-8) * 1.75);
+  }
+}
+
+/* 锚点跳转（如「查看路径矩阵」）时给目标区块留出顶部呼吸空间 */
+.landing-section,
+.landing-hero {
+  scroll-margin-top: var(--space-4);
 }
