@@ -80,13 +80,14 @@ function svgIcon(name) {
 function buildHero(host, stats) {
   const wrapper = document.createElement("section");
   wrapper.id = "hero";
+  // 注意：eyebrow 中的版本号需与 package.json 的 version 保持一致（当前 2.4.0）
   wrapper.className = "landing-hero reveal-on-scroll";
   wrapper.innerHTML = `
     <div class="landing-hero-glow" aria-hidden="true"></div>
     <div class="landing-hero-inner">
-      <span class="landing-hero-eyebrow">v2.3 · local-first 多格式转换工作台</span>
+      <span class="landing-hero-eyebrow">v2.4 · local-first 多格式转换工作台</span>
       <h2 class="landing-hero-title">把文档跨格式转换变成<br/><span class="landing-hero-accent">可验证、可修复、可解释</span>的工程</h2>
-      <p class="landing-hero-sub">${stats.inputFormats} 种输入 × ${stats.outputFormats} 种输出 · ${stats.recommendedRoutes} 条推荐路径 · Repair Engine（2/7 动作已实现）· 处理阶段禁联网</p>
+      <p class="landing-hero-sub"><span class="keep-together">${stats.inputFormats} 种输入 × ${stats.outputFormats} 种输出</span> · <span class="keep-together">${stats.recommendedRoutes} 条推荐路径</span> · <span class="keep-together">Repair Engine（2/7 动作已实现）</span> · <span class="keep-together">处理阶段禁联网</span></p>
       <div class="landing-hero-actions">
         <button type="button" class="primary-button btn-gradient btn-lg" data-landing-cta>立即体验 ${svgIcon("arrow")}</button>
         <a href="#formats" class="landing-cta-ghost">查看路径矩阵</a>
@@ -198,14 +199,18 @@ function buildCta(host) {
 
 function attachRevealObserver(root) {
   const targets = root.querySelectorAll(".reveal-on-scroll");
+  const revealAll = () => targets.forEach((el) => el.classList.add("is-revealed"));
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    targets.forEach((el) => el.classList.add("is-revealed"));
+    revealAll();
     return;
   }
   if (typeof IntersectionObserver === "undefined") {
-    targets.forEach((el) => el.classList.add("is-revealed"));
+    revealAll();
     return;
   }
+  // reveal-armed 门控：只有 observer 真正武装成功后，CSS 才允许隐藏未 reveal 的区块。
+  // 这样 fullPage 截图、打印或 JS 未执行的嵌入环境下，内容始终保持可见。
+  root.classList.add("reveal-armed");
   const observer = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (entry.isIntersecting) {

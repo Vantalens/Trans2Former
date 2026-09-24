@@ -445,6 +445,11 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
   outline: none;
 }
 
+.compact-field select:hover,
+.compact-field input:hover {
+  border-color: var(--border-strong);
+}
+
 .compact-field select:focus,
 .compact-field input:focus,
 #inputContent:focus,
@@ -584,6 +589,12 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
   cursor: not-allowed;
 }
 
+.ghost-button:active:not(:disabled):not(.disabled),
+.mini-button:active:not(:disabled),
+.menu-button:active {
+  transform: translateY(1px);
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.62;
@@ -611,6 +622,14 @@ button:disabled {
   color: var(--muted-strong);
   font-size: 0.8rem;
   font-weight: 800;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.auxiliary-actions > summary:hover,
+.output-settings > summary:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .auxiliary-menu {
@@ -680,6 +699,7 @@ button:disabled {
   min-width: 32px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  font-weight: 700;
   color: var(--muted-strong);
 }
 
@@ -721,7 +741,7 @@ button:disabled {
 }
 
 .progress-track {
-  height: 4px;
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: #e5e9ee;
@@ -731,7 +751,7 @@ button:disabled {
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
   transition: width 0.18s ease;
 }
 
@@ -765,6 +785,12 @@ button:disabled {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-soft);
+}
+
+/* 面板层次：外层工作面板投影略深于内层预览卡片 */
+.source-pane,
+.result-pane {
+  box-shadow: var(--shadow);
 }
 
 .source-pane {
@@ -806,7 +832,7 @@ button:disabled {
   padding: 14px 18px;
   background: var(--surface-raised);
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .drop-zone:hover,
@@ -815,6 +841,12 @@ button:disabled {
   border-color: var(--accent);
   background: var(--accent-soft);
   box-shadow: 0 0 0 3px var(--focus);
+}
+
+.drop-zone:hover .upload-icon,
+.drop-zone:focus-visible .upload-icon,
+.drop-zone.is-active .upload-icon {
+  transform: scale(1.08);
 }
 
 .upload-icon {
@@ -828,6 +860,7 @@ button:disabled {
   color: var(--accent-strong);
   font-size: 1.1rem;
   font-weight: 900;
+  transition: transform 0.15s ease;
 }
 
 .drop-zone strong,
@@ -907,7 +940,9 @@ button:disabled {
 }
 
 .queue-empty {
+  padding: 14px 12px;
   color: var(--muted);
+  text-align: center;
 }
 
 .queue-item {
@@ -998,6 +1033,11 @@ button:disabled {
   line-height: 1.72;
 }
 
+#inputContent::placeholder,
+#outputEditor::placeholder {
+  color: #9aa7b4;
+}
+
 #inputContent.is-binary-input {
   min-height: 118px;
   border-bottom: 1px solid var(--border);
@@ -1063,6 +1103,7 @@ button:disabled {
   color: var(--muted-strong);
   font-size: 0.8rem;
   font-weight: 800;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
 
 .output-settings-panel {
@@ -1109,6 +1150,7 @@ button:disabled {
 }
 
 .tab-button {
+  position: relative;
   min-width: 76px;
   min-height: 44px;
   border: 1px solid transparent;
@@ -1128,11 +1170,27 @@ button:disabled {
   background: rgba(255, 255, 255, 0.6);
 }
 
+.tab-button:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .tab-button.is-active {
   border-color: var(--border);
   background: #ffffff;
   color: var(--accent-strong);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.tab-button.is-active::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 .toggle-label {
@@ -1229,10 +1287,16 @@ button:disabled {
 
 .preview-markdown:empty::before,
 .text-output-preview:empty::before {
-  display: block;
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
   color: #94a3b8;
   font-family: var(--font-ui);
   font-size: 0.88rem;
+  text-align: center;
 }
 
 .preview-markdown:empty::before {
