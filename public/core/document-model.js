@@ -1,3 +1,5 @@
+import { inlinesToPlainText } from "./models/semantic-inlines.js";
+
 export function createDocumentModel({
   title = "document",
   sourceFormat = "",
@@ -99,7 +101,9 @@ export function getPlainText(model) {
   return model.blocks
     .map((block) => {
       if (block.type === "heading" || block.type === "paragraph" || block.type === "quote") {
-        return block.text;
+        return Array.isArray(block.inlines) && block.inlines.length > 0
+          ? inlinesToPlainText(block.inlines)
+          : block.text;
       }
       if (block.type === "list") {
         return block.items.map((item, index) => {
@@ -107,7 +111,11 @@ export function getPlainText(model) {
           const depth = Math.max(0, Number(block.itemMeta?.[index]?.depth) || 0);
           const indent = "  ".repeat(depth);
           const marker = ordered && depth === 0 ? `${index + 1}.` : "-";
-          return `${indent}${marker} ${item}`;
+          const itemInlines = block.itemInlines?.[index];
+          const text = Array.isArray(itemInlines) && itemInlines.length > 0
+            ? inlinesToPlainText(itemInlines)
+            : item;
+          return `${indent}${marker} ${text}`;
         }).join("\n");
       }
       if (block.type === "code") {

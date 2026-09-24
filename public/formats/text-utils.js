@@ -53,7 +53,11 @@ export function stripMarkdownInlineSyntax(value) {
     .replace(/!\[([^\]]*)\]\([^\)]*\)/g, "$1")
     .replace(/\[([^\]]+)\]\([^\)]*\)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
-    .replace(/(\*\*|__)(.*?)\1/g, "$2")
-    .replace(/(\*|_)(.*?)\1/g, "$2")
+    .replace(/\*\*(\S(?:.*?\S)?)\*\*/g, "$1")
+    // Underscore emphasis requires non-word boundaries so identifiers such as
+    // field__id__legacy and snake_case are not treated as formatting delimiters.
+    .replace(/(^|[^\w])__(\S(?:.*?\S)?)__(?=$|[^\w])/g, "$1$2")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/(^|[^\w])_(\S(?:.*?\S)?)_(?=$|[^\w])/g, "$1$2")
     .replace(/~~(.*?)~~/g, "$1");
 }

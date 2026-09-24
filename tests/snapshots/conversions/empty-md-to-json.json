@@ -24,6 +24,7 @@
       "tableFidelity": "not-applicable",
       "assetFidelity": "not-applicable",
       "textFidelity": "high",
+      "layoutFidelity": "not-applicable",
       "warningCount": 0,
       "warningsBySeverity": {},
       "downgradeCount": 0

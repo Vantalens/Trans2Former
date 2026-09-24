@@ -119,6 +119,16 @@ export function ensureDocumentAudit(model, {
   const cursor = { offset: 0 };
   const sourceContext = createSourceContext(content);
   const metadataWarnings = Array.isArray(model.metadata?.warnings) ? model.metadata.warnings.map(normalizeWarning) : [];
+  const layoutSourceFormat = reader || model.sourceFormat || "";
+  const sourceHasPageLayout = ["pdf", "docx", "pptx", "ofd", "png"].includes(layoutSourceFormat);
+  if (sourceHasPageLayout && targetFormat && !["docx", "pdf", "html"].includes(targetFormat)) {
+    metadataWarnings.push({
+      severity: "lossy",
+      code: "LAYOUT_NOT_SUPPORTED_BY_TARGET",
+      message: `${targetFormat} cannot represent the source document's page layout; only text and supported structure are exported.`,
+      details: { sourceFormat: layoutSourceFormat, targetFormat },
+    });
+  }
   const blocks = (model.blocks || []).map((block, index) => {
     const blockWarnings = Array.isArray(block.warnings) ? block.warnings.map(normalizeWarning) : [];
     const identityPayload = JSON.stringify({
@@ -144,6 +154,11 @@ export function ensureDocumentAudit(model, {
   const blockWarnings = blocks.flatMap((block) => block.warnings || []);
   const warnings = [...metadataWarnings, ...blockWarnings]
     .filter((warning, index, all) => all.findIndex((candidate) => candidate.code === warning.code && candidate.message === warning.message) === index);
+  const carriesPageLayout = sourceHasPageLayout;
+  const hasLayoutLoss = warnings.some((warning) =>
+    ["PDF_LAYOUT_HEURISTIC", "DOCX_TABLE_MERGE_APPROXIMATED", "DOCX_NESTED_TABLE_FLATTENED", "PDF_DOCX_LAYOUT_APPROXIMATED", "DOCX_PDF_LAYOUT_APPROXIMATED"].includes(warning.code)
+    || (warning.severity === "lossy" && /layout|position|alignment|column|分页|版面|定位|对齐|列宽|合并单元格/i.test(warning.message))
+  );
 
   const assets = (model.assets || []).map((asset) => ({
     ...asset,
@@ -173,6 +188,7 @@ export function ensureDocumentAudit(model, {
       // 修复 issue #122: 添加 textFidelity 字段
       // 基于 warnings 中的文本相关降级判断文本保真度
       textFidelity: warnings.some((w) => w.severity === "lossy" && /text|content|字符|编码/.test(w.message)) ? "medium" : "high",
+      layoutFidelity: !carriesPageLayout ? "not-applicable" : hasLayoutLoss ? "low" : "medium",
       warningCount: warnings.length,
       warningsBySeverity: warningSummary(warnings),
       downgradeCount: warnings.filter((warning) => ["lossy", "unsupported"].includes(warning.severity)).length,

@@ -21,6 +21,7 @@ import {
 } from "../core/models/semantic-inlines.js";
 import { escapeHtml } from "./text-utils.js";
 import { modelToBodyHtml } from "./markdown.js";
+import { createWarning } from "../core/warnings.js";
 
 const VOID_TAGS = new Set(["br", "hr", "img", "input", "meta", "link", "source", "col", "area", "embed", "param", "wbr"]);
 const BLOCK_TAGS = new Set([
@@ -536,6 +537,10 @@ ${formattedBody}
 }
 
 export function writeHtml({ model, title = model.title }) {
+  const warnings = [];
+  if (model.sourceFormat === "docx" || model.sourceFormat === "pdf" || model.metadata?.ooxml?.pageLayout) {
+    warnings.push(createWarning("lossy", "HTML_LAYOUT_APPROXIMATED", "Paragraph alignment/indent and table widths are represented in HTML where available; custom Word tab stops, exact fonts, page geometry, and pagination are not fully preserved."));
+  }
   const assetMap = new Map((model.assets || []).map((asset) => [asset.id, asset]));
   const bodyHtml = modelToBodyHtml(model).replace(
     /<figure data-asset-id="([^"]+)"><figcaption>([\s\S]*?)<\/figcaption><\/figure>/g,
@@ -553,5 +558,6 @@ export function writeHtml({ model, title = model.title }) {
     format: "html",
     data: renderHtmlDocument({ bodyHtml, title }),
     mime: "text/html;charset=utf-8",
+    warnings: warnings.length > 0 ? warnings : undefined,
   };
 }

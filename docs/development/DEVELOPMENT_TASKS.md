@@ -1,6 +1,6 @@
 # Trans2Former Development Tasks
 
-最后更新：2026-06-13
+最后更新：2026-09-24
 
 维护规则：
 
@@ -88,6 +88,8 @@
 ## 最近验收修复
 
 > 仅保留最近 4 周内的记录；更早的归档到 [docs/archive/DEVELOPMENT_HISTORY.md](docs/archive/DEVELOPMENT_HISTORY.md)，逐次发布的细节走 [CHANGELOG.md](CHANGELOG.md)。
+
+- **2026-09-24 (Issue #214 英文文本与表单布局回归)**：TXT 读写保留段内单换行、行首缩进和字段下划线，并将 Markdown 下划线语法识别限制为非单词边界；PDF 仅按真实水平坐标补英文片段空格，检测连续三行以上的双栏内容并按左栏后右栏输出；DOCX 保留页面几何、段落格式/自定义制表位、表格列宽和 `gridSpan` / `vMerge`，DOCX→PDF/HTML 投影保留可表达的页边距、对齐、缩进和列宽；QualityReport 增加 `layoutFidelity`，不可表达的布局发出 lossy warning。增加 `scripts/layout-offset-regression-test.js`，覆盖 TXT、英文 PDF 单栏/双栏、DOCX 表单 DOCX/PDF/HTML 往返。当前无用户脱敏原件，版面回归使用程序生成的合成文档；多节、多栏跨页、旧式 `hMerge`、浮动对象及完整字体主题仍会警告降级。
 
 - **2026-05-30 (OCR 识别质量展示到检验报告 UI + modelReview 保留修复)**：把已计算但一直不可见的 OCR 识别质量呈现给用户。**修复潜伏 bug**：`format-registry.js` `_runRepairCycle` 用 Repair Engine 的 `modelReview`（`engine:"rule-based"`）覆盖了上游 OCR stage 写的 `modelReview`，导致 `ocr`/`ocrQuality` 子对象被丢弃、UI 取不到——改为合并保留 `priorReview.ocr` / `priorReview.ocrQuality`。`public/index.html` 检验报告面板加「OCR 识别质量」行（`#verificationOcrRecognitionRow`，默认 hidden，仅本次跑了 OCR 才显示）。`public/app.js` `renderVerificationReport` 读 `quality.modelReview.ocr` + `.ocrQuality` 渲染：引擎 / 行数 / 置信度 / 质量 grade / 低置信行 / 纠偏角 / 方向校正数 / 已去噪；grade 驱动 ok·skip·drift 配色。`scripts/browser-smoke-test.js` 断言 `#verificationOcrRecognition` 存在。`scripts/ocr-baseline-test.js` 加回归断言（`convertContentAsync` 默认 repair 路径下 `result.quality.modelReview.ocr` 必须存活）。`npm test` 28 个脚本全量通过。
 - **2026-05-30 (OCR 版面结构识别增强)**：落实「对文件内部文本格式识别的增强」——把 OCR 识别的多行（带 bbox）按版面归并成标题 + 段落，而非平铺成一个大段。新增 `public/core/ocr/ocr-structure.js`：`deriveOcrStructure(lines, opts)`（按阅读顺序 y→x 排序；中位行高 → 相对字号判定标题，行高 ≥ 中位 ×1.35 为 heading、按比例给 level 1-3；行间垂直间距 > 中位 ×0.7 分段；同段相邻行 CJK 直连 / 拉丁加空格；无 bbox 几何回退单段保持旧行为）+ `blocksFromOcrResult(result)`（按页拼接，空则回退 fullText）。`png-ocr.js` `enhanceWithOCR` 把 `paragraphsFromOCR`（旧：整页 16 行拼成 1 段）换成 `blocksFromOcrResult`（结构化标题+段落），删旧函数 + 未用 import。**真机验证**：产品标签 16 行 → 4 个结构块（「纯臻营养护发素」识别为 heading，正文按间距归并为段落）。`browser-transformer` export `deriveOcrStructure`/`blocksFromOcrResult`。新增 `scripts/ocr-structure-test.js`（7 组：字号判标题、间距分段、CJK/拉丁拼接、阅读顺序排序、无几何回退、blocksFromOcrResult 翻页、空白行忽略）接入 `npm test`（第 28 个）。`npm test` 28 个脚本全量通过。
