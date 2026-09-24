@@ -1,12 +1,12 @@
-// 高保真 PDF 输出：直接消费 FixedLayoutModel，保留原始坐标、字体、尺寸。
+// 固定布局 PDF 输出：直接消费 FixedLayoutModel，保留文本起点和可用的宽度信息。
 // 与 pdf-output.js 的程序化输出不同，这里不做重新排版，而是按 textRun.bbox 精确
-// 定位每个文本片段，保留原始视觉布局。
+// 定位每个文本片段；字体会替换为 STSong-Light，图像等元素仍可能丢失。
 //
 // 适用场景：PDF → PDF round-trip、OFD → PDF 高保真转换。
 // issue #105/#106/#107/#108/#111: 统一 CID 字体、annotations 大小写、降级/字替 warning、rotation。
 
 import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
-import { utf16BeHex, pdfUnicodeString, buildCidFontObjects, buildToUnicodeCMap, sanitizeGb1Text } from "./pdf-cid-font.js";
+import { utf16BeHex, pdfUnicodeString, buildCidFontObjects, buildToUnicodeCMap, charWidthFactor, sanitizeGb1Text } from "./pdf-cid-font.js";
 import { createWarning } from "../core/warnings.js";
 
 function escapePdfText(value) {
@@ -26,7 +26,7 @@ function buildHighFidelityPdfBytes(fixedLayout, title) {
 
   // issue #106: 检查未渲染元素
   for (const page of pages) {
-    if (page.images && page.images.length > 0) {
+    if ((page.images && page.images.length > 0) || (page.assets && page.assets.length > 0)) {
       warnings.push(createWarning("lossy", "PDF_HF_IMAGES_DROPPED", "High-fidelity PDF output does not embed images; they were omitted."));
       break;
     }
@@ -90,8 +90,17 @@ function buildHighFidelityPdfBytes(fixedLayout, title) {
       const fontSize = run.fontSize || 12;
       const x = run.bbox.x || 0;
       const y = run.bbox.y || 0;
+      // 替换字体的字宽与来源 PDF 不同；按来源 bbox 宽度缩放整段文字，
+      // 防止相邻英文表单字段在写出时逐段向右漂移。
+      const nominalWidth = [...sanitized].reduce((width, char) =>
+        width + fontSize * charWidthFactor(char.codePointAt(0)), 0);
+      const sourceWidth = Number(run.bbox.w);
+      const horizontalScale = nominalWidth > 0 && Number.isFinite(sourceWidth) && sourceWidth > 0
+        ? Math.max(1, Math.min(1000, sourceWidth / nominalWidth * 100))
+        : 100;
 
       contentLines.push(`/F1 ${fontSize} Tf`);
+      contentLines.push(`${horizontalScale.toFixed(3)} Tz`);
       contentLines.push(`1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm`);
       contentLines.push(`<${utf16BeHex(sanitized)}> Tj`);
     }
@@ -165,6 +174,14 @@ export function writePdfHighFidelity({ model, title = model.title }) {
   }
 
   const { bytes, warnings } = buildHighFidelityPdfBytes(model.fixedLayout, title);
+  if ((model.metadata?.pdf?.pagesWithoutText || []).length > 0) {
+    warnings.push(createWarning(
+      "lossy",
+      "PDF_HF_PAGE_VISUALS_UNVERIFIED",
+      "Textless source pages may contain images or graphics that fixed-layout PDF output cannot reproduce; check the original PDF.",
+      { pages: model.metadata.pdf.pagesWithoutText },
+    ));
+  }
   return {
     type: "binary",
     format: "pdf",

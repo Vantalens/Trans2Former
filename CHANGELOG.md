@@ -7,6 +7,14 @@
 ### 修复
 
 - **Issue #214 跨格式文本与字段偏移**：TXT 保留单换行、缩进和普通下划线字段名；PDF 只在实测坐标支持时补空格，并按重复双栏分离阅读顺序；DOCX 往返保留页面尺寸/页边距、段落对齐/缩进/制表位、表格列宽和 `gridSpan` / `vMerge`。PDF、HTML、DOCX writer 对尚未支持的版面特性发出降级 warning，QualityReport 增加 `layoutFidelity`。新增英文表单布局回归测试。
+- **Issue #216 PDF 提取链可靠性**：PDF.js 提取完成后改为销毁 loading task，清理失败不再丢弃已提取页面；Node 环境改用原生文件路径加载 CMap 与标准字体，修复 `file:` URL 导致提取为空；混合文档保留无文字页页号并发出 `PDF_PAGES_WITHOUT_TEXT`。
+- **Issue #216 空正文不再冒充成功结果**：PDF 经 OCR 仍无可编辑正文时返回 `PDF_TEXT_UNAVAILABLE` / `PDF_ENCRYPTED` 结构化错误，不再把占位提示写入输出正文；工作台对未确认页号显示警告状态而非无条件成功。
+- **Issue #216 扫描件误判与按页 OCR**：稀疏文本英文表单标记为 `sparse-text-pdf`，不再误判为扫描件重复 OCR；扫描 PDF 默认处理全部页面（可用 `options.ocr.maxScanPages` 截断）；混合 PDF 仅对无文字页执行 OCR 并按原页号插回正文，OCR 坐标从栅格像素映射回 PDF 点位。
+- **Issue #216 PDF → PDF 保留原件**：同格式转换经模型路由审计后直接复制原 PDF 字节（`PDF_ORIGINAL_PRESERVED`），保留原字体、图像与版面，不新增可检索文字层；修复 PDF.js 转移输入缓冲区导致的原始字节丢失。
+- **Issue #216 PDF 预览链路**：输入与输出 PDF 均改由本地 PDF.js 逐页渲染预览，取代被 Web/Tauri CSP（`object-src 'none'`）拦截的 `<object>` 备用预览；生成文件的 Blob 下载入口独立保留。
+- **Issue #216 版面保真补强**：PDF 表格字段按列坐标定位，不再用空格补齐列；DOCX 首行/续行缩进与制表位（含对齐方式）映射到 PDF 输出；固定布局替代字体按来源文本框宽度缩放；DOCX 单元格保留连续空格、制表符与段落边界。
+- **Issue #216 质量报告诚实性**：未实际运行输出回读时 `textFidelity` 标为 `unverified`，不再由 warning 数量推断高保真；未确认页号进入 `qualityReport.unresolvedPdfPages` 并随输出返回。
+- **Issue #216 DOCX 多节页面设置与旧式横向合并保留**：段落级 `w:sectPr`（节结束标记）解析为 `paragraph` / `heading` 块的 `sectionBreak.pageLayout` 并在写出时还原，body 末尾节仍走 `metadata.ooxml.pageLayout`，多节文档往返后各节页面几何均保留；含分栏、页眉页脚引用、首页不同等暂不支持的节属性时发出 `DOCX_SECTION_PROPS_PARTIAL`。旧式 `w:hMerge`（restart + 连续 continue）映射为 `cellSpans` 的 `columnSpan`，能完整映射时不再发 `DOCX_TABLE_MERGE_APPROXIMATED`；与 `gridSpan` 混用或结构无法干净映射时仍发出该警告。新增多节往返、hMerge 往返与混用冲突回归测试。
 
 ## [2.4.0] - 2026-07-17
 

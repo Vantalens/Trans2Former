@@ -232,7 +232,7 @@
                   <pre id="errorDebugText"></pre>
                 </details>
               </section>
-              <iframe id="pdfPreview" title="PDF 预览" class="preview-frame pdf-frame"></iframe>
+              <div id="pdfPreview" role="region" aria-label="PDF 预览" class="preview-frame pdf-frame"></div>
               <div id="textOutputPreview" class="preview-frame text-output-preview"></div>
               <details id="verificationReportPanel" class="verification-report" hidden>
                 <summary>转换检验报告 <span id="verificationReportBadge" class="verification-badge"></span></summary>
@@ -245,6 +245,7 @@
                   <div class="verification-row" data-layer="ocr-recognition" id="verificationOcrRecognitionRow" hidden><dt>OCR 识别质量</dt><dd id="verificationOcrRecognition">-</dd></div>
                   <div class="verification-row" data-layer="warnings"><dt>warnings</dt><dd id="verificationWarnings">-</dd></div>
                 </dl>
+                <ul id="verificationWarningDetails" class="verification-warning-details" hidden></ul>
               </details>
             </article>
           </div>

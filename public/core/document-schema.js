@@ -104,6 +104,21 @@ export function validateDocumentModel(model) {
           });
         }
       }
+      if (["paragraph", "heading"].includes(block.type) && block.sectionBreak !== undefined) {
+        const sectionBreak = block.sectionBreak;
+        if (!isObject(sectionBreak) || !isObject(sectionBreak.pageLayout)) {
+          errors.push(`blocks[${index}].sectionBreak must be an object with a pageLayout object`);
+        } else {
+          const layout = sectionBreak.pageLayout;
+          for (const key of ["width", "height"]) {
+            if (layout[key] !== undefined && (!Number.isSafeInteger(layout[key]) || layout[key] <= 0)) errors.push(`blocks[${index}].sectionBreak.pageLayout.${key} must be a positive integer`);
+          }
+          for (const key of ["marginLeft", "marginRight", "marginTop", "marginBottom", "headerDistance", "footerDistance", "gutter"]) {
+            if (layout[key] !== undefined && (!Number.isSafeInteger(layout[key]) || layout[key] < 0)) errors.push(`blocks[${index}].sectionBreak.pageLayout.${key} must be a non-negative integer`);
+          }
+          if (layout.orientation !== undefined && !["portrait", "landscape"].includes(layout.orientation)) errors.push(`blocks[${index}].sectionBreak.pageLayout.orientation is invalid`);
+        }
+      }
       if (block.type === "list") {
         if (typeof block.ordered !== "boolean") errors.push(`blocks[${index}].ordered must be a boolean`);
         if (!Array.isArray(block.items) || block.items.some((item) => typeof item !== "string")) errors.push(`blocks[${index}].items must be string[]`);

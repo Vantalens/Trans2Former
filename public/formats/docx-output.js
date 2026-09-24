@@ -143,17 +143,19 @@ function paragraphFormatProperties(format) {
   return `${tabProperties}${spacingProperties}${indentProperties}${alignmentProperties}`;
 }
 
-function mergeParagraphProperties(base, format) {
+// ECMA-376 中 sectPr 是 pPr 内靠后的子元素：节页面设置追加在段落属性末尾。
+function mergeParagraphProperties(base, format, sectionLayout) {
   const extra = paragraphFormatProperties(format);
-  if (!extra) return base || "";
+  const sectionXml = sectionLayout ? sectionPropertiesXml(sectionLayout) : "";
+  if (!extra && !sectionXml) return base || "";
   const inner = String(base || "").replace(/^\s*<w:pPr\b[^>]*>/, "").replace(/<\/w:pPr>\s*$/, "");
-  return `<w:pPr>${inner}${extra}</w:pPr>`;
+  return `<w:pPr>${inner}${extra}${sectionXml}</w:pPr>`;
 }
 
 function paragraphBlock(block, hyperlinks, opts = {}) {
   return paragraphFromRuns(runsFromBlock(block, hyperlinks), {
     ...opts,
-    pPr: mergeParagraphProperties(opts.pPr, block.paragraphFormat),
+    pPr: mergeParagraphProperties(opts.pPr, block.paragraphFormat, block.sectionBreak?.pageLayout),
   });
 }
 
@@ -302,17 +304,8 @@ ${allRels}
 </Relationships>`;
 }
 
-export function writeDocx({ model, title = model.title }) {
-  const warnings = [];
-  if (model.sourceFormat === "pdf") {
-    warnings.push(createWarning("lossy", "DOCX_PDF_LAYOUT_APPROXIMATED", "PDF coordinates and visual styling were converted to editable DOCX flow; exact page positions, fonts, and pagination are not preserved."));
-  }
-  if (model.sourceFormat === "docx" || model.metadata?.ooxml?.pageLayout) {
-    warnings.push(createWarning("lossy", "DOCX_LAYOUT_PARTIAL", "Page geometry, paragraph alignment/indent/tabs, and supported table widths/merges are preserved; themes, exact fonts, borders, cell padding, floating objects, and pagination are regenerated or omitted."));
-  }
-  const hyperlinks = createHyperlinkRegistry();
-  const bodyXml = model.blocks.map((block) => blockToWordXml(block, hyperlinks)).join("\n");
-  const pageLayout = model.metadata?.ooxml?.pageLayout || {};
+// 单个节的 sectPr 构造：body 末尾节与段落级 sectionBreak 共用同一份页面设置序列化。
+function sectionPropertiesXml(pageLayout = {}) {
   const dimension = (value, fallback) => Number.isSafeInteger(value) && value > 0 ? value : fallback;
   const margin = (value, fallback) => Number.isSafeInteger(value) && value >= 0 ? value : fallback;
   const pageWidth = dimension(pageLayout.width, 11906);
@@ -326,11 +319,24 @@ export function writeDocx({ model, title = model.title }) {
     ["header", "headerDistance", 720], ["footer", "footerDistance", 720],
     ["gutter", "gutter", 0],
   ].map(([attribute, key, fallback]) => `w:${attribute}="${margin(pageLayout[key], fallback)}"`).join(" ");
+  return `<w:sectPr><w:pgSz w:w="${pageWidth}" w:h="${pageHeight}" w:orient="${orientation}"/><w:pgMar ${pageMargins}/></w:sectPr>`;
+}
+
+export function writeDocx({ model, title = model.title }) {
+  const warnings = [];
+  if (model.sourceFormat === "pdf") {
+    warnings.push(createWarning("lossy", "DOCX_PDF_LAYOUT_APPROXIMATED", "PDF coordinates and visual styling were converted to editable DOCX flow; exact page positions, fonts, and pagination are not preserved."));
+  }
+  if (model.sourceFormat === "docx" || model.metadata?.ooxml?.pageLayout) {
+    warnings.push(createWarning("lossy", "DOCX_LAYOUT_PARTIAL", "Page geometry, paragraph alignment/indent/tabs, and supported table widths/merges are preserved; themes, exact fonts, borders, cell padding, floating objects, and pagination are regenerated or omitted."));
+  }
+  const hyperlinks = createHyperlinkRegistry();
+  const bodyXml = model.blocks.map((block) => blockToWordXml(block, hyperlinks)).join("\n");
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="${NS}/wordprocessingml/2006/main" xmlns:r="${REL_NS}">
   <w:body>
 ${bodyXml}
-    <w:sectPr><w:pgSz w:w="${pageWidth}" w:h="${pageHeight}" w:orient="${orientation}"/><w:pgMar ${pageMargins}/></w:sectPr>
+    ${sectionPropertiesXml(model.metadata?.ooxml?.pageLayout || {})}
   </w:body>
 </w:document>`;
   const zipBytes = writeStoredZip([

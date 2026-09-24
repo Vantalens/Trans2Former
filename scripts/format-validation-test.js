@@ -11,6 +11,7 @@ import { createDocumentModel, createHeading, createParagraph } from "../public/c
 import { readZipEntries } from "../public/core/zip-container.js";
 import { readCsv } from "../public/formats/csv.js";
 import { writePptx } from "../public/formats/pptx.js";
+import { expandPdfContentForTextExtraction } from "../public/formats/pdf.js";
 
 // 测试用例：多种格式的标准示例
 const testCases = {
@@ -125,6 +126,9 @@ const sampleInputs = {
   pdf: createBinarySample("pdf"),
   doc: testCases.txt,
 };
+// The synchronous converter consumes the browser/Node PDF.js extraction payload.
+// Exercise PDF routes with the same pre-expanded input used by the workbench.
+sampleInputs.pdf = await expandPdfContentForTextExtraction(sampleInputs.pdf);
 
 // 所有支持的格式
 const formats = {

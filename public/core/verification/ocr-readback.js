@@ -129,10 +129,24 @@ export async function runOcrReadbackLayer({
     : DEFAULT_OCR_READBACK_THRESHOLD;
   const language = normalizeOCRLanguage(ctx?.options?.ocr?.language);
 
-  let recognized;
+  let recognizedText = "";
+  let pageCount = 0;
+  const confidences = [];
   try {
-    const raster = await rasterizer.rasterize({ content: output?.data, pageIndex: 0 });
-    recognized = await resolvedEngine.recognize({ image: raster.dataUrl, options: { language } });
+    pageCount = await rasterizer.countPages({ content: output?.data });
+    const maxPages = Number.isInteger(ctx?.options?.verification?.maxReadbackPages)
+      ? ctx.options.verification.maxReadbackPages : 20;
+    if (!Number.isInteger(pageCount) || pageCount < 1) return skip("output-page-count-unavailable");
+    if (pageCount > maxPages) return skip(`output-pages-exceed-readback-limit:${pageCount}/${maxPages}`);
+    const pageTexts = [];
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      if (ctx?.options?.signal?.aborted) return skip("cancelled");
+      const raster = await rasterizer.rasterize({ content: output?.data, pageIndex });
+      const recognized = await resolvedEngine.recognize({ image: raster.dataUrl, options: { language } });
+      pageTexts.push(recognizedTextOf(recognized));
+      if (typeof recognized?.averageConfidence === "number") confidences.push(recognized.averageConfidence);
+    }
+    recognizedText = pageTexts.join("\n");
   } catch (error) {
     const cause = error?.code || error?.message || "unknown";
     if (cause === "OCR_RASTERIZER_UNAVAILABLE") {
@@ -141,9 +155,12 @@ export async function runOcrReadbackLayer({
     return skip(`readback-failed:${cause}`, [
       createWarning("info", OCR_READBACK_FAILED, `OCR 回读失败：${cause}.`, { from: ctx?.from, to: ctx?.to, cause }),
     ]);
+  } finally {
+    if (typeof rasterizer.dispose === "function") {
+      try { await rasterizer.dispose(); } catch { /* preserve readback result */ }
+    }
   }
 
-  const recognizedText = recognizedTextOf(recognized);
   const similarity = compareText(originalText, recognizedText);
   const passed = similarity.f1 >= threshold;
   const ocrReadback = {
@@ -155,8 +172,10 @@ export async function runOcrReadbackLayer({
     engineId: resolvedEngine.id,
     originalLength: similarity.originalLength,
     recognizedLength: similarity.recognizedLength,
-    averageConfidence: typeof recognized?.averageConfidence === "number" ? recognized.averageConfidence : null,
-    pageIndex: 0,
+    averageConfidence: confidences.length > 0
+      ? confidences.reduce((sum, confidence) => sum + confidence, 0) / confidences.length : null,
+    pageCount,
+    checkedPages: pageCount,
   };
   const warnings = passed
     ? []

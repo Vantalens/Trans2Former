@@ -29,7 +29,9 @@ function decodePdfContent(content) {
       const isBase64 = meta.includes(";base64");
       const payload = content.slice(commaIdx + 1);
       if (isBase64) {
-        const decoded = globalThis.atob(payload);
+        // Expanded PDF inputs can carry an extraction payload after the data URL.
+        const encoded = payload.match(/^[A-Za-z0-9+/=]+/)?.[0] || "";
+        const decoded = globalThis.atob(encoded);
         const bytes = new Uint8Array(decoded.length);
         for (let i = 0; i < decoded.length; i += 1) bytes[i] = decoded.charCodeAt(i);
         return bytes;
@@ -53,6 +55,9 @@ async function loadPdfJs(vendorUrl = VENDOR_PDFJS) {
     if (typeof mod?.getDocument !== "function") {
       throw new Error("vendor pdfjs missing getDocument");
     }
+    if (mod.GlobalWorkerOptions && !mod.GlobalWorkerOptions.workerSrc) {
+      mod.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs/pdf.worker.min.mjs";
+    }
     return mod;
   } catch (error) {
     throw new ConversionError(`PDF.js vendor 加载失败：${error?.message || error}`, {
@@ -65,10 +70,18 @@ async function loadPdfJs(vendorUrl = VENDOR_PDFJS) {
 
 async function openDocument(pdfjs, content) {
   const data = decodePdfContent(content);
-  const loadingTask = pdfjs.getDocument({ data, isEvalSupported: false, disableFontFace: true });
+  const loadingTask = pdfjs.getDocument({
+    data,
+    isEvalSupported: false,
+    disableFontFace: true,
+    cMapUrl: "/vendor/pdfjs/cmaps/",
+    cMapPacked: true,
+    standardFontDataUrl: "/vendor/pdfjs/standard_fonts/",
+  });
   try {
-    return await loadingTask.promise;
+    return { document: await loadingTask.promise, loadingTask };
   } catch (error) {
+    try { await loadingTask.destroy(); } catch { /* preserve the parsing error */ }
     throw new ConversionError(`PDF document 解析失败：${error?.message || error}`, {
       category: "convert",
       code: "OCR_RASTERIZER_FAILED",
@@ -86,6 +99,7 @@ export function createBrowserPdfPageRasterizer({ vendorUrl = VENDOR_PDFJS } = {}
 
   // PDF document 缓存：按 content 的弱标识缓存已打开的 document，避免多页扫描时重复解析
   let cachedDocument = null;
+  let cachedLoadingTask = null;
   let cachedContentRef = null;
 
   async function getCachedDocument(pdfjs, content) {
@@ -94,15 +108,16 @@ export function createBrowserPdfPageRasterizer({ vendorUrl = VENDOR_PDFJS } = {}
       return cachedDocument;
     }
     // 清理旧的 document
-    if (cachedDocument && typeof cachedDocument.destroy === "function") {
-      try {
-        cachedDocument.destroy();
-      } catch (error) {
-        // ignore cleanup errors
-      }
+    if (cachedLoadingTask) {
+      try { await cachedLoadingTask.destroy(); } catch { /* ignore cleanup errors */ }
     }
+    cachedDocument = null;
+    cachedLoadingTask = null;
+    cachedContentRef = null;
     // 打开新 document 并缓存
-    cachedDocument = await openDocument(pdfjs, content);
+    const opened = await openDocument(pdfjs, content);
+    cachedDocument = opened.document;
+    cachedLoadingTask = opened.loadingTask;
     cachedContentRef = content;
     return cachedDocument;
   }
@@ -151,15 +166,12 @@ export function createBrowserPdfPageRasterizer({ vendorUrl = VENDOR_PDFJS } = {}
       // 注意：不在这里 destroy document，让它保持缓存供后续页面使用
     },
     // 显式清理接口，供外部在完成多页扫描后调用
-    dispose() {
-      if (cachedDocument && typeof cachedDocument.destroy === "function") {
-        try {
-          cachedDocument.destroy();
-        } catch (error) {
-          // ignore cleanup errors
-        }
+    async dispose() {
+      if (cachedLoadingTask) {
+        try { await cachedLoadingTask.destroy(); } catch { /* ignore cleanup errors */ }
       }
       cachedDocument = null;
+      cachedLoadingTask = null;
       cachedContentRef = null;
     },
   });

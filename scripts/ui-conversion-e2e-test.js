@@ -5,6 +5,7 @@ import path from "node:path";
 import puppeteer from "puppeteer";
 
 import { startWebServer } from "../src/web-server.js";
+import { writePdfHighFidelity } from "../public/formats/pdf-output-high-fidelity.js";
 
 const PORT_START = 49233;
 const PORT_END = 49313;
@@ -32,9 +33,7 @@ const { server, port } = await startWebServer(await findPort());
 const baseUrl = `http://127.0.0.1:${port}`;
 const browser = await puppeteer.launch({
   headless: "new",
-  ...(process.env.CI && process.platform === "linux"
-    ? { args: ["--no-sandbox", "--disable-setuid-sandbox"] }
-    : {}),
+  args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
 });
 
 try {
@@ -128,6 +127,64 @@ try {
   assert.equal(uploadResult.downloadHref.startsWith("blob:"), true, "uploaded-file download link should point to a Blob URL");
   assert.equal(uploadResult.downloadName, "chinese.html", "uploaded-file download filename should use the source base name and target extension");
   assert.equal(uploadResult.errorPanelHidden, true, "UI error panel should remain hidden after uploaded-file conversion");
+
+  const mixedPdf = writePdfHighFidelity({
+    model: {
+      title: "mixed-ui",
+      fixedLayout: { pages: [
+        { size: { width: 612, height: 792 }, textRuns: [
+          { text: "FIRST", bbox: { x: 100, y: 700, w: 100, h: 12 }, fontSize: 12 },
+        ] },
+        { size: { width: 612, height: 792 }, textRuns: [] },
+      ] },
+    },
+  });
+  await page.evaluate((base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const file = new File([bytes], "mixed-ui.pdf", { type: "application/pdf" });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const input = document.getElementById("fileInput");
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, mixedPdf.data.split(",")[1]);
+  await page.waitForFunction(() => document.getElementById("fromFormatSelect")?.value === "pdf", { timeout: 10000 });
+  await page.select("#toFormatSelect", "txt");
+  await page.click("#transformButton");
+  await page.waitForFunction(
+    () => document.getElementById("downloadOutputButton")?.getAttribute("download") === "mixed-ui.txt",
+    { timeout: 15000 },
+  );
+  const pdfResult = await page.evaluate(() => ({
+    status: document.getElementById("statusText")?.textContent || "",
+    statusType: document.getElementById("statusText")?.dataset.type,
+    warningRow: document.getElementById("verificationWarnings")?.textContent || "",
+    warningDetails: document.getElementById("verificationWarningDetails")?.textContent || "",
+    output: document.getElementById("textOutputPreview")?.textContent || "",
+  }));
+  assert.equal(pdfResult.statusType, "warning", "unresolved PDF pages must not show an unconditional success state");
+  assert.match(pdfResult.status, /第 2 页/);
+  assert.match(pdfResult.warningRow, /第 2 页文字未确认/);
+  assert.match(pdfResult.warningDetails, /PDF_PAGES_WITHOUT_TEXT/);
+  assert.match(pdfResult.output, /FIRST/);
+  await page.select("#toFormatSelect", "pdf");
+  await page.click("#transformButton");
+  await page.waitForFunction(
+    () => document.querySelector("#pdfPreview img.input-pdf-page")?.getAttribute("src")?.startsWith("data:image/png"),
+    { timeout: 15000 },
+  );
+  assert.match(await page.$eval("#pdfPreview .input-pdf-controls span", (element) => element.textContent), /第 1 \/ 2 页/);
+  await page.$eval("#pdfPreview .input-pdf-controls button:nth-of-type(2)", (button) => button.click());
+  await page.waitForFunction(
+    () => document.querySelector("#pdfPreview .input-pdf-controls span")?.textContent.includes("第 2 / 2 页"),
+    { timeout: 15000 },
+  );
+  const downloadedPdfBase64 = await page.evaluate(async () => {
+    const href = document.getElementById("downloadOutputButton").href;
+    const bytes = new Uint8Array(await (await fetch(href)).arrayBuffer());
+    return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+  });
+  assert.equal(downloadedPdfBase64, mixedPdf.data.split(",")[1], "PDF to PDF download must preserve the source bytes");
   assert.deepEqual(pageErrors, [], `UI should not emit page errors:\n${pageErrors.join("\n")}`);
   assert.deepEqual(
     consoleErrors.filter((entry) => !entry.includes("404 (Not Found)")),
@@ -135,7 +192,7 @@ try {
     `UI should not emit console errors/warnings:\n${consoleErrors.join("\n")}`,
   );
 
-  console.log("UI conversion E2E passed: sample Markdown converts through the real workbench path.");
+  console.log("UI conversion E2E passed: Markdown conversion, incomplete PDF warning, and paged PDF.js output preview verified.");
 } finally {
   await browser.close();
   await new Promise((resolve, reject) => {

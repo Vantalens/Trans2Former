@@ -1,15 +1,12 @@
-import { createDocumentModel, createHeading, createList, createParagraph, createRawBlock } from "../core/document-model.js";
+import { createDocumentModel, createHeading, createList, createParagraph } from "../core/document-model.js";
 import { createFixedLayoutModel } from "../core/models/fixed-layout.js";
+import { bytesToDataUrl } from "../core/binary-utils.js";
+import { ConversionError } from "../core/conversion-error.js";
 import { createWarning, withWarnings } from "../core/warnings.js";
-import { escapeHtml } from "./text-utils.js";
-
-const PDF_FALLBACK_TEXT = "这是有效 PDF，但当前核心文本抽取器暂时无法读取其中的正文编码或压缩内容流。下方保留原 PDF 预览；如需转换为可编辑文本，请等待核心 OCR/Layout 增强或导入可复制文本的 PDF。";
-const PDF_ENCRYPTED_TEXT = "此 PDF 受密码保护（已加密），本地解析器无法在不输入密码的情况下提取正文。请先用 PDF 工具解除密码后重新导入；下方保留原 PDF 预览（浏览器查看器可能支持输入密码）。";
 const PDFJS_PAYLOAD_START = "% Trans2Former PDFJS_TEXT_START";
 const PDFJS_PAYLOAD_END = "% Trans2Former PDFJS_TEXT_END";
 const MAX_INFLATED_STREAM_BYTES = 64 * 1024 * 1024;
 const MAX_INFLATED_TOTAL_BYTES = 128 * 1024 * 1024;
-const MAX_EMBEDDED_PDF_BYTES = 4 * 1024 * 1024;
 
 function decodePdfString(value) {
   // PDF 32000-1 §7.3.4.2：单遍解码转义。链式 replace 是错的——\\ 后跟 n 会被
@@ -104,30 +101,6 @@ function coercePdfBytes(content) {
     if (typeof atob === "function") return binaryStringToBytes(atob(dataUrlMatch[1]));
   }
   return binaryStringToBytes(text);
-}
-
-function binaryStringToBase64(value) {
-  const binary = String(value || "");
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(binary, "latin1").toString("base64");
-  }
-  if (typeof btoa === "function") {
-    return btoa(binary);
-  }
-  return "";
-}
-
-function toPdfDataUrl(content, source) {
-  const text = String(content ?? "");
-  const dataUrlMatch = text.match(/^(data:application\/pdf;base64,[A-Za-z0-9+/=]+)/);
-  if (dataUrlMatch) {
-    return dataUrlMatch[1];
-  }
-  return `data:application/pdf;base64,${binaryStringToBase64(source)}`;
-}
-
-function escapeHtmlAttribute(value) {
-  return escapeHtml(value);
 }
 
 function printableRatio(text) {
@@ -407,6 +380,33 @@ function shouldSeparatePdfItems(previous, current) {
   return false;
 }
 
+export function hasPdfJsExtractionPayload(content) {
+  return extractPdfJsPayload(coercePdfText(content))?.engine === "pdfjs";
+}
+
+export function copyOriginalPdf(content) {
+  let source = coercePdfText(content);
+  if (hasPdfJsExtractionPayload(source)) {
+    const marker = source.lastIndexOf(`\n${PDFJS_PAYLOAD_START}`);
+    if (marker >= 0) source = source.slice(0, marker);
+  }
+  const bytes = binaryStringToBytes(source);
+  if (bytes.length < 5 || String.fromCharCode(...bytes.subarray(0, 5)) !== "%PDF-") {
+    throw new ConversionError("输入不是可复制的 PDF 文件。", {
+      category: "parse",
+      code: "PDF_INVALID_SOURCE",
+      format: "pdf",
+    });
+  }
+  return {
+    type: "binary",
+    format: "pdf",
+    data: bytesToDataUrl(bytes, "application/pdf"),
+    mime: "application/pdf",
+    warnings: [createWarning("info", "PDF_ORIGINAL_PRESERVED", "PDF bytes were preserved without rerendering; OCR text was not added as a searchable layer.")],
+  };
+}
+
 function joinPdfItems(items, separator = " ") {
   let output = "";
   let previous = null;
@@ -436,7 +436,7 @@ async function loadPdfJs() {
   return await import("pdfjs-dist/legacy/build/pdf.mjs");
 }
 
-function getPdfJsAssetOptions() {
+async function getPdfJsAssetOptions() {
   if (typeof window !== "undefined") {
     return {
       cMapUrl: "/vendor/pdfjs/cmaps/",
@@ -444,10 +444,13 @@ function getPdfJsAssetOptions() {
       standardFontDataUrl: "/vendor/pdfjs/standard_fonts/",
     };
   }
+  const { fileURLToPath } = await import("node:url");
+  // PDF.js checks for a forward slash suffix before passing this native path to fs.
+  const nodeAssetPath = (relative) => fileURLToPath(new URL(relative, import.meta.url)).replaceAll("\\", "/");
   return {
-    cMapUrl: new URL("../../node_modules/pdfjs-dist/cmaps/", import.meta.url).href,
+    cMapUrl: nodeAssetPath("../../node_modules/pdfjs-dist/cmaps/"),
     cMapPacked: true,
-    standardFontDataUrl: new URL("../../node_modules/pdfjs-dist/standard_fonts/", import.meta.url).href,
+    standardFontDataUrl: nodeAssetPath("../../node_modules/pdfjs-dist/standard_fonts/"),
   };
 }
 
@@ -462,7 +465,7 @@ async function extractTextWithPdfJs(content) {
       useSystemFonts: false,
       useWorkerFetch: false,
       verbosity: 0,
-      ...getPdfJsAssetOptions(),
+      ...await getPdfJsAssetOptions(),
     });
     document = await loadingTask.promise;
     const pages = [];
@@ -514,21 +517,25 @@ async function extractTextWithPdfJs(content) {
         pages.push({ pageNumber, blocks: pageBlocks, layout: layoutPage });
       } else if (fallbackText) {
         pages.push({ pageNumber, text: fallbackText, layout: layoutPage });
+      } else {
+        // Keep textless pages in the payload. A mixed text/scan PDF must not
+        // silently lose page numbers before the caller can report OCR gaps.
+        pages.push({ pageNumber, layout: layoutPage });
       }
       page.cleanup();
     }
-    await document.destroy();
     return { pages, encrypted: false };
   } catch (error) {
     if (typeof console !== "undefined" && console.warn) {
       console.warn("[trans2former] PDF.js extraction failed, falling back to core parser:", error?.message || error);
     }
-    if (document) {
-      try { await document.destroy(); } catch { /* ignore */ }
-    }
     // 加密 PDF 在 getDocument 阶段抛 PasswordException——单独标记，
     // 让上层给出准确文案而非误导的「扫描件/不可读」链路（issue #104）。
     return { pages: [], encrypted: error?.name === "PasswordException" };
+  } finally {
+    if (loadingTask) {
+      try { await loadingTask.destroy(); } catch { /* cleanup must not discard extracted pages */ }
+    }
   }
 }
 
@@ -935,6 +942,7 @@ export function isLikelyEncryptedPdf(source) {
 }
 
 export async function expandPdfContentForTextExtraction(content) {
+  if (hasPdfJsExtractionPayload(content)) return content;
   const source = coercePdfText(content);
   // 字节输入不能走 String(content)——Uint8Array 会变成逗号十进制串，后续解析
   // 全部喂垃圾（issue #103）；字符串/dataURL 输入保持原值，字节级不变。
@@ -983,10 +991,11 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
   // PDF.js + 版面分析路径：page.blocks 已经是结构化的 heading/list/paragraph
   if (pdfJsPayload && pdfJsPayload.pages?.some((page) => Array.isArray(page.blocks) && page.blocks.length > 0)) {
     const layoutBlocks = [];
+    const pageBlockCounts = [];
     let totalItems = 0;
     for (const page of pdfJsPayload.pages) {
-      if (!Array.isArray(page.blocks)) continue;
-      for (const block of page.blocks) {
+      const start = layoutBlocks.length;
+      for (const block of (Array.isArray(page.blocks) ? page.blocks : [])) {
         if (!block || typeof block !== "object") continue;
         if (block.type === "heading" && typeof block.text === "string") {
           const text = block.text.trim();
@@ -1016,13 +1025,30 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
           }
         }
       }
+      if (layoutBlocks.length === start && String(page.text || "").trim()) {
+        layoutBlocks.push(createParagraph(String(page.text).trim()));
+        totalItems += 1;
+      }
+      pageBlockCounts.push(layoutBlocks.length - start);
     }
     if (layoutBlocks.length > 0) {
+      const pagesWithoutText = pdfJsPayload.pages
+        .filter((page, index) => pageBlockCounts[index] === 0)
+        .map((page) => page.pageNumber)
+        .filter((number) => Number.isSafeInteger(number) && number > 0);
       const warnings = [createWarning(
         "lossy",
         "PDF_LAYOUT_HEURISTIC",
         "PDF text was reconstructed from PDF.js coordinates with heuristic layout analysis (font-size for headings, y-gap for paragraphs, line-prefix for lists). Visual fidelity is not preserved."
       )];
+      if (pagesWithoutText.length > 0) {
+        warnings.push(createWarning(
+          "lossy",
+          "PDF_PAGES_WITHOUT_TEXT",
+          `PDF pages ${pagesWithoutText.join(", ")} have no extractable text; they may be blank or require OCR.`,
+          { pages: pagesWithoutText },
+        ));
+      }
       const model = createDocumentModel({
         title,
         sourceFormat: format,
@@ -1030,10 +1056,13 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
         metadata: withWarnings({
           pdf: {
             extraction: "pdfjs-layout",
+            textStatus: "extracted",
             engine: pdfJsPayload.engine || "pdfjs-layout",
             blockCount: layoutBlocks.length,
             textItemCount: totalItems,
             pageCount: pdfJsPayload.pages.length,
+            pagesWithoutText,
+            pageBlockCounts,
             fileName,
           },
         }, warnings),
@@ -1072,14 +1101,6 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
   if (strings.length > 0) {
     blocks.push(createHeading(1, strings[0]));
     strings.slice(1).forEach((text) => blocks.push(createParagraph(text)));
-  } else {
-    blocks.push(createParagraph(encrypted ? PDF_ENCRYPTED_TEXT : PDF_FALLBACK_TEXT));
-    const pdfDataUrl = toPdfDataUrl(content, source);
-    const embeddedBase64 = pdfDataUrl.slice("data:application/pdf;base64,".length);
-    const approxBytes = Math.floor(embeddedBase64.length * 3 / 4);
-    if (embeddedBase64.length > 0 && approxBytes <= MAX_EMBEDDED_PDF_BYTES) {
-      blocks.push(createRawBlock("html", `<object class="t2f-embedded-pdf" data="${escapeHtmlAttribute(pdfDataUrl)}" type="application/pdf" width="100%" height="760"><p>当前浏览器未能内嵌显示 PDF。请使用下载输出查看原 PDF。</p></object>`));
-    }
   }
   const warnings = [createWarning(
     "lossy",
@@ -1104,7 +1125,7 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
     }
   }
 
-  return createDocumentModel({
+  const model = createDocumentModel({
     title,
     sourceFormat: format,
     blocks,
@@ -1115,10 +1136,11 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
           : strings.length > 0
             ? "literal-text-operators"
             : encrypted
-              ? "embedded-original-pdf-encrypted"
+              ? "no-text-encrypted"
               : fontGlyphIdNoise
-                ? "embedded-original-pdf-glyph-noise"
-                : "embedded-original-pdf",
+                ? "no-text-glyph-noise"
+                : "no-text",
+        textStatus: strings.length > 0 ? "extracted" : encrypted ? "encrypted" : "unavailable",
         engine: pdfJsPayload?.engine || "core-mvp",
         textItemCount: strings.length,
         pageCount: pdfJsPayload?.pages?.length || undefined,
@@ -1127,4 +1149,7 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
       },
     }, warnings),
   });
+  const layoutPages = pdfJsPayload?.pages?.filter((page) => page?.layout).map((page) => page.layout) || [];
+  if (layoutPages.length > 0) model.fixedLayout = createFixedLayoutModel({ pages: layoutPages });
+  return model;
 }

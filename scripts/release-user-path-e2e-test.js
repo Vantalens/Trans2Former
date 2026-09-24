@@ -111,9 +111,7 @@ const markdown = `# Release Matrix\n\n${marker}\n\n| Name | Score |\n| --- | ---
 const csv = `Name,Score\n${marker},10\n`;
 const browser = await puppeteer.launch({
   headless: "new",
-  ...(process.env.CI && process.platform === "linux"
-    ? { args: ["--no-sandbox", "--disable-setuid-sandbox"] }
-    : {}),
+  args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
 });
 const { server, port } = await startWebServer(await findPort());
 
@@ -179,5 +177,11 @@ try {
 } finally {
   await browser.close();
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  await rm(tempDirectory, { recursive: true, force: true });
+  const resolvedTemp = path.resolve(os.tmpdir());
+  const resolvedFixture = path.resolve(tempDirectory);
+  if (!resolvedFixture.startsWith(`${resolvedTemp}${path.sep}`)
+    || !path.basename(resolvedFixture).startsWith("trans2former-release-e2e-")) {
+    throw new Error("Refusing to remove a fixture outside the dedicated temporary directory.");
+  }
+  await rm(resolvedFixture, { recursive: true, force: true });
 }

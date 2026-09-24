@@ -7,12 +7,11 @@ import { defaultPdfPageRasterizer } from "./pdf-rasterizer.js";
 import { mergeOCRResultsToFixedLayout } from "./ocr-to-fixed-layout.js";
 import { mapLinesToBlockIds } from "./ocr-structure.js";
 import { fixedLayoutToSemantic } from "../models/mappers.js";
-import { getFixedLayoutSummary } from "../models/fixed-layout.js";
+import { createFixedLayoutModel, getFixedLayoutSummary } from "../models/fixed-layout.js";
 
 export const MODEL_VISUAL_FIDELITY_LOST = "MODEL_VISUAL_FIDELITY_LOST";
 export const MODEL_TEXT_ORDER_HEURISTIC = "MODEL_TEXT_ORDER_HEURISTIC";
 
-const DEFAULT_MAX_SCAN_PAGES = 5;
 const DEFAULT_DPI = 144;
 const LOW_CONFIDENCE_THRESHOLD = 0.6;
 
@@ -39,6 +38,45 @@ function paragraphsFromPageResult(result) {
   return paragraphs;
 }
 
+function mergeOCRPagesWithSourceLayout(sourceLayout, ocrLayout, successfulIndices) {
+  if (!Array.isArray(sourceLayout?.pages) || sourceLayout.pages.length === 0) return ocrLayout;
+  const pages = sourceLayout.pages.map((page) => ({ ...page, textRuns: [...(page.textRuns || [])] }));
+  for (let index = 0; index < successfulIndices.length; index += 1) {
+    const pageIndex = successfulIndices[index];
+    const sourcePage = pages[pageIndex];
+    const ocrPage = ocrLayout.pages[index];
+    if (!sourcePage || !ocrPage) continue;
+    const sourceWidth = Number(sourcePage.size?.width);
+    const sourceHeight = Number(sourcePage.size?.height);
+    const ocrWidth = Number(ocrPage.size?.width);
+    const ocrHeight = Number(ocrPage.size?.height);
+    if (![sourceWidth, sourceHeight, ocrWidth, ocrHeight].every((value) => Number.isFinite(value) && value > 0)) {
+      continue;
+    }
+    const scaleX = sourceWidth / ocrWidth;
+    const scaleY = sourceHeight / ocrHeight;
+    const textRuns = ocrPage.textRuns.map((run) => {
+      if (!run.bbox) return run;
+      const { x, y, w, h } = run.bbox;
+      return {
+        ...run,
+        bbox: {
+          x: x * scaleX,
+          y: sourceHeight - (y + h) * scaleY,
+          w: w * scaleX,
+          h: h * scaleY,
+        },
+        fontSize: h * scaleY,
+      };
+    });
+    sourcePage.textRuns.push(...textRuns);
+  }
+  return createFixedLayoutModel({
+    pages,
+    metadata: { ...(sourceLayout.metadata || {}), ocr: ocrLayout.metadata?.ocr },
+  });
+}
+
 export async function runScannedPdfOCRStage(model, ctx = {}) {
   if (ctx?.options?.ocr?.enabled === false) return model;
   const registry = ctx.ocrRegistry || defaultOCRRegistry;
@@ -57,12 +95,12 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     };
   }
   const rasterizer = ctx.rasterizer || defaultPdfPageRasterizer;
-  // 钳位到 ≥1 的整数：0/负数/NaN 一律回落默认值，杜绝「maxScanPages=0 静默丢弃全文」
-  // 与负页码乱码 warning 两类边界（issue #5 复核发现）。
+  // A page limit is an explicit partial-extraction choice. Invalid limits fall
+  // back to all pages so the default path never silently drops later pages.
   const rawMaxPages = ctx?.options?.ocr?.maxScanPages;
-  const maxPages = typeof rawMaxPages === "number" && Number.isFinite(rawMaxPages) && rawMaxPages >= 1
+  const configuredMaxPages = typeof rawMaxPages === "number" && Number.isFinite(rawMaxPages) && rawMaxPages >= 1
     ? Math.floor(rawMaxPages)
-    : DEFAULT_MAX_SCAN_PAGES;
+    : null;
   const dpi = typeof ctx?.options?.ocr?.dpi === "number" ? ctx.options.ocr.dpi : DEFAULT_DPI;
   // 用户语言偏好（options.ocr.language）归一化后传引擎；注意下方已有 `let language`
   // 累积变量（记录引擎返回的语言），此处必须用独立名字避免遮蔽。
@@ -86,17 +124,35 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
       ]),
     };
   }
-  const effectivePages = Math.min(maxPages, Math.max(1, pageCount || 0));
-  if (effectivePages === 0) return model;
+  if (!Number.isSafeInteger(pageCount) || pageCount < 0) {
+    return {
+      ...model,
+      metadata: withWarnings(model.metadata || {}, [createOCREngineFailedWarning({
+        engineId: engine.id,
+        manifestId: engine.manifestId || "",
+        reason: "rasterizer-invalid-page-count",
+        cause: String(pageCount),
+      })]),
+    };
+  }
+  const maxPages = configuredMaxPages ?? pageCount;
+  const effectivePages = Math.min(maxPages, pageCount);
+  const requestedIndices = Array.isArray(ctx.pageIndices)
+    ? [...new Set(ctx.pageIndices)]
+      .filter((index) => Number.isSafeInteger(index) && index >= 0 && index < pageCount)
+      .sort((a, b) => a - b)
+    : Array.from({ length: pageCount }, (_, index) => index);
+  const pageIndices = requestedIndices.filter((index) => index < effectivePages);
+  if (pageIndices.length === 0 && requestedIndices.length === 0) return model;
 
   const enhanced = cloneModel(model);
-  const truncated = typeof pageCount === "number" && pageCount > effectivePages;
+  const truncated = requestedIndices.length > pageIndices.length;
   if (truncated) {
     // 在循环前注入：即使后续每页 OCR 都失败，截断事实也不丢。
     enhanced.metadata = withWarnings(enhanced.metadata, [
       createOCRScanPagesTruncatedWarning({
         totalPages: pageCount,
-        processedPages: effectivePages,
+        processedPages: pageIndices.length,
         maxScanPages: maxPages,
         engineId: engine.id,
       }),
@@ -105,12 +161,13 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
   const lines = [];
   const aggregateConfidences = [];
   const pageResults = [];
+  const successfulIndices = [];
   let runtimeMsTotal = 0;
   let language = "";
   let modelVersion = "";
 
   try {
-    for (let pageIndex = 0; pageIndex < effectivePages; pageIndex += 1) {
+    for (const pageIndex of pageIndices) {
       // 检查是否已取消
       if (ctx?.signal?.aborted) {
         throw new Error("OCR已取消");
@@ -132,6 +189,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
         continue;
       }
       pageResults.push(pageResult);
+      successfulIndices.push(pageIndex);
       runtimeMsTotal += pageResult?.runtimeMs || 0;
       if (typeof pageResult?.averageConfidence === "number") aggregateConfidences.push(pageResult.averageConfidence);
       language = language || pageResult?.language || "";
@@ -152,7 +210,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     // 清理 rasterizer 缓存的 PDF document
     if (typeof rasterizer.dispose === "function") {
       try {
-        rasterizer.dispose();
+        await rasterizer.dispose();
       } catch (error) {
         // ignore cleanup errors
       }
@@ -164,18 +222,41 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     : 0;
 
   const fixedLayout = mergeOCRResultsToFixedLayout(pageResults, { language, engine: engine.id, modelVersion });
-  enhanced.fixedLayout = fixedLayout;
+  enhanced.fixedLayout = mergeOCRPagesWithSourceLayout(model.fixedLayout, fixedLayout, successfulIndices);
 
   const appendedStart = enhanced.blocks.length;
+  const ocrBlocks = [];
+  const ocrBlocksByPage = new Map();
   if (pageResults.length > 0) {
-    const semanticFromLayout = fixedLayoutToSemantic(fixedLayout, {
-      title: enhanced.title || "scan-ocr",
-      sourceFormat: enhanced.sourceFormat || "pdf",
-    });
-    enhanced.blocks.push(...(semanticFromLayout.blocks || []));
-    // 给追加块预赋稳定 id（绝对索引），供低置信修复按 block.id 命中；document-audit 保留之。
-    for (let i = appendedStart; i < enhanced.blocks.length; i += 1) {
-      if (!enhanced.blocks[i].id) enhanced.blocks[i].id = `ocr-block-${i}`;
+    for (let index = 0; index < fixedLayout.pages.length; index += 1) {
+      const semantic = fixedLayoutToSemantic({ pages: [fixedLayout.pages[index]] }, {
+        title: enhanced.title || "scan-ocr",
+        sourceFormat: enhanced.sourceFormat || "pdf",
+      });
+      const pageBlocks = semantic.blocks || [];
+      for (const block of pageBlocks) {
+        if (!block.id) block.id = `ocr-block-${appendedStart + ocrBlocks.length}`;
+        ocrBlocks.push(block);
+      }
+      ocrBlocksByPage.set(successfulIndices[index], pageBlocks);
+    }
+    const pageBlockCounts = model.metadata?.pdf?.pageBlockCounts;
+    const canInterleave = Array.isArray(pageBlockCounts)
+      && pageBlockCounts.length === pageCount
+      && pageBlockCounts.every((count) => Number.isSafeInteger(count) && count >= 0)
+      && pageBlockCounts.reduce((sum, count) => sum + count, 0) === enhanced.blocks.length;
+    if (canInterleave) {
+      const orderedBlocks = [];
+      let offset = 0;
+      for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+        const count = pageBlockCounts[pageIndex];
+        orderedBlocks.push(...enhanced.blocks.slice(offset, offset + count));
+        orderedBlocks.push(...(ocrBlocksByPage.get(pageIndex) || []));
+        offset += count;
+      }
+      enhanced.blocks = orderedBlocks;
+    } else {
+      enhanced.blocks.push(...ocrBlocks);
     }
     enhanced.metadata = withWarnings(enhanced.metadata, [
       createWarning(
@@ -195,16 +276,15 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
 
   // 用文本包含把每行映射到承载它的追加块的 id。不能按 lines 顺序硬配索引：
   // mergeOCRResultsToFixedLayout 会按阅读顺序（bbox y→x）重排，lines 顺序 ≠ 块顺序。
-  const appendedBlocks = enhanced.blocks.slice(appendedStart);
-  const blockIds = mapLinesToBlockIds(lines, appendedBlocks);
+  const blockIds = mapLinesToBlockIds(lines, ocrBlocks);
   lines.forEach((ocrLine, i) => { ocrLine.blockId = blockIds[i] || ""; });
 
   enhanced.metadata.ocr = {
     language: language || "auto",
-    pageCount: effectivePages,
-    // 空 PDF 时 effectivePages 被既有 Math.max(1,…) 钳到 1，取 max 保证 total ≥ processed。
+    pageCount: pageIndices.length,
     totalPageCount: typeof pageCount === "number" ? Math.max(pageCount, effectivePages) : effectivePages,
     truncated,
+    pageIndices,
     lineCount: lines.length,
     lines,
   };
@@ -215,9 +295,10 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     tasks: Array.from(new Set([...(enhanced.metadata.modelReview?.tasks || []), "ocr-text-recognition", "scan-pdf-rasterize"])),
     inferenceMode: "local",
     ocr: {
-      pageCount: effectivePages,
+      pageCount: pageIndices.length,
       totalPageCount: typeof pageCount === "number" ? Math.max(pageCount, effectivePages) : effectivePages,
       truncated,
+      pageIndices,
       lineCount: lines.length,
       averageConfidence,
       runtimeMs: runtimeMsTotal,
@@ -225,7 +306,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
       modelVersion: modelVersion || "",
       language: language || "auto",
       fullTextLength: lines.reduce((acc, line) => acc + (line.text?.length || 0), 0),
-      fixedLayout: getFixedLayoutSummary(fixedLayout),
+      fixedLayout: getFixedLayoutSummary(enhanced.fixedLayout),
     },
   };
 

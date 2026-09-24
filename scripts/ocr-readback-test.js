@@ -193,4 +193,68 @@ function model(blocks) {
   assert.equal(result.quality.qualityReport.ruleDiff.identical, true);
 }
 
-console.log("OCR readback test passed: compareText (identical/subset/CJK/empty), normalizeText, extractModelText, readback layer gating/drift/unavailable/rasterizer-fail, async three-layer merge, end-to-end null-on-text covered.");
+// 14. multi-page output: every page is rasterized and read back (no later-page skip)
+{
+  const rasterizedPages = [];
+  const pageTexts = ["Alpha page one", "Beta page two", "Gamma page three"];
+  let recognizeCall = 0;
+  const multiPageRasterizer = {
+    async rasterize({ pageIndex }) {
+      rasterizedPages.push(pageIndex);
+      return { dataUrl: "data:image/png;base64,AAAA", width: 16, height: 16 };
+    },
+    async countPages() { return 3; },
+  };
+  const pagedEngine = {
+    id: "stub-ocr-paged",
+    taskCapabilities: ["ocr-text"],
+    isAvailable: () => true,
+    recognize: async () => ({ fullText: pageTexts[recognizeCall++], averageConfidence: 0.9, pages: [] }),
+  };
+  const layer = await runOcrReadbackLayer({
+    model: model(pageTexts.map((text) => ({ type: "paragraph", text }))),
+    output: { data: "<pdf>" },
+    ctx: { from: "md", to: "pdf", options: {} },
+    engine: pagedEngine,
+    rasterizer: multiPageRasterizer,
+  });
+  assert.equal(layer.eligible, true);
+  assert.deepEqual(rasterizedPages, [0, 1, 2]);
+  assert.equal(layer.ocrReadback.pageCount, 3);
+  assert.equal(layer.ocrReadback.checkedPages, 3);
+  assert.equal(layer.ocrReadback.passed, true);
+}
+
+// 15. later-page miss gate: text absent from later pages must fail the check
+{
+  const pageTexts = ["Alpha page one", "", ""];
+  let recognizeCall = 0;
+  const missEngine = {
+    id: "stub-ocr-miss",
+    taskCapabilities: ["ocr-text"],
+    isAvailable: () => true,
+    recognize: async () => ({ fullText: pageTexts[recognizeCall++], averageConfidence: 0.9, pages: [] }),
+  };
+  const threePageRasterizer = {
+    async rasterize() { return { dataUrl: "data:image/png;base64,AAAA", width: 16, height: 16 }; },
+    async countPages() { return 3; },
+  };
+  const layer = await runOcrReadbackLayer({
+    model: model([
+      { type: "paragraph", text: "Alpha page one" },
+      { type: "paragraph", text: "Beta page two" },
+      { type: "paragraph", text: "Gamma page three" },
+    ]),
+    output: { data: "<pdf>" },
+    ctx: { from: "md", to: "pdf", options: {} },
+    engine: missEngine,
+    rasterizer: threePageRasterizer,
+  });
+  assert.equal(layer.eligible, true);
+  assert.equal(layer.ocrReadback.checkedPages, 3);
+  assert.ok(layer.ocrReadback.recall < 0.5, `recall ${layer.ocrReadback.recall} must expose missing later pages`);
+  assert.equal(layer.ocrReadback.passed, false);
+  assert.equal(layer.warnings[0].code, OCR_READBACK_DRIFT);
+}
+
+console.log("OCR readback test passed: compareText (identical/subset/CJK/empty), normalizeText, extractModelText, readback layer gating/drift/unavailable/rasterizer-fail, multi-page full coverage and later-page miss gate, async three-layer merge, end-to-end null-on-text covered.");

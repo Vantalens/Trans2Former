@@ -9,9 +9,9 @@ DOCX input MVP 的目标是把 Word 文档本地解析为 `DocumentModel`，优�
 ## 当前支持
 
 - 标题：识别 `w:pStyle` 中的 `Heading1` 到 `Heading6`。
-- 段落：合并 `w:t` 文本。
+- 段落：按 run 顺序保留 `w:t` 文本、连续空格、制表符和换行；`block.text` 与 `inlines` 的纯文本一致。
 - 链接：解析 `word/_rels/document.xml.rels` 中的 external hyperlink，并追加到可读文本。
-- 表格：第一行作为 headers，其余行作为 rows；保留 `tblGrid` 列宽、`gridSpan` 跨列和 `vMerge` 纵向合并信息。
+- 表格：第一行作为 headers，其余行作为 rows；保留单元格内的连续空格、制表符及段落分隔，并保留 `tblGrid` 列宽、`gridSpan` 跨列和 `vMerge` 纵向合并信息。
 - 段落布局：保留对齐、左右/首行/悬挂缩进、段前段后间距、行距和自定义制表位；文档页面尺寸、方向和页边距供 DOCX writer 回写。
 - 图片引用：解析 `a:blip r:embed`，读取 `word/media/*`，进入 `assets` 并生成 asset block。
 - 列表：识别 `w:numPr`，映射为 `DocumentModel` list，保留层级 metadata。
