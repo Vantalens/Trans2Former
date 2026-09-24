@@ -531,14 +531,14 @@ endobj
   const model = toDocumentModel(noisyPdf, "pdf", "binary-noise.pdf");
   assert.equal(validateDocumentModel(model).ok, true);
   assert.equal(model.blocks.some((block) => String(block.text || "").includes("Ó3□FC")), false);
-  assert.equal(model.blocks[0].type, "paragraph");
-  assert.match(model.blocks[0].text, /这是有效 PDF/);
-  assert.equal(model.blocks.some((block) => block.type === "raw" && block.format === "html" && block.content.includes("application/pdf")), true);
+  assert.equal(model.blocks.length, 0, "missing PDF text must not become a placeholder paragraph");
+  assert.equal(model.metadata.pdf.textStatus, "unavailable");
   assert.equal(model.metadata.warnings.some((warning) => warning.code === "PDF_NO_CREDIBLE_TEXT"), true);
 
-  const html = convertContent({ content: noisyPdf, from: "pdf", to: "html", title: "binary-noise.pdf" });
-  assert.equal(html.data.includes('type="application/pdf"'), true);
-  assert.equal(html.data.includes("Ó3□FC"), false);
+  assert.throws(
+    () => convertContent({ content: noisyPdf, from: "pdf", to: "html", title: "binary-noise.pdf" }),
+    (error) => error.code === "PDF_TEXT_UNAVAILABLE",
+  );
 });
 
 test("PDF reader rejects font Glyph ID noise as text", () => {
@@ -565,7 +565,7 @@ endobj
     );
   }
   assert.equal(model.metadata.warnings.some((warning) => warning.code === "PDF_FONT_GLYPH_ID_NOISE"), true);
-  assert.equal(model.metadata.pdf.extraction, "embedded-original-pdf-glyph-noise");
+  assert.equal(model.metadata.pdf.extraction, "no-text-glyph-noise");
 });
 
 test("PDF reader consumes pdfjs-layout payload with structured blocks", () => {
@@ -784,7 +784,9 @@ test("issue #106 high-fidelity PDF reports omitted images, signatures, and subst
   assert.equal(warningCodes.has("PDF_HF_IMAGES_DROPPED"), true);
   assert.equal(warningCodes.has("PDF_HF_SIGNATURES_DROPPED"), true);
   assert.equal(warningCodes.has("PDF_HF_FONT_SUBSTITUTED"), true);
-  assert.match(new TextDecoder().decode(dataUrlToBytes(output.data)), /\/URI \(https:\/\/example\.com\)/);
+  const pdfText = new TextDecoder().decode(dataUrlToBytes(output.data));
+  assert.match(pdfText, /\/URI \(https:\/\/example\.com\)/);
+  assert.match(pdfText, /125\.000 Tz/, "substituted font must use the source text-run width");
 });
 
 test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", () => {
@@ -826,8 +828,8 @@ test("P8-M4 high-fidelity PDF output preserves FixedLayoutModel coordinates", ()
   assert.equal(model.fixedLayout.pages[0].annotations.length, 1);
   assert.equal(model.fixedLayout.pages[0].rotation, 90);
 
-  // 转换为 PDF，应该使用高保真路径
-  const output = convertContent({ content: fakePdfWithLayout, from: "pdf", to: "pdf", title: "high-fidelity.pdf" });
+  // Writer 单独消费 FixedLayoutModel；完整的 PDF→PDF 路由会直接复制原文件。
+  const output = writePdfBinary({ model, title: "high-fidelity.pdf" });
   assertValidOutput(output, "pdf", "pdf high-fidelity round-trip");
   const bytes = dataUrlToBytes(output.data);
   assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");

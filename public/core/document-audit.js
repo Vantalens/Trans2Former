@@ -185,9 +185,8 @@ export function ensureDocumentAudit(model, {
       structureFidelity: warnings.some((warning) => warning.severity === "lossy") ? "medium" : "high",
       tableFidelity: blocks.some((block) => block.type === "table") ? "tracked" : "not-applicable",
       assetFidelity: assets.length > 0 ? "tracked" : "not-applicable",
-      // 修复 issue #122: 添加 textFidelity 字段
-      // 基于 warnings 中的文本相关降级判断文本保真度
-      textFidelity: warnings.some((w) => w.severity === "lossy" && /text|content|字符|编码/.test(w.message)) ? "medium" : "high",
+      // Reader/writer warnings are risk indicators, not proof that output text matches input.
+      textFidelity: "unverified",
       layoutFidelity: !carriesPageLayout ? "not-applicable" : hasLayoutLoss ? "low" : "medium",
       warningCount: warnings.length,
       warningsBySeverity: warningSummary(warnings),

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readPdf, expandPdfContentForTextExtraction } from "../public/formats/pdf.js";
+import { writePdfHighFidelity } from "../public/formats/pdf-output-high-fidelity.js";
+import { convertContent, convertContentAsync } from "../public/browser-transformer.js";
 
 // 测试 PDF reader 的边界条件、错误处理和关键路径
 // 覆盖审核报告 #168 指出的未覆盖场景
@@ -228,5 +230,49 @@ try {
   console.log(`  ⚠️  结构验证: ${err.message}`);
 }
 
+// 测试 11: 混合文本页与无文字页时，保留页数并明确提示 OCR 缺口。
+console.log("\nTest 11: Mixed text and textless PDF pages");
+const mixedPdf = writePdfHighFidelity({
+  model: {
+    title: "mixed-pages",
+    fixedLayout: {
+      pages: [
+        {
+          size: { width: 612, height: 792 },
+          textRuns: [{ text: "FIELD", bbox: { x: 100, y: 700, w: 120, h: 12 }, fontSize: 12 }],
+        },
+        { size: { width: 612, height: 792 }, textRuns: [] },
+      ],
+    },
+  },
+});
+const mixedExpanded = await expandPdfContentForTextExtraction(mixedPdf.data);
+const mixedModel = readPdf({ content: mixedExpanded, title: "mixed-pages" });
+assert.equal(mixedModel.metadata.pdf.pageCount, 2);
+assert.deepEqual(mixedModel.metadata.pdf.pagesWithoutText, [2]);
+assert.equal(mixedModel.fixedLayout.pages.length, 2);
+assert.ok(mixedModel.metadata.warnings.some((warning) => warning.code === "PDF_PAGES_WITHOUT_TEXT"));
+console.log("  ✅ 无文字页保留在布局中，并产生可见 warning");
+
+// 测试 12: 同格式 PDF 不重新绘制，原字节在同步、异步及预提取入口一致。
+console.log("\nTest 12: PDF identity copy");
+const originalData = mixedPdf.data;
+const expectedBytes = Buffer.from(originalData.split(",")[1], "base64");
+for (const output of [
+  convertContent({ content: originalData, from: "pdf", to: "pdf", options: { repair: false } }),
+  convertContent({ content: mixedExpanded, from: "pdf", to: "pdf", options: { repair: false } }),
+  await convertContentAsync({ content: new Uint8Array(expectedBytes), from: "pdf", to: "pdf", options: { repair: false } }),
+]) {
+  assert.deepEqual(Buffer.from(output.data.split(",")[1], "base64"), expectedBytes);
+  assert.ok(output.warnings.some((warning) => warning.code === "PDF_ORIGINAL_PRESERVED"));
+}
+const blankPdf = writePdfHighFidelity({
+  model: { title: "blank", fixedLayout: { pages: [{ size: { width: 612, height: 792 }, textRuns: [] }] } },
+});
+const blankCopy = await convertContentAsync({ content: blankPdf.data, from: "pdf", to: "pdf" });
+assert.equal(blankCopy.data, blankPdf.data, "a textless PDF must still be copyable without rerendering");
+assert.deepEqual(blankCopy.quality.qualityReport.unresolvedPdfPages, []);
+console.log("  ✅ PDF 同格式转换保留原始字节");
+
 console.log("\n✅ PDF reader test passed: critical paths and edge cases verified.");
-console.log("✅ Covers: empty PDF, corrupted streams, multi-page, metadata, large streams, byte input, boundaries, error handling.");
+console.log("✅ Covers: empty PDF, corrupted streams, multi-page, metadata, large streams, byte input, boundaries, error handling, textless pages, identity copy.");

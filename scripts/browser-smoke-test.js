@@ -202,7 +202,9 @@ try {
   assert.equal(stylesCss.includes("align-items: stretch;"), true, "workspace grid should stretch the source and result panes to fill the available height");
   assert.equal(stylesCss.includes("min-height: 620px;"), false, "result pane should not reserve a large empty preview area on short documents");
   assert.equal(stylesCss.includes(".source-pane {\n  align-self: stretch;"), true, "source pane should stretch to fill the workspace row after removing the bottom drawer");
-  assert.equal(stylesCss.includes(".pdf-frame {\n  display: none;\n  width: 100%;\n  height: 100%;"), true, "PDF result preview should fill the result panel instead of using the iframe default size");
+  assert.equal(stylesCss.includes(".pdf-frame {\n  display: none;\n  width: 100%;\n  height: 100%;"), true, "PDF result preview should fill the result panel");
+  assert.equal(indexHtml.includes('<div id="pdfPreview"'), true, "PDF result preview should render into a page container");
+  assert.equal(indexHtml.includes('<iframe id="pdfPreview"'), false, "PDF output should not depend on a browser PDF plugin");
   assert.equal(appJs.includes("docx"), true, "main app should accept DOCX input");
   for (const format of ["doc", "xlsx", "epub", "pdf", "pptx"]) {
     assert.equal(appJs.includes(format), true, `main app should accept ${format.toUpperCase()} input`);

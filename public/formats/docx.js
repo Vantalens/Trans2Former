@@ -133,8 +133,8 @@ function parseTable(xml) {
   const columnWidths = [...gridXml.matchAll(/<w:gridCol\b[^>]*\/?\s*>/g)]
     .map((match) => Number(getAttr(match[0], "w:w")))
     .filter((width) => Number.isFinite(width) && width > 0);
-  // 嵌套表文本经 extractText 平铺进外层单元格；压缩连续换行/空格为单空格防止单元格内
-  // 换行破坏 md 表格，但保留 \t（issue #92——表格单元格内含制表符的真实文档存在）
+  // Keep paragraph boundaries and significant spaces inside cells. Flattening
+  // adjacent <w:p> elements without separators joins distinct form fields.
   const parsedRows = scanBalanced(xml, "w:tr")
     .map((rowXml) => scanBalanced(rowXml, "w:tc").map((cellXml) => {
       const gridSpan = cellXml.match(/<w:gridSpan\b[^>]*\/?\s*>/)?.[0] || "";
@@ -143,8 +143,11 @@ function parseTable(xml) {
       const verticalMerge = mergeTag
         ? (getAttr(mergeTag, "w:val") === "restart" ? "restart" : "continue")
         : "";
+      const paragraphs = scanBalanced(cellXml, "w:p");
       return {
-        text: extractText(cellXml).replace(/[ \n\r]+/g, " ").trim(),
+        text: paragraphs.length > 0
+          ? paragraphs.map((paragraph) => extractText(paragraph)).join("\n")
+          : extractText(cellXml),
         columnSpan: Number.isSafeInteger(spanValue) && spanValue > 1 ? spanValue : 1,
         verticalMerge,
       };
@@ -352,8 +355,9 @@ function extractRunInlines(xml) {
 function parseParagraph(xml, relationships, assetStore, zip, warnings, references = {}) {
   const style = getAttr(xml.match(/<w:pStyle\b[^>]*\/?>/)?.[0] || "", "w:val");
   const inlines = extractInlinesFromParagraph(xml, relationships);
-  // issue #92：preserve tab，只压缩连续换行/空格为单空格
-  const text = inlinesToPlainText(inlines).replace(/[ \n\r]+/g, " ").trim();
+  // Keep the block text consistent with its inlines. Collapsing spaces here
+  // makes JSON/XML and fallback writers lose field spacing even when runs survive.
+  const text = inlinesToPlainText(inlines).replace(/\r\n?/g, "\n");
   const imageIds = [...xml.matchAll(/<a:blip\b[^>]*r:embed="([^"]+)"/g)].map((match) => match[1]);
   const paragraphFormat = parseParagraphFormat(xml);
   const numPr = xml.match(/<w:numPr\b[\s\S]*?<\/w:numPr>/)?.[0] || "";
@@ -363,7 +367,7 @@ function parseParagraph(xml, relationships, assetStore, zip, warnings, reference
   } : null;
 
   const blocks = [];
-  if (text) {
+  if (text.trim()) {
     if (listMeta) {
       const list = createList([text], references.orderedNumIds?.has(listMeta.numId), [{
         depth: listMeta.depth,

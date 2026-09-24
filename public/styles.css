@@ -698,6 +698,10 @@ button:disabled {
   color: var(--accent-strong);
 }
 
+.status-chip[data-type="warning"] {
+  color: var(--color-warning);
+}
+
 .status-chip[data-type="info"] {
   color: var(--muted-strong);
 }
@@ -1419,6 +1423,24 @@ button:disabled {
   background: #f8fafc;
 }
 
+.input-pdf-viewer {
+  margin-top: 12px;
+}
+
+.input-pdf-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.input-pdf-page {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #f8fafc;
+}
+
 .text-output-preview {
   display: block;
   margin: 0;
@@ -1638,6 +1660,21 @@ button:disabled {
 .verification-badge[data-state="skip"] {
   background: rgba(120, 132, 148, 0.16);
   color: #586172;
+}
+
+.verification-badge[data-state="warning"] {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-strong);
+}
+
+.verification-warning-details {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--color-warning-strong);
+}
+
+.verification-warning-details[hidden] {
+  display: none;
 }
 
 .verification-note {

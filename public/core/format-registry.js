@@ -1,8 +1,10 @@
 import { ConversionError } from "./conversion-error.js";
+import { getPlainText } from "./document-model.js";
 import { ensureDocumentAudit } from "./document-audit.js";
 import { defaultRepairEngine } from "./repair-engine.js";
 import { runVerificationStage, runVerificationStageAsync } from "./verification/verification-stage.js";
 import { createWarning, withWarnings } from "./warnings.js";
+import { copyOriginalPdf } from "../formats/pdf.js";
 
 const FORMAT_ALIASES = {
   markdown: "md",
@@ -567,8 +569,15 @@ export class ConverterRegistry {
       : auditedModel;
 
     const baseQualityReport = finalModel.metadata?.qualityReport || {};
+    const unresolvedPdfPages = this._unresolvedPdfPages(finalModel, fromFormat, effectiveTo);
     const qualityReport = {
       ...baseQualityReport,
+      unresolvedPdfPages,
+      textFidelity: verification.ruleDiff
+        ? (verification.ruleDiff.fidelity === "exact" ? "high" : "medium")
+        : verification.ocrReadback
+          ? (verification.ocrReadback.passed ? "medium" : "low")
+          : "unverified",
       repairStatus: repairStatusFromDecision(cycle.autoRepair),
       finalDecision: cycle.autoRepair?.finalDecision || "pending",
       ruleDiff: verification.ruleDiff,
@@ -586,6 +595,7 @@ export class ConverterRegistry {
       ...cycle.output,
       quality: {
         qualityReport,
+        warnings: finalModel.metadata?.warnings || [],
         modelReview: finalModel.metadata?.modelReview || null,
         autoRepair: finalModel.metadata?.autoRepair || null,
         conversion: finalModel.metadata?.conversion || null,
@@ -639,14 +649,57 @@ export class ConverterRegistry {
     }
   }
 
+  _requirePdfText(model, fromFormat) {
+    if (fromFormat !== "pdf" || getPlainText(model).trim()) return;
+    const encrypted = model?.metadata?.pdf?.encrypted === true;
+    throw new ConversionError(
+      encrypted
+        ? "此 PDF 已加密，无法提取正文。请先解除密码后重试。"
+        : "未能从 PDF 提取可编辑正文。请检查原 PDF 预览，或启用可用的 OCR 后重试。",
+      {
+        category: "parse",
+        code: encrypted ? "PDF_ENCRYPTED" : "PDF_TEXT_UNAVAILABLE",
+        format: "pdf",
+        details: { extraction: model?.metadata?.pdf?.extraction || "unknown" },
+      },
+    );
+  }
+
+  _unresolvedPdfPages(model, fromFormat, toFormat) {
+    if (fromFormat !== "pdf" || toFormat === "pdf") return [];
+    const recoveredPages = new Set((model?.metadata?.ocr?.lines || [])
+      .filter((line) => String(line?.text || "").trim())
+      .map((line) => line.pageIndex + 1));
+    return (model?.metadata?.pdf?.pagesWithoutText || [])
+      .filter((page) => Number.isSafeInteger(page) && page > 0 && !recoveredPages.has(page));
+  }
+
+  _surfacePdfSourceWarnings(model, output, fromFormat) {
+    if (fromFormat !== "pdf") return output;
+    const warnings = [...(output.warnings || []), ...(model?.metadata?.warnings || [])];
+    const signatures = new Set();
+    return {
+      ...output,
+      warnings: warnings.filter((warning) => {
+        const signature = `${warning.code}|${warning.message}`;
+        if (signatures.has(signature)) return false;
+        signatures.add(signature);
+        return true;
+      }),
+      unresolvedPdfPages: this._unresolvedPdfPages(model, fromFormat, output.format),
+    };
+  }
+
   convert({ content, from, to, title = "document", fileName = "", options = {} }) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
     this._checkResourceBudget(content, fromFormat);
     const model = this.prepareConversionModel({ content, from, to, title, fileName, options });
-    const output = this.write({ model, to, title, options });
+    const pdfIdentityCopy = fromFormat === "pdf" && toFormat === "pdf";
+    if (!pdfIdentityCopy) this._requirePdfText(model, fromFormat);
+    const output = pdfIdentityCopy ? copyOriginalPdf(content) : this.write({ model, to, title, options });
     if (options?.repair === false) {
-      return output;
+      return this._surfacePdfSourceWarnings(model, output, fromFormat);
     }
     const ctx = this._buildRepairCtx({ content, fromFormat, toFormat, title, fileName, options });
     const qualityModel = this._mergeWriterWarnings({ model, output, content, fromFormat, toFormat, fileName, options });
@@ -664,6 +717,17 @@ export class ConverterRegistry {
       throw new Error("转换已取消");
     }
 
+    const pdfIdentityCopy = fromFormat === "pdf" && toFormat === "pdf";
+    // PDF.js may transfer a Uint8Array's buffer while extracting text. Capture
+    // same-format output before that operation so the original bytes survive.
+    const identityOutput = pdfIdentityCopy ? copyOriginalPdf(content) : null;
+
+    if (fromFormat === "pdf") {
+      const { expandPdfContentForTextExtraction } = await import("../formats/pdf.js");
+      content = await expandPdfContentForTextExtraction(content);
+      if (signal?.aborted) throw new Error("转换已取消");
+    }
+
     let model = this.prepareConversionModel({ content, from, to, title, fileName, options });
 
     if (options?.ocr?.enabled !== false && fromFormat === "png") {
@@ -675,7 +739,7 @@ export class ConverterRegistry {
         to: toFormat,
         signal,
       });
-    } else if (options?.ocr?.enabled !== false && fromFormat === "pdf") {
+    } else if (options?.ocr?.enabled !== false && fromFormat === "pdf" && toFormat !== "pdf") {
       if (signal?.aborted) throw new Error("转换已取消");
       const { isScannedPdf } = await import("./ocr/pdf-rasterizer.js");
       const detection = await isScannedPdf(content, options?.ocr || {});
@@ -688,14 +752,16 @@ export class ConverterRegistry {
           from: fromFormat,
           to: toFormat,
           signal,
+          pageIndices: detection.pageIndices,
         });
       }
     }
 
     if (signal?.aborted) throw new Error("转换已取消");
-    const output = this.write({ model, to, title, options });
+    if (!pdfIdentityCopy) this._requirePdfText(model, fromFormat);
+    const output = identityOutput || this.write({ model, to, title, options });
     if (options?.repair === false) {
-      return output;
+      return this._surfacePdfSourceWarnings(model, output, fromFormat);
     }
     const ctx = this._buildRepairCtx({ content, fromFormat, toFormat, title, fileName, options });
     const qualityModel = this._mergeWriterWarnings({ model, output, content, fromFormat, toFormat, fileName, options });

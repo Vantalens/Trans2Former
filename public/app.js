@@ -8,6 +8,7 @@ import {
   renderPreviewHtml,
   toConversionDocumentModel,
   toDocumentModel,
+  createBrowserPdfPageRasterizer,
   ensurePaddleDefaultModels,
   rehydrateTesseractAvailability,
 } from "./browser-transformer.js";
@@ -102,6 +103,7 @@ const verificationOcrReadback = byId("verificationOcrReadback");
 const verificationOcrRecognition = byId("verificationOcrRecognition");
 const verificationOcrRecognitionRow = byId("verificationOcrRecognitionRow");
 const verificationWarnings = byId("verificationWarnings");
+const verificationWarningDetails = byId("verificationWarningDetails");
 const securityCenterButton = byId("securityCenterButton");
 const workbenchTabs = byId("workbenchTabs");
 const workflowSteps = [...document.querySelectorAll("[data-workflow-step]")];
@@ -134,6 +136,9 @@ function greet(name) {
 let currentFileName = "document.md";
 let currentInputContent = sampleMarkdown;
 let currentOutputBlobUrl = "";
+let currentInputPdfPreviewUrl = "";
+let currentInputPdfRasterizer = null;
+let currentOutputPdfRasterizer = null;
 let currentOutputDownloadBlob = null;
 let currentOutputFileName = "";
 let previewTimer = null;
@@ -604,7 +609,7 @@ function describeRuleDiff(ruleDiff, verification) {
 function describeSsim(ssim, verification) {
   if (ssim) {
     const score = typeof ssim.score === "number" ? ssim.score.toFixed(3) : "-";
-    return { state: ssim.passed ? "ok" : "drift", text: `score ${score} (阈值 ${ssim.threshold}) · ${ssim.sourceFormat}→${ssim.outputFormat}` };
+    return { state: ssim.passed ? "ok" : "drift", text: `第 ${Number(ssim.pageIndex || 0) + 1} 页 · score ${score} (阈值 ${ssim.threshold}) · ${ssim.sourceFormat}→${ssim.outputFormat}` };
   }
   const skip = (verification?.skipped || []).find((entry) => entry.layer === "ssim");
   return { state: "skip", text: `跳过：${skip?.reason || "未触发"}` };
@@ -614,7 +619,8 @@ function describeOcrReadback(ocrReadback, verification) {
   if (ocrReadback) {
     const f1 = typeof ocrReadback.f1 === "number" ? ocrReadback.f1.toFixed(3) : "-";
     const recall = typeof ocrReadback.recall === "number" ? ocrReadback.recall.toFixed(3) : "-";
-    return { state: ocrReadback.passed ? "ok" : "drift", text: `f1 ${f1} · recall ${recall} (阈值 ${ocrReadback.threshold}) · ${ocrReadback.engineId}` };
+    const pages = ocrReadback.checkedPages ? ` · 已检查 ${ocrReadback.checkedPages}/${ocrReadback.pageCount} 页` : "";
+    return { state: ocrReadback.passed ? "ok" : "drift", text: `f1 ${f1} · recall ${recall} (阈值 ${ocrReadback.threshold}) · ${ocrReadback.engineId}${pages}` };
   }
   const skip = (verification?.skipped || []).find((entry) => entry.layer === "ocr-readback");
   return { state: "skip", text: `跳过：${skip?.reason || "未触发"}` };
@@ -704,12 +710,27 @@ function renderVerificationReport(quality = currentConversionQuality) {
   const severityText = Object.keys(severity).length > 0
     ? Object.entries(severity).map(([level, count]) => `${level}:${count}`).join(" · ")
     : "无";
-  applyVerificationRow(verificationWarnings, { state: (report.downgradeCount || 0) > 0 ? "drift" : "ok", text: `${report.warningCount || 0} 条（${severityText}）` });
+  const unresolvedPages = report.unresolvedPdfPages || [];
+  const unresolvedText = unresolvedPages.length > 0 ? ` · 第 ${unresolvedPages.join("、")} 页文字未确认` : "";
+  applyVerificationRow(verificationWarnings, {
+    state: unresolvedPages.length > 0 || (report.downgradeCount || 0) > 0 ? "drift" : "ok",
+    text: `${report.warningCount || 0} 条（${severityText}）${unresolvedText}`,
+  });
+  if (verificationWarningDetails) {
+    verificationWarningDetails.replaceChildren();
+    const warnings = Array.isArray(quality.warnings) ? quality.warnings : [];
+    for (const warning of warnings.slice(0, 20)) {
+      const item = document.createElement("li");
+      item.textContent = `[${warning.code || "CONVERSION_NOTICE"}] ${warning.message || ""}`;
+      verificationWarningDetails.appendChild(item);
+    }
+    verificationWarningDetails.hidden = warnings.length === 0;
+  }
 
   const activeLayers = (verification.layers || []).length;
   if (verificationReportBadge) {
     verificationReportBadge.textContent = activeLayers > 0 ? `${activeLayers} 层已检验` : "未触发检验层";
-    verificationReportBadge.dataset.state = activeLayers > 0 ? "ok" : "skip";
+    verificationReportBadge.dataset.state = unresolvedPages.length > 0 ? "warning" : activeLayers > 0 ? "ok" : "skip";
   }
   verificationReportPanel.hidden = false;
 }
@@ -1099,7 +1120,7 @@ function resetGeneratedOutput(metaMessage = "尚未生成") {
     verificationReportPanel.hidden = true;
   }
   textOutputPreview.textContent = "";
-  pdfPreview.removeAttribute("src");
+  pdfPreview.replaceChildren();
   downloadOutputButton.textContent = "下载输出";
   if (outputEditor) {
     outputEditor.value = "";
@@ -1447,10 +1468,90 @@ function renderPreview() {
   const model = toDocumentModel(content, fromFormatSelect.value, currentFileName);
   const bodyHtml = renderPreviewHtml(content, fromFormatSelect.value, currentFileName);
   htmlPreview.innerHTML = bodyHtml;
+  if (currentInputPdfPreviewUrl) {
+    URL.revokeObjectURL(currentInputPdfPreviewUrl);
+    currentInputPdfPreviewUrl = "";
+  }
+  if (currentInputPdfRasterizer) {
+    void currentInputPdfRasterizer.dispose();
+    currentInputPdfRasterizer = null;
+  }
+  if (fromFormatSelect.value === "pdf") {
+    if (model.metadata?.pdf?.textStatus !== "extracted") {
+      const notice = document.createElement("p");
+      notice.textContent = model.metadata?.pdf?.encrypted
+        ? "此 PDF 已加密，无法提取正文。请先解除密码后重试。"
+        : "目前未能提取可编辑正文。可在下方查看原 PDF；转换需要可提取文本或可用的 OCR。";
+      htmlPreview.prepend(notice);
+    }
+    const originalDataUrl = content.match(/^data:application\/pdf;base64,[A-Za-z0-9+/=]+/i)?.[0];
+    if (originalDataUrl) {
+      currentInputPdfPreviewUrl = URL.createObjectURL(new Blob([dataUrlToBytes(originalDataUrl)], { type: "application/pdf" }));
+      const download = document.createElement("a");
+      download.href = currentInputPdfPreviewUrl;
+      download.download = currentFileName || "original.pdf";
+      download.textContent = "下载原 PDF";
+      htmlPreview.appendChild(download);
+      const viewer = document.createElement("div");
+      viewer.className = "input-pdf-viewer";
+      htmlPreview.appendChild(viewer);
+      const rasterizer = createBrowserPdfPageRasterizer();
+      currentInputPdfRasterizer = rasterizer;
+      void renderPdfPages(rasterizer, originalDataUrl, viewer, () => currentInputPdfRasterizer === rasterizer, "原 PDF");
+    }
+  }
   renderMathIn(htmlPreview);
   renderDocumentModelPanel(model);
   lastRenderedPayload = payloadKey;
   setStatus(`浏览器端预览已更新 (${Date.now() - renderStart}ms)`, "success");
+}
+
+async function renderPdfPages(rasterizer, content, viewer, isCurrent, labelPrefix) {
+  const downloadHint = labelPrefix === "原 PDF" ? "上方链接下载原件" : "下载按钮查看 PDF";
+  try {
+    const pageCount = await rasterizer.countPages({ content });
+    if (!isCurrent() || !viewer.isConnected) return;
+    if (!Number.isSafeInteger(pageCount) || pageCount < 1) throw new Error("PDF 页数不可用");
+    const controls = document.createElement("div");
+    controls.className = "input-pdf-controls";
+    const previous = document.createElement("button");
+    previous.type = "button";
+    previous.textContent = "上一页";
+    const next = document.createElement("button");
+    next.type = "button";
+    next.textContent = "下一页";
+    const label = document.createElement("span");
+    const image = document.createElement("img");
+    image.className = "input-pdf-page";
+    image.alt = `${labelPrefix} 页面预览`;
+    controls.append(previous, label, next);
+    viewer.append(controls, image);
+    let pageIndex = 0;
+    async function showPage(index) {
+      previous.disabled = true;
+      next.disabled = true;
+      try {
+        const rendered = await rasterizer.rasterize({ content, pageIndex: index, dpi: 96 });
+        if (!isCurrent() || !viewer.isConnected) return;
+        image.src = rendered.dataUrl;
+        image.alt = `${labelPrefix} 第 ${index + 1} 页`;
+        label.textContent = `第 ${index + 1} / ${pageCount} 页`;
+        previous.disabled = index === 0;
+        next.disabled = index === pageCount - 1;
+        pageIndex = index;
+      } catch (error) {
+        if (isCurrent() && viewer.isConnected) {
+          viewer.textContent = `${labelPrefix} 页面暂时无法渲染：${error?.message || error}。可使用${downloadHint}。`;
+        }
+      }
+    }
+    previous.addEventListener("click", () => { void showPage(pageIndex - 1); });
+    next.addEventListener("click", () => { void showPage(pageIndex + 1); });
+    await showPage(0);
+  } catch (error) {
+    if (!isCurrent() || !viewer.isConnected) return;
+    viewer.textContent = `${labelPrefix} 页面暂时无法渲染：${error?.message || error}。可使用${downloadHint}。`;
+  }
 }
 
 function renderPreviewWhenIdle() {
@@ -1478,6 +1579,14 @@ function schedulePreviewUpdate() {
 }
 
 async function handleInputText(rawContent, fileName = currentFileName, { renderInitialPreview = true } = {}) {
+  if (currentInputPdfPreviewUrl) {
+    URL.revokeObjectURL(currentInputPdfPreviewUrl);
+    currentInputPdfPreviewUrl = "";
+  }
+  if (currentInputPdfRasterizer) {
+    void currentInputPdfRasterizer.dispose();
+    currentInputPdfRasterizer = null;
+  }
   workspaceRevision += 1;
   setWorkflowStep("preview");
   currentFileName = fileName;
@@ -1609,6 +1718,10 @@ function buildWorkerPayload(payload) {
 
 function releaseConversionResources() {
   revokeOutputUrl();
+  if (currentOutputPdfRasterizer) {
+    void currentOutputPdfRasterizer.dispose();
+    currentOutputPdfRasterizer = null;
+  }
   if (activeConversion?.worker) {
     activeConversion.worker.terminate();
     activeConversion = null;
@@ -1739,6 +1852,10 @@ async function transformContent() {
     }
 
     const result = await convertWithWorker({ content, from, to, title, fileName: currentFileName, options });
+    const unresolvedPdfPages = result.quality?.qualityReport?.unresolvedPdfPages || result.unresolvedPdfPages || [];
+    const completionStatus = unresolvedPdfPages.length > 0
+      ? `输出已生成，但第 ${unresolvedPdfPages.join("、")} 页的可编辑文字未确认；请核对原 PDF。`
+      : "";
 
     // 注意：不在主线程重复调用 toConversionDocumentModel，因为 worker/convertAsync
     // 内部已经完整执行了 prepareConversionModel（包含 read + mappers + audit）。
@@ -1770,7 +1887,10 @@ async function transformContent() {
       downloadOutputButton.download = currentOutputFileName;
       downloadOutputButton.textContent = "下载二进制输出";
       if (result.format === "pdf") {
-        pdfPreview.src = outputUrl;
+        pdfPreview.replaceChildren();
+        const rasterizer = createBrowserPdfPageRasterizer();
+        currentOutputPdfRasterizer = rasterizer;
+        void renderPdfPages(rasterizer, result.data, pdfPreview, () => currentOutputPdfRasterizer === rasterizer, "输出 PDF");
         updateOutputPreviewVisibility(true);
       } else {
         renderBinaryOutputPreview(result);
@@ -1781,7 +1901,7 @@ async function transformContent() {
       setOutputMeta(`二进制输出已生成 · ${result.mime} · ${outputDirectoryLabel}`);
       updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
       updateActiveQueueItem({ status: "done" });
-      setStatus("浏览器端本地二进制转换成功", "success");
+      setStatus(completionStatus || "浏览器端本地二进制转换成功", completionStatus ? "warning" : "success");
       return;
     }
 
@@ -1796,7 +1916,7 @@ async function transformContent() {
     setWorkflowStep("output");
     updateConversionProgress({ stage: "complete", progress: 1, message: "转换完成" });
     updateActiveQueueItem({ status: "done" });
-    setStatus("浏览器端转换成功", "success");
+    setStatus(completionStatus || "浏览器端转换成功", completionStatus ? "warning" : "success");
   } catch (error) {
     if (error.message === "转换已取消") {
       updateConversionProgress({ stage: "canceled", progress: 0, message: "转换已取消" });

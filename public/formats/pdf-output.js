@@ -59,12 +59,42 @@ function charAdvance(char, fontSize) {
 
 // 把一组 inline segments wrap 成多行，每行仍是 segments 数组并附带宽度。
 // segment 形态: { text, style, href? }，style: { bold, italic, code, link, strike }
-function wrapSegments(segments, fontSize, maxWidth, stats) {
+function wrapSegments(segments, fontSize, maxWidth, stats, {
+  continuationWidth = maxWidth,
+  firstIndent = 0,
+  continuationIndent = firstIndent,
+  tabStops = [],
+} = {}) {
   const lines = [];
   let currentLine = [];
   let currentWidth = 0;
+  const lineLimit = () => lines.length === 0 ? maxWidth : continuationWidth;
+  const lineIndent = () => lines.length === 0 ? firstIndent : continuationIndent;
 
-  function pushSegment(text, style, href) {
+  function nextTabStop(position) {
+    const explicit = tabStops.find((stop) => stop.position > position + 0.1);
+    return explicit ?? { position: (Math.floor(position / 36) + 1) * 36, alignment: "left" };
+  }
+
+  function measureFollowingField(segmentIndex, firstChars, startIndex) {
+    let width = 0;
+    let beforeDecimal = null;
+    for (let index = segmentIndex; index < segments.length; index += 1) {
+      const chars = index === segmentIndex
+        ? firstChars.slice(startIndex)
+        : [...sanitizeGb1Text(segments[index].text).text];
+      for (const char of chars) {
+        if (char === "\t" || char === "\n") {
+          return { width, beforeDecimal: beforeDecimal ?? width };
+        }
+        if ((char === "." || char === ",") && beforeDecimal === null) beforeDecimal = width;
+        width += charAdvance(char, fontSize);
+      }
+    }
+    return { width, beforeDecimal: beforeDecimal ?? width };
+  }
+
+  function pushSegment(text, style, href, segmentIndex) {
     if (!text) return;
     // issue #105/#107: 字符降级为 Adobe-GB1 覆盖内字符
     const { text: sanitized, dropped } = sanitizeGb1Text(text);
@@ -75,7 +105,9 @@ function wrapSegments(segments, fontSize, maxWidth, stats) {
     }
     let buffer = "";
     let bufferWidth = 0;
-    for (const char of sanitized) {
+    const chars = [...sanitized];
+    for (let charIndex = 0; charIndex < chars.length; charIndex += 1) {
+      const char = chars[charIndex];
       if (char === "\n") {
         if (buffer) {
           currentLine.push({ text: buffer, style, href, width: bufferWidth });
@@ -88,8 +120,36 @@ function wrapSegments(segments, fontSize, maxWidth, stats) {
         currentWidth = 0;
         continue;
       }
+      if (char === "\t") {
+        if (buffer) {
+          currentLine.push({ text: buffer, style, href, width: bufferWidth });
+          currentWidth += bufferWidth;
+          buffer = "";
+          bufferWidth = 0;
+        }
+        let position = lineIndent() + currentWidth;
+        let stop = nextTabStop(position);
+        if (stop.position - lineIndent() > lineLimit() && currentLine.length > 0) {
+          lines.push(currentLine);
+          currentLine = [];
+          currentWidth = 0;
+          position = lineIndent();
+          stop = nextTabStop(position);
+        }
+        const field = measureFollowingField(segmentIndex, chars, charIndex + 1);
+        const alignment = stop.alignment || "left";
+        const alignedStart = alignment === "right" ? stop.position - field.width
+          : alignment === "center" ? stop.position - field.width / 2
+            : ["decimal", "num"].includes(alignment) ? stop.position - field.beforeDecimal
+              : stop.position;
+        const target = Math.max(position, alignedStart);
+        const gap = target - position;
+        currentLine.push({ text: "", width: gap, columnStart: target - lineIndent() });
+        currentWidth += gap;
+        continue;
+      }
       const advance = charAdvance(char, fontSize);
-      if (currentWidth + bufferWidth + advance > maxWidth && (currentLine.length > 0 || buffer.length > 0)) {
+      if (currentWidth + bufferWidth + advance > lineLimit() && (currentLine.length > 0 || buffer.length > 0)) {
         if (buffer) {
           currentLine.push({ text: buffer, style, href, width: bufferWidth });
           buffer = "";
@@ -108,8 +168,8 @@ function wrapSegments(segments, fontSize, maxWidth, stats) {
     }
   }
 
-  for (const segment of segments) {
-    pushSegment(segment.text, segment.style, segment.href);
+  for (const [index, segment] of segments.entries()) {
+    pushSegment(segment.text, segment.style, segment.href, index);
   }
   if (currentLine.length > 0) lines.push(currentLine);
   return lines;
@@ -206,9 +266,16 @@ function blockLayout(block) {
   const indentLeft = Number(format.indentLeft) || 0;
   const firstLine = Number(format.firstLineIndent) || 0;
   const hanging = Number(format.hangingIndent) || 0;
+  const continuationIndent = Math.max(0, layout.indent + indentLeft / 20);
   return {
     ...layout,
-    indent: layout.indent + Math.max(0, indentLeft + firstLine - hanging) / 20,
+    indent: Math.max(0, continuationIndent + (firstLine - hanging) / 20),
+    continuationIndent,
+    rightIndent: Math.max(0, Number(format.indentRight) || 0) / 20,
+    tabStops: (Array.isArray(format.tabStops) ? format.tabStops : [])
+      .filter((tab) => Number.isFinite(tab?.position) && tab.position > 0 && tab.alignment !== "clear")
+      .map((tab) => ({ position: tab.position / 20, alignment: tab.alignment || "left" }))
+      .sort((a, b) => a.position - b.position),
     alignment: ["left", "center", "right", "justify"].includes(format.alignment) ? format.alignment : "left",
     marginTop: Math.max(0, Number(format.spacingBefore) || 0) / 20,
     marginBottom: Number.isFinite(Number(format.spacingAfter)) ? Math.max(0, Number(format.spacingAfter)) / 20 : layout.marginBottom,
@@ -476,7 +543,9 @@ function buildPdfBytes(model, title, paperSize) {
   // 内部函数使用闭包访问 PAGE_WIDTH, PAGE_HEIGHT, CONTENT_WIDTH
   function blockToLinesLocal(block, stats) {
     const layout = blockLayout(block);
-    const maxWidth = CONTENT_WIDTH - layout.indent;
+    const continuationIndent = layout.continuationIndent ?? layout.indent;
+    const rightIndent = layout.rightIndent || 0;
+    const maxWidth = CONTENT_WIDTH - layout.indent - rightIndent;
 
     if (block.type === "code") {
       const text = String(block.code ?? "");
@@ -541,23 +610,21 @@ function buildPdfBytes(model, title, paperSize) {
         const cellLines = row.map((cell, cellIndex) => {
           const spanInfo = cellSpans[rowIndex]?.[cellIndex] || {};
           const columnSpan = Number.isSafeInteger(spanInfo.columnSpan) && spanInfo.columnSpan > 0 ? spanInfo.columnSpan : 1;
+          const columnStart = columnWidths.slice(0, logicalColumn).reduce((sum, width) => sum + width, 0);
           const cellWidth = columnWidths.slice(logicalColumn, logicalColumn + columnSpan).reduce((sum, width) => sum + width, 0) || CONTENT_WIDTH / cols * columnSpan;
           logicalColumn += columnSpan;
           const inlines = getCellInlineTokens(cell);
           let segments = flattenInlinesToSegments(inlines);
           if (rowIndex === 0) segments = segments.map((segment) => ({ ...segment, style: { ...segment.style, bold: true } }));
-          return { lines: wrapSegments(segments, fontSize, Math.max(8, cellWidth - 8), stats), width: cellWidth };
+          return { lines: wrapSegments(segments, fontSize, Math.max(8, cellWidth - 8), stats), columnStart };
         });
         const maxLines = Math.max(...cellLines.map((cell) => cell.lines.length), 1);
         for (let lineIdx = 0; lineIdx < maxLines; lineIdx += 1) {
           const mergedSegments = [];
-          cellLines.forEach((cell, colIdx) => {
+          cellLines.forEach((cell) => {
             const lineSegments = cell.lines[lineIdx] || [];
-            const usedWidth = lineSegments.reduce((sum, seg) => sum + seg.width, 0);
-            if (lineSegments.length > 0) mergedSegments.push(...lineSegments);
-            const pad = Math.max(0, cell.width - usedWidth);
-            if (colIdx < cellLines.length - 1) {
-              mergedSegments.push({ text: " ".repeat(Math.max(1, Math.floor(pad / (fontSize * 0.5)))), style: {}, href: "", width: pad });
+            if (lineSegments.length > 0) {
+              mergedSegments.push({ ...lineSegments[0], columnStart: cell.columnStart + 4 }, ...lineSegments.slice(1));
             }
           });
           lines.push({
@@ -589,10 +656,16 @@ function buildPdfBytes(model, title, paperSize) {
     if (layout.forceBold) segments = segments.map((seg) => ({ ...seg, style: { ...(seg.style || {}), bold: true } }));
     if (layout.forceItalic) segments = segments.map((seg) => ({ ...seg, style: { ...(seg.style || {}), italic: true } }));
     segments = autoLinkifySegments(segments);
-    const wrapped = wrapSegments(segments, layout.fontSize, maxWidth, stats);
+    const wrapped = wrapSegments(segments, layout.fontSize, maxWidth, stats, {
+      continuationWidth: CONTENT_WIDTH - continuationIndent - rightIndent,
+      firstIndent: layout.indent,
+      continuationIndent,
+      tabStops: layout.tabStops,
+    });
     return wrapped.map((lineSegments, idx) => ({
       segments: lineSegments,
-      indent: layout.indent,
+      indent: idx === 0 ? layout.indent : continuationIndent,
+      rightIndent,
       fontSize: layout.fontSize,
       leading: layout.leading,
       marginAfter: idx === wrapped.length - 1 ? layout.marginBottom : 0,
@@ -624,7 +697,7 @@ function buildPdfBytes(model, title, paperSize) {
   function renderLineLocal(line) {
     const ops = [];
     const annotations = [];
-    const contentWidth = CONTENT_WIDTH - (line.indent || 0);
+    const contentWidth = CONTENT_WIDTH - (line.indent || 0) - (line.rightIndent || 0);
     const lineWidth = line.segments.reduce((sum, seg) => sum + (seg.width != null ? seg.width : String(seg.text || "").length * line.fontSize * 0.5), 0);
     const alignOffset = line.alignment === "center" ? Math.max(0, (contentWidth - lineWidth) / 2)
       : line.alignment === "right" ? Math.max(0, contentWidth - lineWidth)
@@ -632,6 +705,9 @@ function buildPdfBytes(model, title, paperSize) {
     let cursorX = marginLeft + (line.indent || 0) + alignOffset;
 
     for (const seg of line.segments) {
+      if (Number.isFinite(seg.columnStart)) {
+        cursorX = marginLeft + (line.indent || 0) + seg.columnStart;
+      }
       if (!seg.text) continue;
       const segWidth = seg.width != null ? seg.width : seg.text.length * line.fontSize * 0.5;
       const style = seg.style || {};

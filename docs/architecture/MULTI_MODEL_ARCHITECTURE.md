@@ -253,7 +253,7 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 - `runSsimLayer({ ctx, output })`：资格判断 `ctx.from ∈ {pdf,png}` 且 `ctx.to ∈ {pdf,png}`（当前实际命中 `pdf→pdf` / `png→pdf`）；经 `defaultPageImageSource` 取源图 + 输出图像素 → `compareImages` → `qualityReport.ssim = { score, threshold, passed, width, height, pageIndex, sourceFormat, outputFormat }`；低于阈值（默认 0.85）发 info 级 `SSIM_VISUAL_DRIFT`。
 - 像素源抽象 `public/core/verification/page-image-source.js`：`defaultPageImageSource`（Node 抛 `VERIFICATION_IMAGE_SOURCE_UNAVAILABLE`；浏览器首次调用 dynamic import `page-image-source-browser.js` 用 vendor pdfjs + canvas `getImageData` 取 RGBA）+ `setPageImageSource` / `resetPageImageSource` 让测试注入 stub。
 - `format-registry.js` 抽出 `_runRepairCycle` / `_assembleQuality` 共享，`convert()`（sync）走 `_wrapWithRepairCycle`（rule-diff），`convertAsync()` 走 `_wrapWithRepairCycleAsync`（rule-diff + SSIM）。`options.repair === false` 仍短路整个验证阶段。
-- 注意：Trans2Former 的 `pdf → pdf` 走「reader 抽文本 → writer 重排版」，视觉本就不保真，SSIM 偏低是**诚实信号**，故仅发 info warning，不判失败、不阻塞。本轮渲染 stub-only（Node 无 canvas；真实 PDF/PNG 渲染 fixture + 浏览器端端到端验证留给后续）。
+- 当前 `pdf → pdf` 在完成 reader 与路由审计后复制原 PDF 字节，不重绘页面，也不新增 OCR 可检索文本层；该路径的 SSIM 应反映相同文件的视觉结果。PDF 转其他格式仍按各 reader/writer 的保真范围评估。Node 无 canvas 时视觉回环仍会跳过，不能把跳过视为视觉验证通过。
 
 ### 转换后检验三层 · OCR 回读层（P9-C.3 落地）
 
