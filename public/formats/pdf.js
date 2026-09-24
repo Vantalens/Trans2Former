@@ -1130,6 +1130,13 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
   // 加密识别（issue #104）：payload 标志或结构探测；仅在毫无可信文本时启用文案
   const encrypted = Boolean(pdfJsPayload?.encrypted)
     || (strings.length === 0 && isLikelyEncryptedPdf(source));
+  // PDF.js 成功解析出页面、但整篇没有任何文本 run：典型扫描件/图片型 PDF
+  // （也可能全为空白页）。与核心解析器的"二进制噪声不可信"区分开——后者意味着
+  // 解析失败，前者意味着文档根本没有文本层，UI 应引导 OCR 而非报"不可读"。
+  const payloadPageNumbers = (Array.isArray(pdfJsPayload?.pages) ? pdfJsPayload.pages : [])
+    .map((page) => page?.pageNumber)
+    .filter((number) => Number.isSafeInteger(number) && number > 0);
+  const pdfJsParsedButTextless = !encrypted && strings.length === 0 && payloadPageNumbers.length > 0;
   const blocks = [];
   if (strings.length > 0) {
     blocks.push(createHeading(1, strings[0]));
@@ -1146,6 +1153,13 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
         "unsupported",
         "PDF_ENCRYPTED",
         "PDF is password-protected; text extraction requires the password and was skipped."
+      ));
+    } else if (pdfJsParsedButTextless) {
+      warnings.push(createWarning(
+        "unsupported",
+        "PDF_NO_TEXT_RUNS",
+        `PDF.js parsed ${payloadPageNumbers.length} page(s) but none contain extractable text runs; the document is likely scanned or image-only (or the pages are blank). Convert with OCR enabled to recover editable text.`,
+        { pageCount: payloadPageNumbers.length, pagesWithoutText: payloadPageNumbers, ocrRecommended: true }
       ));
     } else {
       warnings.push(createWarning(
@@ -1165,7 +1179,13 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
     metadata: withWarnings({
       pdf: {
         extraction: pdfJsPayload
-          ? "pdfjs-text-content"
+          ? strings.length > 0
+            ? "pdfjs-text-content"
+            : encrypted
+              ? "no-text-encrypted"
+              : pdfJsParsedButTextless
+                ? "pdfjs-no-text"
+                : "pdfjs-text-content"
           : strings.length > 0
             ? "literal-text-operators"
             : encrypted
@@ -1177,6 +1197,7 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
         engine: pdfJsPayload?.engine || "core-mvp",
         textItemCount: strings.length,
         pageCount: pdfJsPayload?.pages?.length || undefined,
+        ...(pdfJsParsedButTextless ? { pagesWithoutText: payloadPageNumbers } : {}),
         ...(encrypted ? { encrypted: true } : {}),
         fileName,
       },
