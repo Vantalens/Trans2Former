@@ -178,9 +178,7 @@ const VIRTUAL_LIST_ITEM_LIMIT = 160;
 const EDITABLE_OUTPUT_FORMATS = new Set(["md", "html", "txt", "json", "csv", "xml"]);
 const BINARY_OUTPUT_FORMATS = new Set(["docx", "xlsx", "pptx", "epub", "pdf"]);
 const INPUT_EDITOR_MIN_HEIGHT = 144;
-const INPUT_EDITOR_MAX_HEIGHT = 420;
 const BINARY_INPUT_EDITOR_MIN_HEIGHT = 118;
-const BINARY_INPUT_EDITOR_MAX_HEIGHT = 280;
 const HISTORY_PREFERENCE_KEY = "trans2former.history.optIn";
 const MARKDOWN_PROFILE_PREFERENCE_KEY = "trans2former.markdown.profile";
 const PROGRESS_STAGE_LABELS = {
@@ -218,6 +216,8 @@ function setStatus(message, type = "info") {
   // 修复 issue #37: 只设置 data-type，颜色由 CSS 控制
   statusText.textContent = message;
   statusText.dataset.type = type;
+  // 长状态文案在芯片内省略显示，悬停可见完整内容
+  statusText.title = String(message || "");
 }
 
 function setFileMeta(message) {
@@ -1065,13 +1065,13 @@ function updateWordCount() {
 }
 
 function fitInputEditorHeight() {
+  // 编辑器在源面板内垂直铺满（flex 拉伸），这里只同步模式对应的最小高度；
+  // 不再按内容钉死像素高度，避免宽屏/高视口下面板底部出现大片空白。
   const isBinary = inputContent.classList.contains("is-binary-input");
   const minHeight = isBinary ? BINARY_INPUT_EDITOR_MIN_HEIGHT : INPUT_EDITOR_MIN_HEIGHT;
-  const maxHeight = isBinary ? BINARY_INPUT_EDITOR_MAX_HEIGHT : INPUT_EDITOR_MAX_HEIGHT;
-  inputContent.style.height = "auto";
-  const nextHeight = Math.min(maxHeight, Math.max(minHeight, inputContent.scrollHeight + 2));
-  inputContent.style.height = `${nextHeight}px`;
-  inputContent.style.overflowY = inputContent.scrollHeight > maxHeight ? "auto" : "hidden";
+  inputContent.style.minHeight = `${minHeight}px`;
+  inputContent.style.height = "";
+  inputContent.style.overflowY = "auto";
 }
 
 function isBinaryInputFormat(format = fromFormatSelect.value) {
@@ -1417,6 +1417,41 @@ function getLargePreviewSample(rawContent, mode) {
     .join("\n");
 }
 
+// 输入预览空态：清空标准化预览并给出与当前输入一致的提示，
+// 避免载入新文件/恢复工作区后残留示例文档等陈旧内容（CSS :empty + attr(data-empty-hint) 呈现）。
+function showInputPreviewHint(message = "") {
+  if (!htmlPreview) {
+    return;
+  }
+  htmlPreview.replaceChildren();
+  if (message) {
+    htmlPreview.dataset.emptyHint = message;
+  } else {
+    delete htmlPreview.dataset.emptyHint;
+  }
+}
+
+// 扫描件/图片型 PDF：PDF.js 解析出页面但整篇无文本 run（数据层 warning PDF_NO_TEXT_RUNS，
+// 或 metadata.pdf.extraction === "pdfjs-no-text"）。UI 应引导本地 OCR，而不是笼统报"不可读"。
+function getPdfNoTextRunsWarning(model) {
+  const warnings = model?.metadata?.warnings;
+  if (!Array.isArray(warnings)) {
+    return null;
+  }
+  return warnings.find((warning) => warning?.code === "PDF_NO_TEXT_RUNS") || null;
+}
+
+function isNoTextRunsPdfModel(model) {
+  return Boolean(getPdfNoTextRunsWarning(model)) || model?.metadata?.pdf?.extraction === "pdfjs-no-text";
+}
+
+function describeNoTextRunsPdf(model) {
+  const warning = getPdfNoTextRunsWarning(model);
+  const pageCount = Number(warning?.details?.pageCount) || Number(model?.metadata?.pdf?.pageCount) || 0;
+  const pagesText = pageCount > 0 ? `共 ${pageCount} 页，` : "";
+  return `这份 PDF ${pagesText}均无文本层，疑似扫描件/图片型——点击转换将使用本地 OCR 识别。`;
+}
+
 function renderLargeDocumentPreview(rawContent, fileName = currentFileName) {
   updateLargePreviewControls(rawContent.length);
   const mode = largePreviewModeSelect?.value || "structure";
@@ -1429,6 +1464,7 @@ function renderLargeDocumentPreview(rawContent, fileName = currentFileName) {
     `<p>当前仅渲染前 ${Math.min(model.blocks.length, LARGE_PREVIEW_BLOCK_LIMIT)} 个结构块，转换仍在 Worker 中完整执行。</p>`,
   ].join("");
   htmlPreview.innerHTML = summary + renderPreviewHtml(previewContent, fromFormatSelect.value, fileName);
+  delete htmlPreview.dataset.emptyHint;
   renderMathIn(htmlPreview);
   renderDocumentModelPanel({
     ...model,
@@ -1468,6 +1504,12 @@ function renderPreview() {
   const model = toDocumentModel(content, fromFormatSelect.value, currentFileName);
   const bodyHtml = renderPreviewHtml(content, fromFormatSelect.value, currentFileName);
   htmlPreview.innerHTML = bodyHtml;
+  if (String(bodyHtml || "").trim()) {
+    delete htmlPreview.dataset.emptyHint;
+  } else {
+    // 解析成功但没有可渲染正文（如无文本 PDF 之外的空文档），如实呈现空态而非残留旧内容
+    htmlPreview.dataset.emptyHint = "未生成可预览内容";
+  }
   if (currentInputPdfPreviewUrl) {
     URL.revokeObjectURL(currentInputPdfPreviewUrl);
     currentInputPdfPreviewUrl = "";
@@ -1481,7 +1523,9 @@ function renderPreview() {
       const notice = document.createElement("p");
       notice.textContent = model.metadata?.pdf?.encrypted
         ? "此 PDF 已加密，无法提取正文。请先解除密码后重试。"
-        : "目前未能提取可编辑正文。可在下方查看原 PDF；转换需要可提取文本或可用的 OCR。";
+        : isNoTextRunsPdfModel(model)
+          ? `${describeNoTextRunsPdf(model)}可在下方查看原 PDF。`
+          : "目前未能提取可编辑正文。可在下方查看原 PDF；转换需要可提取文本或可用的 OCR。";
       htmlPreview.prepend(notice);
     }
     const originalDataUrl = content.match(/^data:application\/pdf;base64,[A-Za-z0-9+/=]+/i)?.[0];
@@ -1562,6 +1606,8 @@ function renderPreviewWhenIdle() {
     try {
       renderPreview();
     } catch (error) {
+      // 预览渲染失败时清空残留内容（如示例文档），避免误导
+      showInputPreviewHint(`预览生成失败：${error.message}。可点击“刷新预览”重试。`);
       setStatus(error.message, "error");
     }
   });
@@ -1591,7 +1637,19 @@ async function handleInputText(rawContent, fileName = currentFileName, { renderI
   setWorkflowStep("preview");
   currentFileName = fileName;
   currentInputContent = String(rawContent ?? "");
-  inputContent.value = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName);
+  let inputDisplayText = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName);
+  if (String(fromFormatSelect.value).toLowerCase() === "pdf") {
+    // 扫描件/图片型 PDF：占位文案明确引导本地 OCR（与加密提示并列的专门分支）
+    try {
+      const inputModel = toDocumentModel(currentInputContent, fromFormatSelect.value, fileName);
+      if (isNoTextRunsPdfModel(inputModel)) {
+        inputDisplayText = describeNoTextRunsPdf(inputModel);
+      }
+    } catch {
+      // 解析失败时保留默认可读摘要
+    }
+  }
+  inputContent.value = inputDisplayText;
   syncInputEditorMode();
   fitInputEditorHeight();
   setFileMeta(fileName);
@@ -1612,6 +1670,11 @@ async function handleInputText(rawContent, fileName = currentFileName, { renderI
   } else if (renderInitialPreview) {
     renderPreviewWhenIdle();
   } else {
+    // 不自动生成初始预览时（恢复工作区/超大文件），清空旧预览并给出与输入一致的空态，
+    // 否则右侧会残留示例文档或上一个文件的内容
+    showInputPreviewHint(isBinaryInputFormat()
+      ? `${String(fromFormatSelect.value).toUpperCase()} 文件已载入，未自动生成预览。可点击“刷新预览”查看。`
+      : `已载入 ${fileName}，预览未自动生成。点击“刷新预览”查看。`);
     setStatus("大文件已载入，预览保持手动刷新以避免卡顿", "info");
   }
   scheduleWorkspaceSnapshot();

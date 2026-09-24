@@ -1,14 +1,53 @@
 /* Landing 视图样式 — Trans2Former 入口页面
-   复用 styles.css 顶部的 CSS 变量；只新增 hero/卡片/格式矩阵的动画与布局。 */
+   深色「工程控制台」美学：技术图纸式发丝线 + 等宽技术标签 + 青蓝冷色渐变。
+   变量全部定义在 .landing-view 作用域，不改 styles.css 的全局 token。 */
 
 .landing-view {
+  /* 底色层级 */
+  --l-bg: #0b0e13;
+  --l-bg-raise: #0d0f14;
+  --l-panel: #11151c;
+  --l-panel-2: #151a22;
+  /* 文字阶梯 */
+  --l-text-hi: #f4f7fa;
+  --l-text: #c3ccd6;
+  --l-text-dim: #7d8894;
+  /* 发丝线（核心材质） */
+  --l-line: rgba(255, 255, 255, 0.07);
+  --l-line-strong: rgba(255, 255, 255, 0.14);
+  /* 辅助强调（扫描光束 / 渐变文字） */
+  --l-teal: #4bf3c8;
+  --l-blue: #5b8cff;
+  /* 状态色（深色底重配，描边 + 淡底） */
+  --l-ok: #5eead4;
+  --l-ok-line: rgba(94, 234, 212, 0.38);
+  --l-ok-bg: rgba(94, 234, 212, 0.09);
+  --l-warn: #fbbf24;
+  --l-warn-line: rgba(251, 191, 36, 0.36);
+  --l-warn-bg: rgba(251, 191, 36, 0.08);
+  --l-gen: #7ea4ff;
+  --l-gen-line: rgba(126, 164, 255, 0.42);
+  --l-gen-bg: rgba(126, 164, 255, 0.1);
+  --l-stop: #fb7185;
+  --l-stop-line: rgba(251, 113, 133, 0.4);
+  --l-stop-bg: rgba(251, 113, 133, 0.09);
+  /* 字体 */
+  --l-font-ui: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --l-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  /* 动效 */
+  --l-ease: cubic-bezier(0.075, 0.82, 0.165, 1);
+  /* 几何（扫描光束 / 图纸网格） */
+  --l-beam-w: 64px;
+  --l-doc-w: 34px;
+  --l-doc-h: 44px;
+  --l-grid: 56px;
+
   display: block;
   width: 100%;
-  background:
-    radial-gradient(1200px 600px at 20% -10%, rgba(13, 148, 136, 0.18), transparent 60%),
-    radial-gradient(900px 500px at 90% 10%, rgba(15, 118, 110, 0.14), transparent 60%),
-    linear-gradient(180deg, #f8fafc 0%, #eef2f7 60%, #e9eef5 100%);
-  color: var(--text);
+  color-scheme: dark;
+  background: var(--l-bg);
+  color: var(--l-text);
+  font-family: var(--l-font-ui);
   overflow-y: auto;
 }
 
@@ -20,20 +59,24 @@
 
 .landing-section-heading {
   margin-bottom: var(--space-8);
-  max-width: 720px;
+  max-width: 760px;
 }
 
 .landing-section-eyebrow {
   display: inline-block;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--accent-soft);
-  color: var(--accent-strong);
+  margin-bottom: var(--space-4);
+  font-family: var(--l-mono);
   font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 500;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  margin-bottom: var(--space-3);
+  color: var(--l-teal);
+}
+
+.landing-section-eyebrow::before {
+  content: "//";
+  margin-right: var(--space-2);
+  color: var(--l-text-dim);
 }
 
 .landing-section-heading h3 {
@@ -42,12 +85,12 @@
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--text);
+  color: var(--l-text-hi);
 }
 
 .landing-section-sub {
   margin-top: var(--space-3);
-  color: var(--muted);
+  color: var(--l-text-dim);
   font-size: var(--text-base);
   line-height: 1.7;
 }
@@ -62,79 +105,100 @@
 /* Hero ----------------------------------------------------------- */
 .landing-hero {
   position: relative;
-  /* 垂直节奏收紧：96/64 → 72/48，视觉重心上移，首屏留白减少 */
-  padding: calc(var(--space-8) * 2.25) var(--space-6) calc(var(--space-8) * 1.5);
   max-width: 1200px;
   margin: 0 auto;
+  padding: calc(var(--space-8) * 1.75) var(--space-6) calc(var(--space-8) * 1.5);
   overflow: hidden;
 }
 
-.landing-hero-glow {
+/* 图纸网格底纹（向四周淡出，避免满屏网点） */
+.landing-hero-grid {
   position: absolute;
-  inset: -20% -10% auto -10%;
-  height: 480px;
-  background:
-    radial-gradient(closest-side, rgba(13, 148, 136, 0.35), transparent 70%),
-    radial-gradient(closest-side at 70% 50%, rgba(94, 234, 212, 0.32), transparent 70%);
-  filter: blur(80px);
-  opacity: 0.85;
-  z-index: 0;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: var(--l-grid) var(--l-grid);
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 30% 0%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(ellipse 90% 80% at 30% 0%, #000 30%, transparent 78%);
   pointer-events: none;
-  animation: landingHeroGlow 18s ease-in-out infinite alternate;
+}
+
+/* 顶部 meta 行：发丝线夹住的等宽技术参数 */
+.landing-hero-meta {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-6);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--l-line);
+  border-bottom: 1px solid var(--l-line);
+  font-family: var(--l-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--l-text-dim);
+}
+
+.landing-hero-meta-item.is-live {
+  color: var(--l-teal);
+}
+
+.landing-hero-meta-item.is-live::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--l-teal);
+  vertical-align: 1px;
 }
 
 .landing-hero-inner {
   position: relative;
-  z-index: 1;
-  text-align: left;
-  max-width: 820px;
-}
-
-.landing-hero-eyebrow {
-  display: inline-block;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  margin-bottom: var(--space-4);
+  max-width: 880px;
+  padding-top: calc(var(--space-8) * 1.5);
 }
 
 .landing-hero-title {
   margin: 0;
-  font-size: clamp(34px, 4.6vw, 56px);
-  line-height: 1.12;
+  font-size: clamp(2.4rem, 5.6vw, 3.8rem);
+  line-height: 1.08;
   font-weight: 800;
-  color: #0b1220;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  color: var(--l-text-hi);
 }
 
 .landing-hero-accent {
-  /* 修复 issue #43: 使用更深的青蓝色以满足 WCAG 3:1 大文本对比度要求 */
-  /* 原: #38bdf8 vs #f8fafc ≈ 2.0:1, #14b8a6 ≈ 2.5:1 (不达标) */
-  /* 新: #0e7490 vs #f8fafc ≈ 4.5:1, #0891b2 ≈ 3.8:1 (达标) */
-  background: linear-gradient(120deg, #0d9488 0%, #0891b2 45%, #0e7490 100%);
+  background: linear-gradient(105deg, var(--l-teal) 0%, var(--l-blue) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  background-size: 200% 100%;
-  animation: landingGradientShift 8s ease-in-out infinite alternate;
 }
 
 .landing-hero-sub {
-  margin: var(--space-5) 0 var(--space-6);
-  font-size: var(--text-lg);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-6) 0 var(--space-7);
+  font-family: var(--l-mono);
+  font-size: var(--text-sm);
   line-height: 1.7;
-  color: var(--muted-strong);
-  max-width: 720px;
-  text-wrap: balance;
+  letter-spacing: 0.02em;
+  color: var(--l-text-dim);
 }
 
-/* 副标题按语义分组整体换行，避免「处理阶段禁联网」被拆开留下单字孤行 */
 .landing-hero-sub .keep-together {
   white-space: nowrap;
+}
+
+.landing-hero-sep {
+  color: var(--l-teal);
+  opacity: 0.65;
 }
 
 .landing-hero-actions {
@@ -142,158 +206,340 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
-  margin-bottom: var(--space-6);
 }
 
+/* landing 内主按钮改为 pill，渐变仍由全局 .btn-gradient 提供 */
+.landing-view .primary-button.btn-gradient.btn-lg {
+  border-radius: var(--radius-full);
+  padding-left: calc(var(--space-6) + var(--space-1));
+  padding-right: calc(var(--space-6) + var(--space-1));
+  box-shadow: 0 0 0 1px rgba(75, 243, 200, 0.18), 0 8px 28px -12px rgba(13, 148, 136, 0.55);
+}
 
 .landing-cta-ghost {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-3) var(--space-6);
-  border-radius: var(--radius-lg);
-  border: 1px solid rgba(15, 118, 110, 0.25);
-  color: var(--accent-strong);
-  background: rgba(255, 255, 255, 0.55);
+  min-height: 44px;
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--l-line-strong);
+  color: var(--l-text);
+  background: transparent;
   font-size: var(--text-sm);
   font-weight: 600;
   text-decoration: none;
-  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+  transition: border-color var(--duration-base) var(--l-ease), background var(--duration-base) var(--l-ease), color var(--duration-base) var(--l-ease);
 }
 
 .landing-cta-ghost:hover {
-  background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(15, 118, 110, 0.45);
+  border-color: rgba(75, 243, 200, 0.45);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--l-text-hi);
 }
 
 .landing-cta-ghost:focus-visible {
-  outline: 3px solid var(--focus);
+  outline: 3px solid rgba(75, 243, 200, 0.35);
   outline-offset: 3px;
 }
 
+/* 底部徽章行：发丝线分隔的等宽小字 */
 .landing-hero-badges {
+  position: relative;
   list-style: none;
-  padding: 0;
-  margin: 0;
+  margin: calc(var(--space-8) * 1.5) 0 0;
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--l-line);
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-}
-
-.landing-hero-badges li {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(15, 118, 110, 0.2);
-  color: var(--text);
+  gap: var(--space-2) var(--space-5);
+  font-family: var(--l-mono);
   font-size: var(--text-xs);
-  font-weight: 500;
-  backdrop-filter: blur(8px);
-  transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease;
+  letter-spacing: 0.06em;
+  color: var(--l-text-dim);
 }
 
-.landing-hero-badges li:hover {
-  border-color: rgba(15, 118, 110, 0.42);
-  background: rgba(255, 255, 255, 0.92);
+.landing-hero-badges li:not(:last-child)::after {
+  content: "//";
+  margin-left: var(--space-5);
+  color: rgba(75, 243, 200, 0.5);
 }
 
 /* Features -------------------------------------------------------- */
 .landing-feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
 .landing-feature-card {
   position: relative;
   padding: var(--space-6);
-  border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: 0 16px 40px -32px rgba(15, 23, 42, 0.25);
-  transition: transform var(--duration-base) ease, box-shadow var(--duration-base) ease, border-color var(--duration-base) ease;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--l-line);
+  background: linear-gradient(180deg, var(--l-panel-2), var(--l-panel));
+  transition: border-color var(--duration-base) var(--l-ease), background var(--duration-base) var(--l-ease);
 }
 
 .landing-feature-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 22px 46px -28px rgba(15, 118, 110, 0.3);
-  border-color: rgba(15, 118, 110, 0.45);
+  border-color: rgba(75, 243, 200, 0.28);
+  background: linear-gradient(180deg, #171d26, #12161e);
 }
 
-.landing-feature-card:hover .landing-feature-icon {
-  transform: translateY(-2px);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.22), rgba(56, 189, 248, 0.26));
+/* Repair Engine 宽卡：跨 2 列 */
+.landing-feature-card.is-wide {
+  grid-column: span 2;
+}
+
+.landing-feature-tag {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  font-family: var(--l-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  color: var(--l-text-dim);
+  opacity: 0.75;
 }
 
 .landing-feature-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(56, 189, 248, 0.18));
-  color: var(--accent-strong);
-  margin-bottom: var(--space-4);
-  transition: transform var(--duration-base) ease, background var(--duration-base) ease;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--l-line-strong);
+  color: var(--l-teal);
+  margin-bottom: var(--space-5);
+  transition: border-color var(--duration-base) var(--l-ease), color var(--duration-base) var(--l-ease);
+}
+
+.landing-feature-card:hover .landing-feature-icon {
+  border-color: rgba(75, 243, 200, 0.4);
 }
 
 .landing-feature-card h4 {
   margin: 0 0 var(--space-2);
   font-size: var(--text-lg);
-  color: var(--text);
+  color: var(--l-text-hi);
   font-weight: 700;
 }
 
 .landing-feature-card p {
   margin: 0;
   font-size: var(--text-sm);
-  line-height: 1.7;
-  color: var(--muted);
+  line-height: 1.75;
+  color: var(--l-text-dim);
 }
 
-/* Formats matrix --------------------------------------------------- */
+/* Registry 快照面板：虚线描边的终端读数 */
+.landing-feature-readout {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--l-line-strong);
+  background: rgba(255, 255, 255, 0.015);
+  font-family: var(--l-mono);
+}
+
+.landing-readout-title {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  color: var(--l-teal);
+}
+
+.landing-readout-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+}
+
+.landing-readout-key {
+  color: var(--l-text-dim);
+}
+
+.landing-readout-leader {
+  flex: 1 1 auto;
+  border-bottom: 1px dotted var(--l-line-strong);
+  transform: translateY(-3px);
+}
+
+.landing-readout-value {
+  color: var(--l-text-hi);
+  font-weight: 700;
+}
+
+/* 签名动画：文档扫描光束 ----------------------------------------------
+   一列横向循环滚动的格式文档条带 + 竖直扫描光束（青→蓝渐变）。
+   默认 paused；卡片 hover / focus-within / reveal 进入视口后 running。
+   prefers-reduced-motion 下完全静止。 */
+.landing-scan {
+  position: relative;
+  margin-top: var(--space-5);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--l-line);
+  border-bottom: 1px solid var(--l-line);
+  overflow: hidden;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 100% 11px;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+
+.landing-scan-track {
+  display: flex;
+  width: max-content;
+  animation: landingScanMarquee 46s linear infinite;
+  animation-play-state: paused;
+}
+
+.landing-scan-set {
+  display: flex;
+  gap: var(--space-4);
+  padding-right: var(--space-4);
+}
+
+.landing-scan-doc {
+  width: var(--l-doc-w);
+  height: var(--l-doc-h);
+  color: rgba(195, 204, 214, 0.5);
+  flex: 0 0 auto;
+}
+
+.landing-scan-doc-label {
+  font-family: var(--l-mono);
+  font-size: 7px;
+  letter-spacing: 0.04em;
+  fill: currentColor;
+}
+
+.landing-scan-beam {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--l-beam-w);
+  margin-left: calc(var(--l-beam-w) / -2);
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(75, 243, 200, 0.14) 32%,
+    rgba(91, 140, 255, 0.32) 50%,
+    rgba(75, 243, 200, 0.14) 68%,
+    transparent 100%);
+  filter: blur(2px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: landingBeamSway 7s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+
+/* 光束核心亮线 */
+.landing-scan-beam::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(180deg,
+    transparent,
+    rgba(91, 140, 255, 0.85) 35%,
+    rgba(75, 243, 200, 0.85) 65%,
+    transparent);
+}
+
+/* 光束辉光 */
+.landing-scan-beam::after {
+  content: "";
+  position: absolute;
+  inset: -12px -28px;
+  background: radial-gradient(closest-side, rgba(91, 140, 255, 0.2), transparent 72%);
+  filter: blur(8px);
+}
+
+.landing-feature-card.is-revealed .landing-scan-track,
+.landing-feature-card.is-revealed .landing-scan-beam,
+.landing-feature-card:hover .landing-scan-track,
+.landing-feature-card:hover .landing-scan-beam,
+.landing-feature-card:focus-within .landing-scan-track,
+.landing-feature-card:focus-within .landing-scan-beam {
+  animation-play-state: running;
+}
+
+@keyframes landingScanMarquee {
+  to { transform: translateX(-50%); }
+}
+
+@keyframes landingBeamSway {
+  from { transform: translateX(-26px); }
+  to { transform: translateX(26px); }
+}
+
+/* Formats matrix：技术数据行 ---------------------------------------- */
+.landing-format-table {
+  border-bottom: 1px solid var(--l-line);
+}
+
+.landing-format-head {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-2);
+  border-top: 1px solid var(--l-line);
+  border-bottom: 1px solid var(--l-line);
+  font-family: var(--l-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  color: var(--l-text-dim);
+}
+
 .landing-format-grid {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
 .landing-format-row {
   display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: var(--space-4);
+  grid-template-columns: 170px 1fr;
+  gap: var(--space-5);
   align-items: center;
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  transition: background var(--duration-base) ease, border-color var(--duration-base) ease, box-shadow var(--duration-base) ease, transform var(--duration-base) ease;
+  padding: var(--space-4) var(--space-2);
+  border-bottom: 1px solid var(--l-line);
+  transition: background var(--duration-base) var(--l-ease);
+}
+
+.landing-format-row:last-child {
+  border-bottom: 0;
 }
 
 .landing-format-row:hover {
-  background: #ffffff;
-  border-color: rgba(15, 118, 110, 0.35);
-  box-shadow: 0 12px 30px -22px rgba(15, 118, 110, 0.4);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .landing-format-input {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.landing-format-name {
-  font-weight: 700;
-  font-size: var(--text-base);
-  color: var(--text);
+  gap: calc(var(--space-1) / 2);
 }
 
 .landing-format-key {
-  font-size: 11px;
-  color: var(--muted);
-  font-family: var(--mono, ui-monospace, "SFMono-Regular", "Consolas", monospace);
-  letter-spacing: 0.04em;
+  font-family: var(--l-mono);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: 0.08em;
+  color: var(--l-text-hi);
+}
+
+.landing-format-name {
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  color: var(--l-text-dim);
 }
 
 .landing-route-chips {
@@ -302,97 +548,122 @@
   margin: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .landing-route-chip {
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   font-weight: 600;
-  font-family: var(--mono, ui-monospace, "SFMono-Regular", "Consolas", monospace);
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  border: 1px solid transparent;
+  letter-spacing: 0.06em;
+  font-family: var(--l-mono);
+  text-transform: uppercase;
+  color: var(--l-text);
+  border: 1px solid var(--l-line-strong);
+  background: rgba(255, 255, 255, 0.02);
 }
 
-.landing-route-chip.is-recommended { background: var(--color-success-soft); color: var(--color-success); }
-.landing-route-chip.is-degraded { background: var(--color-warning-soft); color: var(--color-warning); }
-.landing-route-chip.is-generated { background: rgba(99, 102, 241, 0.14); color: #4338ca; }
-.landing-route-chip.is-restricted { background: var(--danger-soft); color: var(--danger); }
+.landing-route-chip.is-recommended { color: var(--l-ok); border-color: var(--l-ok-line); background: var(--l-ok-bg); }
+.landing-route-chip.is-degraded { color: var(--l-warn); border-color: var(--l-warn-line); background: var(--l-warn-bg); }
+.landing-route-chip.is-generated { color: var(--l-gen); border-color: var(--l-gen-line); background: var(--l-gen-bg); }
+.landing-route-chip.is-restricted { color: var(--l-stop); border-color: var(--l-stop-line); background: var(--l-stop-bg); }
 
 .landing-format-legend {
-  margin-top: 20px;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-2);
   align-items: center;
-  justify-content: center;
+  padding: var(--space-4) var(--space-2);
 }
 
-/* Workflow -------------------------------------------------------- */
+.landing-format-legend-label {
+  margin-right: var(--space-2);
+  font-family: var(--l-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  color: var(--l-text-dim);
+}
+
+/* Workflow：横向轨道 + 等宽序号 + 发丝连接线 ------------------------- */
 .landing-workflow-track {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-5);
 }
 
 .landing-workflow-step {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  transition: transform var(--duration-base) ease, box-shadow var(--duration-base) ease, border-color var(--duration-base) ease;
+  position: relative;
+  padding-top: var(--space-6);
 }
 
-.landing-workflow-step:hover {
-  transform: translateY(-2px);
-  border-color: rgba(15, 118, 110, 0.35);
-  box-shadow: 0 14px 30px -24px rgba(15, 118, 110, 0.4);
+/* 发丝连接线 */
+.landing-workflow-step::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: calc(var(--space-3) + 2px);
+  right: calc(var(--space-5) * -1);
+  height: 1px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.landing-workflow-step:last-child::before {
+  right: 0;
+}
+
+/* 轨道节点 */
+.landing-workflow-step::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--l-teal);
+  background: var(--l-bg);
 }
 
 .landing-workflow-index {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #0d9488, #38bdf8);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  margin-bottom: var(--space-2);
+  font-family: var(--l-mono);
+  font-size: var(--text-2xl);
   font-weight: 700;
-  font-size: var(--text-base);
+  letter-spacing: 0.04em;
+  background: linear-gradient(120deg, var(--l-teal), var(--l-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .landing-workflow-step strong {
   display: block;
   font-size: var(--text-base);
-  color: var(--text);
+  color: var(--l-text-hi);
 }
 
 .landing-workflow-step p {
   margin: var(--space-1) 0 0;
   font-size: var(--text-sm);
-  line-height: 1.6;
-  color: var(--muted);
+  line-height: 1.65;
+  color: var(--l-text-dim);
 }
 
-/* CTA ------------------------------------------------------------- */
+/* CTA：深色面板 + 顶部品牌渐变细条 + 渐变文字标题 -------------------- */
 .landing-cta {
   position: relative;
   overflow: hidden;
   text-align: center;
-  padding: calc(var(--space-8) * 2) var(--space-6) calc(var(--space-8) * 2.5);
-  background: linear-gradient(180deg, rgba(15, 118, 110, 0.05) 0%, rgba(15, 118, 110, 0.12) 100%);
-  border: 1px solid rgba(15, 118, 110, 0.16);
+  padding: calc(var(--space-8) * 2) var(--space-6) calc(var(--space-8) * 2.25);
+  background: linear-gradient(180deg, var(--l-panel-2), var(--l-panel));
+  border: 1px solid var(--l-line);
   border-radius: var(--radius-xl);
-  margin: var(--space-8) auto calc(var(--space-8) * 2);
+  margin: var(--space-8) auto calc(var(--space-8) * 1.5);
   max-width: 1100px;
 }
 
@@ -405,10 +676,29 @@
   background: var(--btn-gradient-primary);
 }
 
+.landing-cta-eyebrow {
+  display: inline-block;
+  margin-bottom: var(--space-4);
+  font-family: var(--l-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--l-text-dim);
+}
+
 .landing-cta h3 {
   margin: 0 0 var(--space-3);
-  font-size: var(--text-2xl);
-  color: var(--text);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--l-text-hi);
+}
+
+.landing-cta-accent {
+  background: linear-gradient(105deg, var(--l-teal), var(--l-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .landing-cta p {
@@ -416,21 +706,41 @@
   max-width: 640px;
   font-size: var(--text-base);
   line-height: 1.7;
-  color: var(--muted);
+  color: var(--l-text-dim);
 }
 
+/* Footer ----------------------------------------------------------- */
+.landing-footer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-6) calc(var(--space-8) * 1.75);
+}
+
+.landing-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--l-line);
+  font-family: var(--l-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--l-text-dim);
+}
 
 /* Scroll reveal --------------------------------------------------- */
 /* reveal-armed 门控：只有 JS 成功武装 IntersectionObserver 后，
    未 reveal 的区块才会被隐藏；fullPage 截图、打印、JS 未执行等
    场景下所有内容默认可见。 */
 .reveal-on-scroll {
-  transition: opacity var(--duration-slow) ease, transform var(--duration-slow) ease;
+  transition: opacity var(--duration-slow) var(--l-ease), transform var(--duration-slow) var(--l-ease);
 }
 
 .reveal-armed .reveal-on-scroll:not(.is-revealed) {
   opacity: 0;
-  transform: translateY(16px);
+  transform: translateY(8px);
 }
 
 .reveal-on-scroll.is-revealed {
@@ -446,20 +756,9 @@
   }
 }
 
-/* Animations ------------------------------------------------------ */
-@keyframes landingGradientShift {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 100% 50%; }
-}
-
-@keyframes landingHeroGlow {
-  0% { transform: translate3d(-3%, 0, 0) scale(1); opacity: 0.7; }
-  100% { transform: translate3d(3%, 2%, 0) scale(1.06); opacity: 0.95; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .landing-hero-glow,
-  .landing-hero-accent,
+  .landing-scan-track,
+  .landing-scan-beam,
   .reveal-on-scroll {
     animation: none !important;
     transition: none !important;
@@ -472,15 +771,40 @@
 }
 
 /* Responsive ------------------------------------------------------ */
-@media (max-width: 820px) {
+@media (max-width: 960px) {
+  .landing-feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .landing-feature-card.is-wide {
+    grid-column: span 2;
+  }
+  .landing-feature-readout {
+    grid-column: span 2;
+  }
+  .landing-workflow-track {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: var(--space-7);
+  }
+}
+
+@media (max-width: 640px) {
   .landing-section { padding: calc(var(--space-8) * 1.5) var(--space-4); }
-  .landing-hero { padding: calc(var(--space-8) * 1.75) var(--space-4) calc(var(--space-8) * 1.25); }
-  .landing-section-heading h3 { font-size: 26px; }
-  .landing-format-row { grid-template-columns: 1fr; gap: var(--space-2); }
+  .landing-hero { padding: var(--space-7) var(--space-4) calc(var(--space-8) * 1.25); }
+  .landing-hero-inner { padding-top: var(--space-7); }
+  .landing-hero-title { font-size: clamp(1.75rem, 8vw, 2.2rem); }
+  .landing-section-heading h3 { font-size: var(--text-2xl); }
+  .landing-feature-grid { grid-template-columns: 1fr; }
+  .landing-feature-card.is-wide,
+  .landing-feature-readout { grid-column: span 1; }
+  .landing-format-head { display: none; }
+  .landing-format-row { grid-template-columns: 1fr; gap: var(--space-3); }
+  .landing-workflow-track { grid-template-columns: 1fr; row-gap: var(--space-6); }
+  .landing-workflow-step::before { right: 0; }
   .landing-cta {
-    margin: var(--space-6) var(--space-3) calc(var(--space-8) * 1.75);
+    margin: var(--space-6) var(--space-3) calc(var(--space-8) * 1.25);
     padding: calc(var(--space-8) * 1.5) var(--space-4) calc(var(--space-8) * 1.75);
   }
+  .landing-footer { padding: 0 var(--space-4) calc(var(--space-8) * 1.5); }
 }
 
 /* 锚点跳转（如「查看路径矩阵」）时给目标区块留出顶部呼吸空间 */
