@@ -18,6 +18,7 @@
 - **Issue #216 markdown 剥离不再吞纯下划线串**：下划线强调正则增加守卫，PDF 签名线（如 `Date: ____________`）不再被回溯匹配逐轮缩减，影响 txt/json/csv/xlsx/pptx 输出；真实 `__强调__` 标记仍正常剥离。
 - **Issue #216 PDF.js 提取的 Buffer 输入安全**：Node Buffer 先复制为独立 `Uint8Array` 再交给 PDF.js，避免 transfer 共享内存池导致无关数据被 detach。
 - **Issue #216 DOCX 多节页面设置与旧式横向合并保留**：段落级 `w:sectPr`（节结束标记）解析为 `paragraph` / `heading` 块的 `sectionBreak.pageLayout` 并在写出时还原，body 末尾节仍走 `metadata.ooxml.pageLayout`，多节文档往返后各节页面几何均保留；含分栏、页眉页脚引用、首页不同等暂不支持的节属性时发出 `DOCX_SECTION_PROPS_PARTIAL`。旧式 `w:hMerge`（restart + 连续 continue）映射为 `cellSpans` 的 `columnSpan`，能完整映射时不再发 `DOCX_TABLE_MERGE_APPROXIMATED`；与 `gridSpan` 混用或结构无法干净映射时仍发出该警告。新增多节往返、hMerge 往返与混用冲突回归测试。
+- **Issue #216 PDF 多余空格（加字距碎词与 CJK 伪空格）**：item 拼接层 `shouldSeparatePdfItems` 词间空格阈值从 0.12em 提到 0.22em（近似真实空格宽度 0.25em），加字距排版的字形间隙不再被当成词间空格（"E x p a n d e d" 式碎词）；新增 `collapseCjkFakeSpaces` 收拢 pdf.js addFakeSpaces 对 0.102em–0.6em 字间位移插入的伪空格——连续 ≥3 个单字 CJK 以单空格相连的链收拢去空格（"加 字 距 版"→"加字距版"），两个多字 CJK 词之间的对齐空格保留。拉丁字母加字距碎词的词边界在 pdf.js 合并 item 时已丢失，无法可靠还原，保留原样（上游启发式限制）。新增加字距字形链不拆词、CJK 伪空格收拢、多字词空格保留回归断言。
 
 ## [2.4.0] - 2026-07-17
 
