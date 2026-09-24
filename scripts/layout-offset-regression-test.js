@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { analyzePageLayout } from "../public/formats/pdf.js";
+import { analyzePageLayout, collapseCjkFakeSpaces } from "../public/formats/pdf.js";
 import { readText, writeText } from "../public/formats/plain-text.js";
 import { readDocx } from "../public/formats/docx.js";
 import { writeDocx } from "../public/formats/docx-output.js";
@@ -31,6 +31,25 @@ const measuredEnglish = analyzePageLayout([
   { str: "Star", x: 39, y: 500, width: 24, height: 12, hasPosition: true, hasHorizontalGeometry: true },
 ]);
 assert.equal(measuredEnglish.map((block) => block.text).join(" "), "North Star");
+
+// Letter-spaced glyphs (expanded tracking, ~0.18em gaps) must not be split into
+// space-separated letters: only a real word-space-width gap inserts a space.
+const trackingItems = [];
+let trackingX = 60;
+for (const ch of "Expanded") {
+  trackingItems.push({ str: ch, x: trackingX, y: 500, width: 6, height: 11, hasPosition: true, hasHorizontalGeometry: true });
+  trackingX += 8; // 6pt glyph advance + 2pt tracking (0.18em)
+}
+const trackingBlocks = analyzePageLayout(trackingItems);
+assert.equal(trackingBlocks[0].text, "Expanded");
+
+// pdf.js inserts fake ASCII spaces for 0.102em-0.6em inter-glyph gaps, shredding
+// letter-spaced CJK into "加 字 距 版"; chains of >=3 single CJK chars joined by
+// single spaces are always fake tracking and must be collapsed, while a single
+// space between multi-char CJK words (form alignment, e.g. "逐词 绘制") is kept.
+assert.equal(collapseCjkFakeSpaces("加 字 距 版"), "加字距版");
+assert.equal(collapseCjkFakeSpaces("逐词 绘制"), "逐词 绘制");
+assert.equal(collapseCjkFakeSpaces("Normal spacing line"), "Normal spacing line");
 
 // A repeated two-column page is read down the left column, then down the right.
 const columnItems = [

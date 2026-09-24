@@ -376,12 +376,16 @@ function shouldSeparatePdfItems(previous, current) {
   // PDF.js often returns one text item per glyph/word and omits literal spaces.
   // Only insert one when actual horizontal geometry proves a word gap. Character
   // classes alone are not evidence of whitespace: they split English words and IDs.
+  // The gap threshold approximates a real space advance (~0.25em): letter-spaced
+  // tracking (usually <=0.2em) must not become a space between every glyph — that
+  // turned "Expanded tracking" into "E x p a n d e d" (issue #216 续批). Residual
+  // boundary: tracking wider than ~0.22em is indistinguishable from a word space.
   if (previous?.hasHorizontalGeometry && current?.hasPosition) {
     const previousEnd = Number(previous.x) + Number(previous.width);
     const currentStart = Number(current.x);
     const gap = currentStart - previousEnd;
     const height = Math.max(Number(previous.height) || 0, Number(current.height) || 0, 12);
-    return gap > Math.max(1.5, height * 0.12);
+    return gap > Math.max(1.5, height * 0.22);
   }
   return false;
 }
@@ -425,6 +429,19 @@ function joinPdfItems(items, separator = " ") {
     previous = item;
   }
   return output.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").trim();
+}
+
+// pdf.js 的 addFakeSpaces 对 0.102em-0.6em 的字间位移一律插入 ASCII 伪空格：
+// 加字距排版的文本每个字形都命中该区间，CJK 变成“加 字 距 版”式碎字。
+// 收拢规则：连续 ≥3 个单字 CJK 以单空格相连必为加字距碎字，去掉内部空格；
+// 两个多字词之间的空格可能是表单/标签的对齐间距（如“逐词 绘制”），必须保留。
+// 拉丁字母加字距碎词（"E x p a n d e d"）的词边界在 pdf.js 合并 item 时已丢失，
+// 无法可靠还原——保留原样，属上游启发式限制（issue #216 续批）。
+const CJK_CHAR_CLASS = "\u3400-\u4DBF\u4E00-\u9FFF\uFA00-\uFAFF";
+
+export function collapseCjkFakeSpaces(text) {
+  const run = new RegExp(`(?:[${CJK_CHAR_CLASS}] ){2,}[${CJK_CHAR_CLASS}]`, "g");
+  return String(text).replace(run, (match) => match.replaceAll(" ", ""));
 }
 
 async function loadPdfJs() {
@@ -488,7 +505,7 @@ async function extractTextWithPdfJs(content) {
       const items = (textContent.items || [])
         .filter((item) => typeof item.str === "string" && item.str.length > 0)
         .map((item) => ({
-          str: item.str,
+          str: collapseCjkFakeSpaces(item.str),
           x: item.transform?.[4] ?? 0,
           y: item.transform?.[5] ?? 0,
           width: Number(item.width) || 0,
@@ -504,7 +521,7 @@ async function extractTextWithPdfJs(content) {
         : "";
       // P8-M4：同时收集 FixedLayoutModel 的 textRuns + page size，供 model.fixedLayout 使用。
       const textRuns = items.map((item) => ({
-        text: item.str,
+        text: collapseCjkFakeSpaces(item.str),
         bbox: { x: item.x, y: item.y, w: item.width, h: item.height },
         fontName: item.fontName,
         fontSize: item.height,
