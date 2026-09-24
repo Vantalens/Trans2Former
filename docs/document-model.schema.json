@@ -30,7 +30,8 @@
               "warnings": { "$ref": "#/$defs/warnings" },
               "level": { "type": "integer", "minimum": 1, "maximum": 6 },
               "text": { "type": "string" },
-              "paragraphFormat": { "$ref": "#/$defs/paragraphFormat" }
+              "paragraphFormat": { "$ref": "#/$defs/paragraphFormat" },
+              "sectionBreak": { "$ref": "#/$defs/sectionBreak" }
             }
           },
           {
@@ -43,7 +44,8 @@
               "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
               "warnings": { "$ref": "#/$defs/warnings" },
               "text": { "type": "string" },
-              "paragraphFormat": { "$ref": "#/$defs/paragraphFormat" }
+              "paragraphFormat": { "$ref": "#/$defs/paragraphFormat" },
+              "sectionBreak": { "$ref": "#/$defs/sectionBreak" }
             }
           },
           {
@@ -228,7 +230,14 @@
       "properties": {
         "warnings": { "$ref": "#/$defs/warnings" },
         "conversion": { "type": "object" },
-        "qualityReport": { "type": "object" }
+        "qualityReport": { "type": "object" },
+        "ooxml": {
+          "type": "object",
+          "properties": {
+            "pageLayout": { "$ref": "#/$defs/pageLayout" }
+          },
+          "additionalProperties": true
+        }
       },
       "additionalProperties": true
     }
@@ -259,6 +268,30 @@
             }
           }
         }
+      }
+    },
+    "pageLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "orientation": { "enum": ["portrait", "landscape"] },
+        "marginLeft": { "type": "integer", "minimum": 0 },
+        "marginRight": { "type": "integer", "minimum": 0 },
+        "marginTop": { "type": "integer", "minimum": 0 },
+        "marginBottom": { "type": "integer", "minimum": 0 },
+        "headerDistance": { "type": "integer", "minimum": 0 },
+        "footerDistance": { "type": "integer", "minimum": 0 },
+        "gutter": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sectionBreak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageLayout"],
+      "properties": {
+        "pageLayout": { "$ref": "#/$defs/pageLayout" }
       }
     },
     "sourceSpan": {

@@ -126,7 +126,8 @@ function scanTopLevelBlocks(body) {
 }
 
 function parseTable(xml) {
-  // gridSpan / vMerge are represented in the model below; legacy hMerge is still lossy.
+  // gridSpan / vMerge 与旧式 hMerge（restart + 连续 continue）都映射进模型的
+  // columnSpan / verticalMerge；hMerge 与 gridSpan 混用或结构无法干净映射时仍算近似。
   const hasMergedCells = /<w:hMerge\b/.test(xml);
   const hasNestedTable = (String(xml ?? "").match(/<w:tbl\b/g) || []).length > 1;
   const gridXml = String(xml ?? "").match(/<w:tblGrid\b[^>]*>([\s\S]*?)<\/w:tblGrid>/)?.[1] || "";
@@ -137,11 +138,16 @@ function parseTable(xml) {
   // adjacent <w:p> elements without separators joins distinct form fields.
   const parsedRows = scanBalanced(xml, "w:tr")
     .map((rowXml) => scanBalanced(rowXml, "w:tc").map((cellXml) => {
-      const gridSpan = cellXml.match(/<w:gridSpan\b[^>]*\/?\s*>/)?.[0] || "";
-      const spanValue = Number(getAttr(gridSpan, "w:val"));
+      const gridSpanTag = cellXml.match(/<w:gridSpan\b[^>]*\/?\s*>/)?.[0] || "";
+      const spanValue = Number(getAttr(gridSpanTag, "w:val"));
       const mergeTag = cellXml.match(/<w:vMerge\b[^>]*\/?\s*>/)?.[0] || "";
       const verticalMerge = mergeTag
         ? (getAttr(mergeTag, "w:val") === "restart" ? "restart" : "continue")
+        : "";
+      // 旧式 hMerge：缺省 w:val 视为 continue（ECMA-376）
+      const hMergeTag = cellXml.match(/<w:hMerge\b[^>]*\/?\s*>/)?.[0] || "";
+      const horizontalMerge = hMergeTag
+        ? (getAttr(hMergeTag, "w:val") === "restart" ? "restart" : "continue")
         : "";
       const paragraphs = scanBalanced(cellXml, "w:p");
       return {
@@ -150,13 +156,38 @@ function parseTable(xml) {
           : extractText(cellXml),
         columnSpan: Number.isSafeInteger(spanValue) && spanValue > 1 ? spanValue : 1,
         verticalMerge,
+        horizontalMerge,
+        hasGridSpan: gridSpanTag !== "",
       };
     }))
     .filter((row) => row.length > 0);
-  const rows = parsedRows
+  // hMerge 折叠：restart 格吸收后续连续 continue 格为 columnSpan，continue 格不占模型列
+  // （与 gridSpan 的逻辑列推进一致）；continue 无 restart 起始或与 gridSpan 同格混用时不折叠。
+  let hasHMergeCells = false;
+  let hasGridSpanCells = false;
+  let mergeMapsCleanly = true;
+  const foldedRows = parsedRows.map((row) => {
+    const cells = [];
+    let mergeHead = null;
+    for (const cell of row) {
+      hasHMergeCells = hasHMergeCells || cell.horizontalMerge !== "";
+      hasGridSpanCells = hasGridSpanCells || cell.hasGridSpan;
+      if (cell.horizontalMerge === "continue" && mergeHead) {
+        mergeHead.columnSpan += 1;
+        continue;
+      }
+      // 到达这里的 hMerge 格未被折叠：孤儿 continue，或 restart 与 gridSpan 同格混用
+      if (cell.horizontalMerge === "continue") mergeMapsCleanly = false;
+      if (cell.horizontalMerge === "restart" && cell.hasGridSpan) mergeMapsCleanly = false;
+      mergeHead = cell.horizontalMerge === "restart" && !cell.hasGridSpan ? cell : null;
+      cells.push(cell);
+    }
+    return cells;
+  });
+  const rows = foldedRows
     .map((row) => row.map((cell) => cell.text))
     .filter((row) => row.length > 0);
-  const cellSpans = parsedRows.map((row) => row.map(({ columnSpan, verticalMerge }) => ({
+  const cellSpans = foldedRows.map((row) => row.map(({ columnSpan, verticalMerge }) => ({
     columnSpan,
     ...(verticalMerge ? { verticalMerge } : {}),
   })));
@@ -168,7 +199,10 @@ function parseTable(xml) {
   if (table && cellSpans.some((row) => row.some((cell) => cell.columnSpan > 1 || cell.verticalMerge))) {
     table.cellSpans = cellSpans;
   }
-  return { table, hasMergedCells, hasNestedTable };
+  // 能完整映射的 hMerge 不再发近似警告；混用 gridSpan、结构不干净或 hMerge 藏在嵌套表格仍发。
+  const mergeApproximated = hasMergedCells
+    && (!hasHMergeCells || hasGridSpanCells || !mergeMapsCleanly);
+  return { table, hasNestedTable, mergeApproximated };
 }
 
 function parseParagraphFormat(xml) {
@@ -206,12 +240,20 @@ function parseParagraphFormat(xml) {
   return Object.keys(format).length > 0 ? format : null;
 }
 
-function parsePageLayout(xml) {
-  const sections = [...String(xml ?? "").matchAll(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g)];
-  const section = sections.at(-1)?.[0] || "";
-  if (!section) return null;
-  const pageSize = section.match(/<w:pgSz\b[^>]*\/?\s*>/)?.[0] || "";
-  const pageMargins = section.match(/<w:pgMar\b[^>]*\/?\s*>/)?.[0] || "";
+// sectPr 中暂不支持的属性（分栏、页眉页脚引用、首页不同、页码格式等）；
+// w:type 缺省即 nextPage（与 writer 行为一致），仅非默认值算丢失。
+const SECTION_PARTIAL_PROPS = /<w:(?:cols|headerReference|footerReference|titlePg|pgNumType|footnotePr|endnotePr|docGrid|paperSrc|lnNumType|vAlign|textDirection)\b/;
+
+function hasPartialSectionProps(sectPrXml) {
+  if (SECTION_PARTIAL_PROPS.test(sectPrXml)) return true;
+  const sectionType = getAttr(String(sectPrXml).match(/<w:type\b[^>]*\/?\s*>/)?.[0] || "", "w:val") || "nextPage";
+  return sectionType !== "nextPage";
+}
+
+// 单个 <w:sectPr> 切片 → pageLayout；body 末尾节（parsePageLayout）与段落级节标记共用。
+function parseSectionLayout(section) {
+  const pageSize = String(section ?? "").match(/<w:pgSz\b[^>]*\/?\s*>/)?.[0] || "";
+  const pageMargins = String(section ?? "").match(/<w:pgMar\b[^>]*\/?\s*>/)?.[0] || "";
   const layout = {};
   for (const [attribute, key] of [["w:w", "width"], ["w:h", "height"]]) {
     const value = getAttr(pageSize, attribute);
@@ -224,6 +266,14 @@ function parsePageLayout(xml) {
     if (/^\d+$/.test(value)) layout[key] = Number(value);
   }
   return Object.keys(layout).length > 0 ? layout : null;
+}
+
+// 向后兼容：body 级页面设置仍取最后一节（body 末尾 sectPr），与单节行为一致。
+function parsePageLayout(xml) {
+  const sections = [...String(xml ?? "").matchAll(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g)];
+  const section = sections.at(-1)?.[0] || "";
+  if (!section) return null;
+  return parseSectionLayout(section);
 }
 
 // 从 styles.xml 解析每个 paragraph style 对应的 heading level（如果有）。
@@ -360,6 +410,13 @@ function parseParagraph(xml, relationships, assetStore, zip, warnings, reference
   const text = inlinesToPlainText(inlines).replace(/\r\n?/g, "\n");
   const imageIds = [...xml.matchAll(/<a:blip\b[^>]*r:embed="([^"]+)"/g)].map((match) => match[1]);
   const paragraphFormat = parseParagraphFormat(xml);
+  // 段落 pPr 内的 sectPr 表示"本节到此结束"（ECMA-376），解析为该块的 sectionBreak；
+  // body 末尾 sectPr 仍走 metadata.ooxml.pageLayout，两者语义不重叠。
+  const sectionPrXml = xml.match(/<w:pPr\b[\s\S]*?<\/w:pPr>/)?.[0]?.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/)?.[0] || "";
+  const sectionLayout = sectionPrXml ? parseSectionLayout(sectionPrXml) : null;
+  if (sectionPrXml && hasPartialSectionProps(sectionPrXml)) {
+    warnings.push(createWarning("lossy", "DOCX_SECTION_PROPS_PARTIAL", "DOCX section properties such as columns, header/footer references, or non-default section types are not preserved; only page geometry is kept."));
+  }
   const numPr = xml.match(/<w:numPr\b[\s\S]*?<\/w:numPr>/)?.[0] || "";
   const listMeta = numPr ? {
     depth: Number(getAttr(numPr.match(/<w:ilvl\b[^>]*\/?>/)?.[0] || "", "w:val")) || 0,
@@ -382,13 +439,20 @@ function parseParagraph(xml, relationships, assetStore, zip, warnings, reference
       const heading = createHeading(level, text);
       if (inlines.length > 0) heading.inlines = inlines;
       if (paragraphFormat) heading.paragraphFormat = paragraphFormat;
+      if (sectionLayout) heading.sectionBreak = { pageLayout: sectionLayout };
       blocks.push(heading);
     } else {
       const paragraph = createParagraph(text);
       if (inlines.length > 0) paragraph.inlines = inlines;
       if (paragraphFormat) paragraph.paragraphFormat = paragraphFormat;
+      if (sectionLayout) paragraph.sectionBreak = { pageLayout: sectionLayout };
       blocks.push(paragraph);
     }
+  } else if (sectionLayout) {
+    // 空段落仅承担节结束标记（Word 常见写法）：保留为空段落载体，节页面设置不再被静默丢弃
+    const carrier = createParagraph("");
+    carrier.sectionBreak = { pageLayout: sectionLayout };
+    blocks.push(carrier);
   }
 
   for (const id of [...xml.matchAll(/<w:footnoteReference\b[^>]*w:id="([^"]+)"/g)].map((match) => match[1])) {
@@ -466,8 +530,8 @@ export function readDocx({ content, title = "document", fileName = "", format = 
 
   for (const block of scanTopLevelBlocks(body)) {
     if (block.tag === "tbl") {
-      const { table, hasMergedCells, hasNestedTable } = parseTable(block.xml);
-      if (hasMergedCells) {
+      const { table, mergeApproximated, hasNestedTable } = parseTable(block.xml);
+      if (mergeApproximated) {
         warnings.push(createWarning("lossy", "DOCX_TABLE_MERGE_APPROXIMATED", "DOCX merged table cells were flattened into the DocumentModel table shape."));
       }
       if (hasNestedTable) {

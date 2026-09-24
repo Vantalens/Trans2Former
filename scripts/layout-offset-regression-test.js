@@ -8,6 +8,9 @@ import { writePdfBinary } from "../public/formats/pdf-output.js";
 import { writeHtml } from "../public/formats/html.js";
 import { createDocumentModel } from "../public/core/document-model.js";
 import { ensureDocumentAudit } from "../public/core/document-audit.js";
+import { readZipEntries } from "../public/core/zip-container.js";
+import { writeStoredZip } from "../public/core/zip-writer.js";
+import { textToBytes } from "../public/core/binary-utils.js";
 
 // TXT round-trip preserves ordinary underscores, indentation, and single line breaks.
 const sourceText = "  field__id__legacy: A-102\r\nnext line\r\n\r\n  second_field: ready\r";
@@ -119,5 +122,87 @@ const reflowedDocxQuality = ensureDocumentAudit({
   metadata: { ...docxModel.metadata, warnings: generatedPdf.warnings },
 }, { reader: "docx", writer: "pdf", targetFormat: "pdf" });
 assert.equal(reflowedDocxQuality.metadata.qualityReport.layoutFidelity, "low");
+
+// Multi-section DOCX round-trip: a paragraph-level sectionBreak (portrait A4) and the
+// trailing body sectPr (landscape) are both preserved, in document order.
+const twoSectionModel = createDocumentModel({
+  title: "Two sections",
+  sourceFormat: "docx",
+  blocks: [
+    {
+      type: "paragraph",
+      text: "Portrait section",
+      sectionBreak: {
+        pageLayout: {
+          width: 11906,
+          height: 16838,
+          orientation: "portrait",
+          marginLeft: 1440,
+          marginRight: 1440,
+          marginTop: 1440,
+          marginBottom: 1440,
+          headerDistance: 720,
+          footerDistance: 720,
+          gutter: 0,
+        },
+      },
+    },
+    { type: "paragraph", text: "Landscape section" },
+  ],
+  metadata: {
+    ooxml: {
+      pageLayout: {
+        width: 16838,
+        height: 11906,
+        orientation: "landscape",
+        marginLeft: 900,
+        marginRight: 900,
+        marginTop: 720,
+        marginBottom: 720,
+        headerDistance: 720,
+        footerDistance: 720,
+        gutter: 0,
+      },
+    },
+  },
+});
+const twoSectionDocx = writeDocx({ model: twoSectionModel });
+const twoSectionBytes = new Uint8Array(Buffer.from(twoSectionDocx.data.split(",")[1], "base64"));
+const twoSectionXml = readZipEntries(twoSectionBytes).getText("word/document.xml");
+assert.equal((twoSectionXml.match(/<w:sectPr\b/g) || []).length, 2);
+assert.ok(twoSectionXml.indexOf("<w:sectPr") < twoSectionXml.lastIndexOf("<w:sectPr"));
+const twoSectionRoundTrip = readDocx({ content: twoSectionBytes, title: "Two sections" });
+const sectionBreakBlock = twoSectionRoundTrip.blocks.find((block) => block.sectionBreak);
+assert.deepEqual(sectionBreakBlock.sectionBreak, twoSectionModel.blocks[0].sectionBreak);
+assert.deepEqual(twoSectionRoundTrip.metadata.ooxml.pageLayout, twoSectionModel.metadata.ooxml.pageLayout);
+
+// Backward compatibility: a model without sectionBreak still emits exactly one trailing sectPr.
+const singleSectionXml = readZipEntries(docxBytes).getText("word/document.xml");
+assert.equal((singleSectionXml.match(/<w:sectPr\b/g) || []).length, 1);
+
+// Legacy hMerge maps to columnSpan: restart + following continue cells fold into one
+// logical cell; a clean mapping no longer raises DOCX_TABLE_MERGE_APPROXIMATED.
+const docxWithBody = (bodyXml) => writeStoredZip([
+  {
+    name: "word/document.xml",
+    data: textToBytes(`<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyXml}</w:body></w:document>`),
+  },
+]);
+const cleanHMerge = readDocx({
+  content: docxWithBody(`<w:tbl><w:tr><w:tc><w:tcPr><w:hMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>Merged</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:hMerge/></w:tcPr><w:p/></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`),
+  title: "hmerge",
+});
+const cleanHMergeTable = cleanHMerge.blocks.find((block) => block.type === "table");
+assert.deepEqual(cleanHMergeTable.headers, ["Merged"]);
+assert.deepEqual(cleanHMergeTable.cellSpans, [[{ columnSpan: 2 }], [{ columnSpan: 1 }, { columnSpan: 1 }]]);
+assert.equal((cleanHMerge.metadata.warnings || []).some((warning) => warning.code === "DOCX_TABLE_MERGE_APPROXIMATED"), false);
+
+// Mixing gridSpan and hMerge in one table cannot be mapped cleanly and still warns.
+const mixedMerge = readDocx({
+  content: docxWithBody(`<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Grid</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:tcPr><w:hMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>Legacy</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:hMerge/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>`),
+  title: "mixed",
+});
+assert.equal(mixedMerge.metadata.warnings.some((warning) => warning.code === "DOCX_TABLE_MERGE_APPROXIMATED"), true);
 
 console.log("Layout offset regressions passed: TXT whitespace, PDF English spacing/columns, and DOCX form geometry.");
