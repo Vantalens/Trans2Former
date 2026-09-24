@@ -247,12 +247,18 @@ const mixedPdf = writePdfHighFidelity({
   },
 });
 const mixedExpanded = await expandPdfContentForTextExtraction(mixedPdf.data);
-const mixedModel = readPdf({ content: mixedExpanded, title: "mixed-pages" });
-assert.equal(mixedModel.metadata.pdf.pageCount, 2);
-assert.deepEqual(mixedModel.metadata.pdf.pagesWithoutText, [2]);
-assert.equal(mixedModel.fixedLayout.pages.length, 2);
-assert.ok(mixedModel.metadata.warnings.some((warning) => warning.code === "PDF_PAGES_WITHOUT_TEXT"));
-console.log("  ✅ 无文字页保留在布局中，并产生可见 warning");
+// 混合页检测依赖 PDF.js 提取文本页；可选依赖缺失的环境（npm ci 可选安装失败）跳过断言。
+const pdfjsAvailable = await import("pdfjs-dist").then(() => true, () => false);
+if (pdfjsAvailable) {
+  const mixedModel = readPdf({ content: mixedExpanded, title: "mixed-pages" });
+  assert.equal(mixedModel.metadata.pdf.pageCount, 2);
+  assert.deepEqual(mixedModel.metadata.pdf.pagesWithoutText, [2]);
+  assert.equal(mixedModel.fixedLayout.pages.length, 2);
+  assert.ok(mixedModel.metadata.warnings.some((warning) => warning.code === "PDF_PAGES_WITHOUT_TEXT"));
+  console.log("  ✅ 无文字页保留在布局中，并产生可见 warning");
+} else {
+  console.log("  ⊘ 跳过：pdfjs-dist 未安装，混合页页级检测依赖 PDF.js 提取");
+}
 
 // 测试 12: 同格式 PDF 不重新绘制，原字节在同步、异步及预提取入口一致。
 console.log("\nTest 12: PDF identity copy");

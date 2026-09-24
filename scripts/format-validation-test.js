@@ -130,6 +130,27 @@ const sampleInputs = {
 // Exercise PDF routes with the same pre-expanded input used by the workbench.
 sampleInputs.pdf = await expandPdfContentForTextExtraction(sampleInputs.pdf);
 
+// PDF 文本提取能力探针：pdfjs-dist 是可选依赖，npm ci 对 optionalDependency 安装失败不报错，
+// 环境可能缺少它（Enhanced CI 曾在 main 的 Node 24 任务遇到）。此时核心解析器对本样例取不到正文，
+// pdf → X 应诚实抛出 PDF_TEXT_UNAVAILABLE（而不是旧行为那样导出占位提示）。
+// 探针在该环境下把矩阵中的 pdf 输入用例记为跳过；若 pdfjs 可用却取不到正文，按回归失败处理。
+const pdfjsInstalled = await import("pdfjs-dist").then(() => true, () => false);
+let pdfTextExtractionAvailable = true;
+if (!pdfjsInstalled) {
+  try {
+    convertContent({ content: sampleInputs.pdf, from: "pdf", to: "txt", title: "probe.pdf", fileName: "probe.pdf" });
+  } catch (error) {
+    if (error?.code === "PDF_TEXT_UNAVAILABLE") {
+      pdfTextExtractionAvailable = false;
+    } else {
+      throw error;
+    }
+  }
+  if (!pdfTextExtractionAvailable) {
+    console.log("⊘ 当前环境无 PDF 文本提取能力（pdfjs-dist 未安装且核心解析器无可用正文）；pdf → * 用例跳过，PDF_TEXT_UNAVAILABLE 错误码已断言。");
+  }
+}
+
 // 所有支持的格式
 const formats = {
   input: ["txt", "md", "html", "csv", "json", "xml", "docx", "xlsx", "epub", "pptx", "pdf", "doc"],
@@ -156,6 +177,10 @@ console.log("-".repeat(80));
 for (const from of formats.input) {
   for (const to of formats.output) {
     if (!getAllowedOutputFormats(from).includes(to)) {
+      stats.skipped++;
+      continue;
+    }
+    if (from === "pdf" && !pdfTextExtractionAvailable) {
       stats.skipped++;
       continue;
     }

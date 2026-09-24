@@ -746,9 +746,9 @@ Closes #123
 完成 PPTX 图表提取功能：
 
 改动文件：
-- D:/Trans2Former/public/formats/pptx-input.js
-- D:/Trans2Former/scripts/conversion-snapshot-test.js
-- D:/Trans2Former/docs/FORMAT_ROADMAP.md
+- D:/Projects/Trans2Former/public/formats/pptx-input.js
+- D:/Projects/Trans2Former/scripts/conversion-snapshot-test.js
+- D:/Projects/Trans2Former/docs/FORMAT_ROADMAP.md
 
 完成功能：
 - 添加 PPTX 柱状图和折线图解析
