@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readPdf, expandPdfContentForTextExtraction } from "../public/formats/pdf.js";
+import { readPdf, expandPdfContentForTextExtraction, hasPdfJsExtractionPayload } from "../public/formats/pdf.js";
 import { writePdfHighFidelity } from "../public/formats/pdf-output-high-fidelity.js";
 import { convertContent, convertContentAsync } from "../public/browser-transformer.js";
 
@@ -279,6 +279,25 @@ const blankCopy = await convertContentAsync({ content: blankPdf.data, from: "pdf
 assert.equal(blankCopy.data, blankPdf.data, "a textless PDF must still be copyable without rerendering");
 assert.deepEqual(blankCopy.quality.qualityReport.unresolvedPdfPages, []);
 console.log("  ✅ PDF 同格式转换保留原始字节");
+
+// 测试 13: Node Buffer 输入必须先复制为独立 Uint8Array 再交给 PDF.js。
+// Buffer 是 Uint8Array 子类，但底层是共享内存池；PDF.js 会 transfer 输入的
+// ArrayBuffer，直接传入 Buffer 会整块 detach、把无关数据清零（或被直接拒绝）。
+console.log("\nTest 13: Buffer input is copied before PDF.js transfer");
+if (pdfjsAvailable) {
+  const sentinel = Buffer.from("sentinel-data-must-survive");
+  const victimPdf = Buffer.from(originalData.split(",")[1], "base64");
+  const expandedFromBuffer = await expandPdfContentForTextExtraction(victimPdf);
+  assert.equal(hasPdfJsExtractionPayload(expandedFromBuffer), true,
+    "Buffer input should still reach the PDF.js extraction path");
+  assert.equal(victimPdf.subarray(0, 5).toString("latin1"), "%PDF-",
+    "input Buffer bytes must survive extraction (its ArrayBuffer must not be detached)");
+  assert.equal(sentinel.toString("utf8"), "sentinel-data-must-survive",
+    "the shared Buffer pool must not be detached by PDF.js transfer");
+  console.log("  ✅ Buffer 输入复制后提取正常，共享内存池未被 detach");
+} else {
+  console.log("  ⊘ 跳过：pdfjs-dist 未安装，Buffer 路径依赖 PDF.js 提取");
+}
 
 console.log("\n✅ PDF reader test passed: critical paths and edge cases verified.");
 console.log("✅ Covers: empty PDF, corrupted streams, multi-page, metadata, large streams, byte input, boundaries, error handling, textless pages, identity copy.");

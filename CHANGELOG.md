@@ -14,6 +14,9 @@
 - **Issue #216 PDF 预览链路**：输入与输出 PDF 均改由本地 PDF.js 逐页渲染预览，取代被 Web/Tauri CSP（`object-src 'none'`）拦截的 `<object>` 备用预览；生成文件的 Blob 下载入口独立保留。
 - **Issue #216 版面保真补强**：PDF 表格字段按列坐标定位，不再用空格补齐列；DOCX 首行/续行缩进与制表位（含对齐方式）映射到 PDF 输出；固定布局替代字体按来源文本框宽度缩放；DOCX 单元格保留连续空格、制表符与段落边界。
 - **Issue #216 质量报告诚实性**：未实际运行输出回读时 `textFidelity` 标为 `unverified`，不再由 warning 数量推断高保真；未确认页号进入 `qualityReport.unresolvedPdfPages` 并随输出返回。
+- **Issue #216 PDF 列表编号保留**：版面分析对同类列表项的合并行距阈值放宽到 3 倍行高且要求上一行为列表项，原 1.6 倍阈值会把 2 倍行距的条款列表拆成单条 list，writer 将每项都从 1 重新编号；段落打断后不再合并。
+- **Issue #216 markdown 剥离不再吞纯下划线串**：下划线强调正则增加守卫，PDF 签名线（如 `Date: ____________`）不再被回溯匹配逐轮缩减，影响 txt/json/csv/xlsx/pptx 输出；真实 `__强调__` 标记仍正常剥离。
+- **Issue #216 PDF.js 提取的 Buffer 输入安全**：Node Buffer 先复制为独立 `Uint8Array` 再交给 PDF.js，避免 transfer 共享内存池导致无关数据被 detach。
 - **Issue #216 DOCX 多节页面设置与旧式横向合并保留**：段落级 `w:sectPr`（节结束标记）解析为 `paragraph` / `heading` 块的 `sectionBreak.pageLayout` 并在写出时还原，body 末尾节仍走 `metadata.ooxml.pageLayout`，多节文档往返后各节页面几何均保留；含分栏、页眉页脚引用、首页不同等暂不支持的节属性时发出 `DOCX_SECTION_PROPS_PARTIAL`。旧式 `w:hMerge`（restart + 连续 continue）映射为 `cellSpans` 的 `columnSpan`，能完整映射时不再发 `DOCX_TABLE_MERGE_APPROXIMATED`；与 `gridSpan` 混用或结构无法干净映射时仍发出该警告。新增多节往返、hMerge 往返与混用冲突回归测试。
 
 ## [2.4.0] - 2026-07-17

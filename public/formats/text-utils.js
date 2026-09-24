@@ -56,8 +56,11 @@ export function stripMarkdownInlineSyntax(value) {
     .replace(/\*\*(\S(?:.*?\S)?)\*\*/g, "$1")
     // Underscore emphasis requires non-word boundaries so identifiers such as
     // field__id__legacy and snake_case are not treated as formatting delimiters.
-    .replace(/(^|[^\w])__(\S(?:.*?\S)?)__(?=$|[^\w])/g, "$1$2")
+    // The content must not start or end with an underscore either: a pure run of
+    // underscores (PDF signature lines like "Date: ____________") is literal text,
+    // otherwise regex backtracking strips it 12 -> 8 -> 6 chars per pass.
+    .replace(/(^|[^\w])__(?!_)(\S(?:.*?\S)?)(?<!_)__(?=$|[^\w])/g, "$1$2")
     .replace(/\*(.*?)\*/g, "$1")
-    .replace(/(^|[^\w])_(\S(?:.*?\S)?)_(?=$|[^\w])/g, "$1$2")
+    .replace(/(^|[^\w])_(?!_)(\S(?:.*?\S)?)(?<!_)_(?=$|[^\w])/g, "$1$2")
     .replace(/~~(.*?)~~/g, "$1");
 }

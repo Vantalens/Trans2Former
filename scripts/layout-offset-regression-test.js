@@ -205,4 +205,40 @@ const mixedMerge = readDocx({
 });
 assert.equal(mixedMerge.metadata.warnings.some((warning) => warning.code === "DOCX_TABLE_MERGE_APPROXIMATED"), true);
 
+// Ordered PDF list items at 2x line spacing (common in real documents) must stay a
+// single list; split single-item lists would make the writer renumber every item from 1.
+const spacedListItems = [
+  "1. Delivery 交付: within 15 business days.",
+  "2. Warranty 保修: Twelve (12) months.",
+  "3. Liability 责任: capped at 100% of the Contract Price.",
+  "4. Governing Law 适用法律: 本合同受中华人民共和国法律管辖。",
+].map((text, index) => ({ str: text, x: 60, y: 700 - index * 20, width: 300, height: 10 }));
+const spacedListBlocks = analyzePageLayout(spacedListItems);
+assert.equal(spacedListBlocks.length, 1);
+assert.equal(spacedListBlocks[0].type, "list");
+assert.equal(spacedListBlocks[0].ordered, true);
+assert.equal(spacedListBlocks[0].items.length, 4);
+
+// A gap beyond 3x line height still starts a new list instead of over-merging.
+const distantListBlocks = analyzePageLayout([
+  { str: "1. First", x: 60, y: 700, width: 60, height: 10 },
+  { str: "2. Second", x: 60, y: 660, width: 60, height: 10 },
+]);
+assert.equal(distantListBlocks.length, 2);
+
+// A paragraph line between list items breaks the list instead of being swallowed.
+const interruptedListBlocks = analyzePageLayout([
+  { str: "1. First", x: 60, y: 700, width: 60, height: 10 },
+  { str: "note in between", x: 60, y: 686, width: 90, height: 10 },
+  { str: "2. Second", x: 60, y: 672, width: 60, height: 10 },
+]);
+assert.deepEqual(interruptedListBlocks.map((block) => block.type), ["list", "paragraph", "list"]);
+
+// Underscore runs (PDF signature lines) are literal text, not markdown emphasis,
+// while genuine emphasis markers are still stripped for txt output.
+const underscoreModel = readText({ content: "Date 日期: ____________", title: "sig", format: "txt" });
+assert.ok(writeText({ model: underscoreModel }).data.includes("Date 日期: ____________"));
+const emphasisModel = readText({ content: "**bold** __em__ *it* _em2_ ~~gone~~", title: "em", format: "txt" });
+assert.equal(writeText({ model: emphasisModel }).data, "bold em it em2 gone\n");
+
 console.log("Layout offset regressions passed: TXT whitespace, PDF English spacing/columns, and DOCX form geometry.");
