@@ -36,9 +36,9 @@
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.06);
   --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
 
-  /* 字体家族 */
-  --font-ui: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --mono: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace;
+  /* 字体家族：UI 走现代无衬线 + 中文回退；等宽仅用于代码块、统计数字、步骤序号 */
+  --font-ui: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
 
   /* 圆角 */
   --radius: 10px;
@@ -76,7 +76,7 @@
 }
 
 @supports (font-variation-settings: normal) {
-  :root { --font-ui: "Inter var", "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif; }
+  :root { --font-ui: "Inter var", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
 }
 
 * {
@@ -174,6 +174,31 @@ body[data-active-view="landing"] .auxiliary-actions {
 }
 body[data-active-view="workbench"] .is-landing-only { display: none !important; }
 
+/* 落地页为深色工程控制台：顶栏随之切换为深色发丝线风格（工作台保持浅色） */
+body[data-active-view="landing"] .topbar {
+  background: rgba(11, 14, 19, 0.94);
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+  /* 落地态隐藏了中间两列，改用两列网格让动作区贴右 */
+  grid-template-columns: minmax(180px, auto) 1fr;
+}
+body[data-active-view="landing"] .topbar-actions {
+  grid-column: 2;
+  justify-content: flex-end;
+}
+body[data-active-view="landing"] #navWorkbenchButton {
+  border-radius: 999px;
+  padding-inline: 20px;
+}
+body[data-active-view="landing"] .brand h1 {
+  color: #f4f7fa;
+}
+body[data-active-view="landing"] .brand span {
+  color: #7d8894;
+}
+body[data-active-view="landing"] .brand-link:hover h1 {
+  color: #4bf3c8;
+}
+
 .viewer-card-actions {
   display: inline-flex;
   align-items: center;
@@ -198,6 +223,8 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
   background: var(--surface-soft);
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
   transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
 }
 
@@ -420,16 +447,19 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
   border-radius: var(--radius);
   padding: 10px 12px;
   background: var(--surface);
-  box-shadow: var(--shadow-soft);
 }
 
+/* 输入/输出等技术标签等宽化（工程控制台气质）；控件本身保持 UI 字体可读性 */
 .compact-field {
   display: grid;
   gap: 4px;
   min-width: 0;
   color: var(--muted);
+  font-family: var(--mono);
   font-size: 0.68rem;
-  font-weight: 800;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .compact-field select,
@@ -442,6 +472,11 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
   padding: 0 10px;
   background: #ffffff;
   color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   outline: none;
 }
 
@@ -492,7 +527,8 @@ body[data-active-view="workbench"] .is-landing-only { display: none !important; 
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.06s ease;
+  /* 过渡曲线统一（与 landing 的 --l-ease 同族），时长走 duration token */
+  transition: background-color var(--duration-fast) cubic-bezier(0.075, 0.82, 0.165, 1), border-color var(--duration-fast) cubic-bezier(0.075, 0.82, 0.165, 1), color var(--duration-fast) cubic-bezier(0.075, 0.82, 0.165, 1), box-shadow var(--duration-fast) cubic-bezier(0.075, 0.82, 0.165, 1), transform 0.06s cubic-bezier(0.075, 0.82, 0.165, 1);
 }
 
 .primary-button {
@@ -673,6 +709,7 @@ button:disabled {
 
 .topbar-progress .status-chip {
   min-width: 0;
+  max-width: 300px;
   padding: 3px 8px;
   border-radius: 999px;
   background: var(--surface-soft);
@@ -698,6 +735,7 @@ button:disabled {
 .topbar-progress #progressPercent {
   min-width: 32px;
   text-align: right;
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--muted-strong);
@@ -705,7 +743,9 @@ button:disabled {
 
 .progress-stage {
   /* 修复 issue #36: 移除 display:none，让阶段文案可见 */
+  font-family: var(--mono);
   font-size: 0.75rem;
+  letter-spacing: 0.03em;
   color: var(--muted);
 }
 
@@ -741,6 +781,8 @@ button:disabled {
 }
 
 .progress-track {
+  width: 100%;
+  max-width: 320px;
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
@@ -774,6 +816,19 @@ button:disabled {
   min-height: 0;
   padding: 18px 24px 16px;
   overflow: visible;
+}
+
+/* 宽屏收敛：顶栏与工作区内容限宽居中，避免超宽屏上 grid fr 列被无限拉伸失衡 */
+@media (min-width: 1808px) {
+  .topbar {
+    padding-inline: calc((100% - 1760px) / 2);
+  }
+}
+
+@media (min-width: 1968px) {
+  .workspace {
+    padding-inline: calc((100% - 1920px) / 2);
+  }
 }
 
 .source-pane,
@@ -1006,7 +1061,9 @@ button:disabled {
 .format-note {
   min-width: 0;
   color: var(--muted-strong);
+  font-family: var(--mono);
   font-size: 0.76rem;
+  letter-spacing: 0.02em;
 }
 
 .editor-stats {
@@ -1014,7 +1071,9 @@ button:disabled {
   gap: 10px;
   flex: 0 0 auto;
   color: var(--muted);
+  font-family: var(--mono);
   font-size: 0.72rem;
+  letter-spacing: 0.02em;
 }
 
 #inputContent {
@@ -1299,8 +1358,13 @@ button:disabled {
   text-align: center;
 }
 
-.preview-markdown:empty::before {
+.preview-markdown:empty:not([data-empty-hint])::before {
   content: "等待预览";
+}
+
+/* 载入新文件/恢复工作区后若预览未生成，用 attr 提示与输入一致的状态（替代残留的示例文档） */
+.preview-markdown:empty[data-empty-hint]::before {
+  content: attr(data-empty-hint);
 }
 
 .text-output-preview:empty::before {
@@ -1369,7 +1433,8 @@ button:disabled {
 }
 
 .preview-markdown strong { font-weight: 700; color: #0f172a; }
-.preview-markdown em { font-style: italic; }
+/* 中文正文不使用 italic（合成斜体对 CJK 可读性差），强调改为加粗 */
+.preview-markdown em { font-style: normal; font-weight: 600; color: var(--muted-strong); }
 .preview-markdown del { text-decoration: line-through; color: var(--muted); }
 
 .preview-markdown a {
@@ -2059,7 +2124,7 @@ button:disabled {
   border-radius: 6px;
   background: var(--surface);
   color: var(--muted);
-  font-style: italic;
+  font-style: normal;
   text-align: center;
 }
 
