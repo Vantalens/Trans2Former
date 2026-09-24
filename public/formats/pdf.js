@@ -91,6 +91,12 @@ function coercePdfText(content) {
 }
 
 function coercePdfBytes(content) {
+  // Node 的 Buffer 是 Uint8Array 子类，但 PDF.js 会明确拒绝 Buffer：
+  // 它 transfer 输入的 ArrayBuffer，而 Buffer 底层是共享内存池，直接传入会
+  // 整块 detach、污染无关数据。复制为独立 Uint8Array 再交给 PDF.js。
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(content)) {
+    return new Uint8Array(content);
+  }
   if (content instanceof Uint8Array) return content;
   if (content instanceof ArrayBuffer) return new Uint8Array(content);
   if (ArrayBuffer.isView(content)) return new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
@@ -689,6 +695,7 @@ function analyzeSingleColumnLayout(items) {
   let paragraphMinX = null;
   let lastY = null;
   let lastHeight = bodyFontSize;
+  let lastLineWasListItem = false;
 
   function flushParagraph() {
     if (paragraphTextBuffer.length > 0) {
@@ -720,13 +727,20 @@ function analyzeSingleColumnLayout(items) {
       const block = { type: "heading", level, text };
       if (line.inlines.length > 0) block.inlines = line.inlines;
       blocks.push(block);
+      lastLineWasListItem = false;
     } else if (listMatch) {
       const itemText = listMatch[2].trim();
       const lastBlock = blocks[blocks.length - 1];
       const ordered = /^\d{1,3}[.)]/.test(listMatch[1]);
       // list 项的行内格式：去掉行首符号，沿用剩余 inline 序列
       const itemInlines = stripListPrefixInlines(line.inlines, listMatch[1]);
-      if (!isNewBlock && lastBlock && lastBlock.type === "list" && lastBlock.ordered === ordered) {
+      // 列表项之间允许更宽行距：真实文档常用 1.5-2 倍行距，超出 isNewBlock 的 1.6 倍阈值后
+      // 每项会被拆成单条 list，writer 把每项都从 1 重新编号。仅当上一行也是同类列表项、
+      // 且中间没有介入段落时，按 3 倍行高内的宽阈值继续合并（issue #216 续批）。
+      const continuesList = paragraphTextBuffer.length === 0
+        && lastBlock && lastBlock.type === "list" && lastBlock.ordered === ordered
+        && (!isNewBlock || (lastLineWasListItem && yGap <= lastHeight * 3.0));
+      if (continuesList) {
         lastBlock.items.push(itemText);
         if (lastBlock.itemInlines) lastBlock.itemInlines.push(itemInlines);
       } else {
@@ -735,11 +749,13 @@ function analyzeSingleColumnLayout(items) {
         if (itemInlines.length > 0) list.itemInlines = [itemInlines];
         blocks.push(list);
       }
+      lastLineWasListItem = true;
     } else {
       if (isNewBlock) flushParagraph();
       paragraphTextBuffer.push(text);
       paragraphInlineBuffer.push(line.inlines);
       if (paragraphMinX === null) paragraphMinX = line.minX;
+      lastLineWasListItem = false;
     }
     lastY = line.y;
     lastHeight = line.height;
