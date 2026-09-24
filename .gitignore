@@ -50,6 +50,7 @@ test-results.txt
 测试结果.txt
 .DS_Store
 Thumbs.db
+.tmp-*
 
 # Local environment
 .env
