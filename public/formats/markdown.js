@@ -420,14 +420,33 @@ export function writeMarkdown({ model, options = {} }) {
 }
 
 export function blockToHtml(block) {
+  const paragraphStyle = (value) => {
+    const format = value.paragraphFormat;
+    const styles = [];
+    if (format && typeof format === "object") {
+      if (["left", "center", "right", "justify"].includes(format.alignment)) styles.push(`text-align:${format.alignment}`);
+      const indentLeft = Number(format.indentLeft) || 0;
+      const firstLine = Number(format.firstLineIndent) || 0;
+      const hanging = Number(format.hangingIndent) || 0;
+      if (indentLeft) styles.push(`margin-left:${indentLeft / 20}pt`);
+      if (firstLine || hanging) styles.push(`text-indent:${(firstLine - hanging) / 20}pt`);
+      if (Number.isFinite(Number(format.spacingBefore))) styles.push(`margin-top:${Math.max(0, Number(format.spacingBefore)) / 20}pt`);
+      if (Number.isFinite(Number(format.spacingAfter))) styles.push(`margin-bottom:${Math.max(0, Number(format.spacingAfter)) / 20}pt`);
+      if (Array.isArray(format.tabStops) && format.tabStops.length > 0) styles.push("white-space:pre-wrap;tab-size:8");
+    }
+    const text = String(value.text || "");
+    if ((text.includes("\t") || value.inlines?.some((node) => node?.type === "linebreak"))
+      && !styles.some((style) => style.startsWith("white-space:"))) styles.push("white-space:pre-wrap");
+    return styles.length > 0 ? ` style="${escapeHtml(styles.join(";"))}"` : "";
+  };
   if (block.type === "heading") {
-    return `<h${block.level}>${blockTextToHtml(block)}</h${block.level}>`;
+    return `<h${block.level}${paragraphStyle(block)}>${blockTextToHtml(block)}</h${block.level}>`;
   }
   if (block.type === "paragraph") {
-    return `<p>${blockTextToHtml(block)}</p>`;
+    return `<p${paragraphStyle(block)}>${blockTextToHtml(block)}</p>`;
   }
   if (block.type === "quote") {
-    return `<blockquote>${blockTextToHtml(block)}</blockquote>`;
+    return `<blockquote${paragraphStyle(block)}>${blockTextToHtml(block)}</blockquote>`;
   }
   if (block.type === "list") {
     return listBlockToHtml(block);
@@ -437,21 +456,37 @@ export function blockToHtml(block) {
     return `<pre><code${language}>${escapeHtml(block.code)}</code></pre>`;
   }
   if (block.type === "table") {
-    const alignAttr = (index) => {
-      const alignment = block.alignments?.[index] || "";
-      return alignment ? ` style="text-align:${alignment}"` : "";
+    const widths = Array.isArray(block.columnWidths) && block.columnWidths.length > 0
+      ? block.columnWidths
+      : null;
+    const colgroup = widths
+      ? `<colgroup>${widths.map((width) => `<col style="width:${(width / widths.reduce((sum, item) => sum + item, 0)) * 100}%" />`).join("")}</colgroup>`
+      : "";
+    const spans = Array.isArray(block.cellSpans) ? block.cellSpans : [];
+    const renderCell = (cell, rowIndex, cellIndex, tag) => {
+      const span = spans[rowIndex]?.[cellIndex] || {};
+      if (span.verticalMerge === "continue") return "";
+      const columnSpan = Number.isSafeInteger(span.columnSpan) && span.columnSpan > 1 ? ` colspan="${span.columnSpan}"` : "";
+      let rowSpan = 1;
+      if (span.verticalMerge === "restart") {
+        for (let next = rowIndex + 1; next < spans.length && spans[next]?.[cellIndex]?.verticalMerge === "continue"; next += 1) rowSpan += 1;
+      }
+      const rowSpanAttr = rowSpan > 1 ? ` rowspan="${rowSpan}"` : "";
+      const alignment = block.alignments?.[cellIndex] || "";
+      const alignAttr = alignment ? ` style="text-align:${alignment}"` : "";
+      return `<${tag}${columnSpan}${rowSpanAttr}${alignAttr}>${inlinesToHtml(tableCellInlines(block, rowIndex === 0 ? -1 : rowIndex - 1, cellIndex, cell))}</${tag}>`;
     };
     const head = [
       "  <thead>",
-      `    <tr>${block.headers.map((cell, index) => `<th${alignAttr(index)}>${inlinesToHtml(tableCellInlines(block, -1, index, cell))}</th>`).join("")}</tr>`,
+      `    <tr>${block.headers.map((cell, index) => renderCell(cell, 0, index, "th")).join("")}</tr>`,
       "  </thead>",
     ].join("\n");
     const body = [
       "  <tbody>",
-      ...block.rows.map((row, rowIndex) => `    <tr>${row.map((cell, index) => `<td${alignAttr(index)}>${inlinesToHtml(tableCellInlines(block, rowIndex, index, cell))}</td>`).join("")}</tr>`),
+      ...block.rows.map((row, rowIndex) => `    <tr>${row.map((cell, index) => renderCell(cell, rowIndex + 1, index, "td")).join("")}</tr>`),
       "  </tbody>",
     ].join("\n");
-    return `<table>\n${head}\n${body}\n</table>`;
+    return `<table>\n${colgroup ? `${colgroup}\n` : ""}${head}\n${body}\n</table>`;
   }
   if (block.type === "image") {
     return `<img src="${escapeHtml(block.src)}" alt="${escapeHtml(block.alt)}" />`;

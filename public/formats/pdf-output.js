@@ -30,6 +30,21 @@ function getPaperSize(paperFormat) {
   return PAPER_SIZES[paperFormat] || PAPER_SIZES[DEFAULT_PAPER];
 }
 
+function getDocumentPaperSize(model, paperFormat) {
+  if (paperFormat) return getPaperSize(paperFormat);
+  const layout = model.metadata?.ooxml?.pageLayout;
+  if (!layout || !(layout.width > 0) || !(layout.height > 0)) return getPaperSize(DEFAULT_PAPER);
+  const twipsToPoints = (value, fallback) => Number.isFinite(value) && value >= 0 ? value / 20 : fallback;
+  return {
+    width: layout.width / 20,
+    height: layout.height / 20,
+    marginLeft: twipsToPoints(layout.marginLeft, MARGIN_LEFT) + twipsToPoints(layout.gutter, 0),
+    marginRight: twipsToPoints(layout.marginRight, MARGIN_RIGHT),
+    marginTop: twipsToPoints(layout.marginTop, MARGIN_TOP),
+    marginBottom: twipsToPoints(layout.marginBottom, MARGIN_BOTTOM),
+  };
+}
+
 const MARGIN_LEFT = 72;
 const MARGIN_RIGHT = 72;
 const MARGIN_TOP = 60;
@@ -174,18 +189,30 @@ function flattenInlinesToSegments(tokens, parentStyle = {}, hrefStack = []) {
 
 // 按 block 计算字号 / 缩进 / 段后间距。
 function blockLayout(block) {
+  let layout;
   if (block.type === "heading") {
     const level = Math.min(6, Math.max(1, Number(block.level) || 1));
     const sizes = [22, 18, 16, 14, 13, 12];
-    return { fontSize: sizes[level - 1], leading: sizes[level - 1] * 1.4, indent: 0, marginBottom: 8, forceBold: true };
+    layout = { fontSize: sizes[level - 1], leading: sizes[level - 1] * 1.4, indent: 0, marginBottom: 8, forceBold: true };
+  } else if (block.type === "quote") {
+    layout = { fontSize: 12, leading: 18, indent: 24, marginBottom: 6, forceItalic: true };
+  } else if (block.type === "code") {
+    layout = { fontSize: 11, leading: 15, indent: 24, marginBottom: 6, allCode: true };
+  } else {
+    layout = { fontSize: 12, leading: 16, indent: 0, marginBottom: 6 };
   }
-  if (block.type === "quote") {
-    return { fontSize: 12, leading: 18, indent: 24, marginBottom: 6, forceItalic: true };
-  }
-  if (block.type === "code") {
-    return { fontSize: 11, leading: 15, indent: 24, marginBottom: 6, allCode: true };
-  }
-  return { fontSize: 12, leading: 16, indent: 0, marginBottom: 6 };
+  const format = block.paragraphFormat;
+  if (!format || typeof format !== "object") return layout;
+  const indentLeft = Number(format.indentLeft) || 0;
+  const firstLine = Number(format.firstLineIndent) || 0;
+  const hanging = Number(format.hangingIndent) || 0;
+  return {
+    ...layout,
+    indent: layout.indent + Math.max(0, indentLeft + firstLine - hanging) / 20,
+    alignment: ["left", "center", "right", "justify"].includes(format.alignment) ? format.alignment : "left",
+    marginTop: Math.max(0, Number(format.spacingBefore) || 0) / 20,
+    marginBottom: Number.isFinite(Number(format.spacingAfter)) ? Math.max(0, Number(format.spacingAfter)) / 20 : layout.marginBottom,
+  };
 }
 
 // 把 block 转成 layout lines：每个 line = { segments, indent, fontSize, leading, isLastInBlock }
@@ -265,13 +292,15 @@ function blockToLines(block, stats) {
 
   const wrapped = wrapSegments(segments, layout.fontSize, maxWidth, stats);
   if (wrapped.length === 0) return [];
-  return wrapped.map((lineSegments, i) => ({
-    segments: lineSegments,
-    indent: layout.indent,
-    fontSize: layout.fontSize,
-    leading: layout.leading,
-    marginAfter: i === wrapped.length - 1 ? layout.marginBottom : 0,
-  }));
+      return wrapped.map((lineSegments, i) => ({
+        segments: lineSegments,
+        indent: layout.indent,
+        alignment: layout.alignment,
+        fontSize: layout.fontSize,
+        leading: layout.leading,
+        marginBefore: i === 0 ? layout.marginTop || 0 : 0,
+        marginAfter: i === wrapped.length - 1 ? layout.marginBottom : 0,
+      }));
 }
 
 function tableToLines(block, stats) {
@@ -281,28 +310,45 @@ function tableToLines(block, stats) {
   const lines = [];
   const fontSize = 11;
   const leading = 15;
-  const colWidth = CONTENT_WIDTH / Math.max(1, headers.length);
+  const columnCount = Math.max(1, Array.isArray(block.columnWidths) ? block.columnWidths.length : 0, ...rows.map((row, rowIndex) =>
+    row.reduce((count, _cell, cellIndex) => count + (Number.isSafeInteger(block.cellSpans?.[rowIndex]?.[cellIndex]?.columnSpan) && block.cellSpans[rowIndex][cellIndex].columnSpan > 0 ? block.cellSpans[rowIndex][cellIndex].columnSpan : 1), 0)
+  ));
+  const sourceWidths = Array.isArray(block.columnWidths)
+    && block.columnWidths.length === columnCount
+    && block.columnWidths.every((width) => Number.isSafeInteger(width) && width > 0)
+    ? block.columnWidths
+    : null;
+  const widthTotal = sourceWidths?.reduce((sum, width) => sum + width, 0) || columnCount;
+  const columnWidths = sourceWidths
+    ? sourceWidths.map((width) => width / widthTotal * CONTENT_WIDTH)
+    : Array.from({ length: columnCount }, () => CONTENT_WIDTH / columnCount);
+  const cellSpans = Array.isArray(block.cellSpans) ? block.cellSpans : [];
 
   rows.forEach((row, rowIndex) => {
-    const cellLines = row.map((cell) => {
+    let logicalColumn = 0;
+    const cellLines = row.map((cell, cellIndex) => {
+      const spanInfo = cellSpans[rowIndex]?.[cellIndex] || {};
+      const columnSpan = Number.isSafeInteger(spanInfo.columnSpan) && spanInfo.columnSpan > 0 ? spanInfo.columnSpan : 1;
+      const cellWidth = columnWidths.slice(logicalColumn, logicalColumn + columnSpan).reduce((sum, width) => sum + width, 0) || CONTENT_WIDTH / columnCount * columnSpan;
+      logicalColumn += columnSpan;
       const tokens = getCellInlineTokens(cell);
       let segments = flattenInlinesToSegments(tokens);
       if (rowIndex === 0) {
         segments = segments.map((seg) => ({ ...seg, style: { ...seg.style, bold: true } }));
       }
-      return wrapSegments(segments, fontSize, colWidth - 8, stats);
+      return { lines: wrapSegments(segments, fontSize, Math.max(8, cellWidth - 8), stats), width: cellWidth };
     });
-    const maxLines = Math.max(1, ...cellLines.map((c) => c.length));
+    const maxLines = Math.max(1, ...cellLines.map((cell) => cell.lines.length));
     for (let lineIdx = 0; lineIdx < maxLines; lineIdx += 1) {
       const mergedSegments = [];
-      cellLines.forEach((cellWrapped, colIdx) => {
-        const lineSegments = cellWrapped[lineIdx] || [];
+      cellLines.forEach((cell, colIdx) => {
+        const lineSegments = cell.lines[lineIdx] || [];
         const usedWidth = lineSegments.reduce((sum, seg) => sum + seg.width, 0);
         if (lineSegments.length > 0) {
-          mergedSegments.push(...lineSegments.map((seg) => ({ ...seg, columnStart: colIdx * colWidth })));
+          mergedSegments.push(...lineSegments.map((seg) => ({ ...seg, columnStart: columnWidths.slice(0, colIdx).reduce((sum, width) => sum + width, 0) })));
         }
-        // 列分隔（简单空格填充，避免实现复杂的 cell box 绘制）
-        const pad = Math.max(0, colWidth - usedWidth);
+        // 列分隔按原始列宽投影后的 cell 宽度补齐。
+        const pad = Math.max(0, cell.width - usedWidth);
         if (colIdx < cellLines.length - 1) {
           mergedSegments.push({ text: " ".repeat(Math.max(1, Math.floor(pad / (fontSize * 0.5)))), style: {}, href: "", width: pad });
         }
@@ -419,7 +465,11 @@ function buildPdfBytes(model, title, paperSize) {
   // 根据纸张尺寸设置页面参数
   const PAGE_WIDTH = paperSize.width;
   const PAGE_HEIGHT = paperSize.height;
-  const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
+  const marginLeft = Number.isFinite(paperSize.marginLeft) ? paperSize.marginLeft : MARGIN_LEFT;
+  const marginRight = Number.isFinite(paperSize.marginRight) ? paperSize.marginRight : MARGIN_RIGHT;
+  const marginTop = Number.isFinite(paperSize.marginTop) ? paperSize.marginTop : MARGIN_TOP;
+  const marginBottom = Number.isFinite(paperSize.marginBottom) ? paperSize.marginBottom : MARGIN_BOTTOM;
+  const CONTENT_WIDTH = PAGE_WIDTH - marginLeft - marginRight;
 
   const stats = { dropped: new Map() }; // issue #107: 收集降级字符
 
@@ -474,27 +524,38 @@ function buildPdfBytes(model, title, paperSize) {
 
     if (block.type === "table") {
       const lines = [];
-      const rows = Array.isArray(block.rows) ? block.rows : [];
+      const rows = [block.headers || [], ...(Array.isArray(block.rows) ? block.rows : [])];
       const fontSize = 11;
       const leading = 15;
-      const cols = rows.length > 0 ? rows[0].length : 0;
-      const colWidth = cols > 0 ? Math.floor(CONTENT_WIDTH / cols) : CONTENT_WIDTH;
+      const cellSpans = Array.isArray(block.cellSpans) ? block.cellSpans : [];
+      const cols = Math.max(1, Array.isArray(block.columnWidths) ? block.columnWidths.length : 0, ...rows.map((row, rowIndex) =>
+        row.reduce((count, _cell, cellIndex) => count + (Number.isSafeInteger(cellSpans[rowIndex]?.[cellIndex]?.columnSpan) && cellSpans[rowIndex][cellIndex].columnSpan > 0 ? cellSpans[rowIndex][cellIndex].columnSpan : 1), 0)
+      ));
+      const sourceWidths = Array.isArray(block.columnWidths) && block.columnWidths.length === cols && block.columnWidths.every((width) => Number.isSafeInteger(width) && width > 0)
+        ? block.columnWidths
+        : null;
+      const widthTotal = sourceWidths?.reduce((sum, width) => sum + width, 0) || cols;
+      const columnWidths = sourceWidths ? sourceWidths.map((width) => width / widthTotal * CONTENT_WIDTH) : Array.from({ length: cols }, () => CONTENT_WIDTH / cols);
       rows.forEach((row, rowIndex) => {
-        const cellLines = row.map((cell) => {
+        let logicalColumn = 0;
+        const cellLines = row.map((cell, cellIndex) => {
+          const spanInfo = cellSpans[rowIndex]?.[cellIndex] || {};
+          const columnSpan = Number.isSafeInteger(spanInfo.columnSpan) && spanInfo.columnSpan > 0 ? spanInfo.columnSpan : 1;
+          const cellWidth = columnWidths.slice(logicalColumn, logicalColumn + columnSpan).reduce((sum, width) => sum + width, 0) || CONTENT_WIDTH / cols * columnSpan;
+          logicalColumn += columnSpan;
           const inlines = getCellInlineTokens(cell);
-          const segments = flattenInlinesToSegments(inlines);
-          return wrapSegments(segments, fontSize, colWidth - 8, stats);
+          let segments = flattenInlinesToSegments(inlines);
+          if (rowIndex === 0) segments = segments.map((segment) => ({ ...segment, style: { ...segment.style, bold: true } }));
+          return { lines: wrapSegments(segments, fontSize, Math.max(8, cellWidth - 8), stats), width: cellWidth };
         });
-        const maxLines = Math.max(...cellLines.map((lines) => lines.length), 1);
+        const maxLines = Math.max(...cellLines.map((cell) => cell.lines.length), 1);
         for (let lineIdx = 0; lineIdx < maxLines; lineIdx += 1) {
           const mergedSegments = [];
-          cellLines.forEach((lines, colIdx) => {
-            const lineSegments = lines[lineIdx] || [];
+          cellLines.forEach((cell, colIdx) => {
+            const lineSegments = cell.lines[lineIdx] || [];
             const usedWidth = lineSegments.reduce((sum, seg) => sum + seg.width, 0);
-            if (lineSegments.length > 0) {
-              mergedSegments.push(...lineSegments.map((seg) => ({ ...seg, columnStart: colIdx * colWidth })));
-            }
-            const pad = Math.max(0, colWidth - usedWidth);
+            if (lineSegments.length > 0) mergedSegments.push(...lineSegments);
+            const pad = Math.max(0, cell.width - usedWidth);
             if (colIdx < cellLines.length - 1) {
               mergedSegments.push({ text: " ".repeat(Math.max(1, Math.floor(pad / (fontSize * 0.5)))), style: {}, href: "", width: pad });
             }
@@ -541,15 +602,16 @@ function buildPdfBytes(model, title, paperSize) {
   function paginateLocal(allLines) {
     const pages = [];
     let current = [];
-    let yCursor = PAGE_HEIGHT - MARGIN_TOP;
+    let yCursor = PAGE_HEIGHT - marginTop;
 
     for (const line of allLines) {
-      const needed = line.leading + (line.marginAfter || 0);
-      if (yCursor - needed < MARGIN_BOTTOM && current.length > 0) {
+      const needed = (line.marginBefore || 0) + line.leading + (line.marginAfter || 0);
+      if (yCursor - needed < marginBottom && current.length > 0) {
         pages.push(current);
         current = [];
-        yCursor = PAGE_HEIGHT - MARGIN_TOP;
+        yCursor = PAGE_HEIGHT - marginTop;
       }
+      yCursor -= line.marginBefore || 0;
       yCursor -= line.leading;
       current.push({ ...line, y: yCursor });
       yCursor -= line.marginAfter || 0;
@@ -562,7 +624,12 @@ function buildPdfBytes(model, title, paperSize) {
   function renderLineLocal(line) {
     const ops = [];
     const annotations = [];
-    let cursorX = MARGIN_LEFT + (line.indent || 0);
+    const contentWidth = CONTENT_WIDTH - (line.indent || 0);
+    const lineWidth = line.segments.reduce((sum, seg) => sum + (seg.width != null ? seg.width : String(seg.text || "").length * line.fontSize * 0.5), 0);
+    const alignOffset = line.alignment === "center" ? Math.max(0, (contentWidth - lineWidth) / 2)
+      : line.alignment === "right" ? Math.max(0, contentWidth - lineWidth)
+        : 0;
+    let cursorX = marginLeft + (line.indent || 0) + alignOffset;
 
     for (const seg of line.segments) {
       if (!seg.text) continue;
@@ -714,8 +781,8 @@ function buildPdfBytes(model, title, paperSize) {
 // issue #108: 高保真失败时 warning，双路 warnings 合并透传
 export function writePdfBinary({ model, title = model.title, options = {} }) {
   const warnings = [];
-  const paperFormat = options?.paperFormat || DEFAULT_PAPER;
-  const paperSize = getPaperSize(paperFormat);
+  const hasDocxLayout = model.sourceFormat === "docx" || Boolean(model.metadata?.ooxml?.pageLayout);
+  const paperSize = getDocumentPaperSize(model, options?.paperFormat);
 
   if (model.fixedLayout && model.fixedLayout.pages && model.fixedLayout.pages.length > 0) {
     try {
@@ -734,6 +801,9 @@ export function writePdfBinary({ model, title = model.title, options = {} }) {
 
   const { bytes, warnings: buildWarnings } = buildPdfBytes(model, title, paperSize);
   if (buildWarnings) warnings.push(...buildWarnings);
+  if (hasDocxLayout) {
+    warnings.push(createWarning("lossy", "PDF_DOCX_LAYOUT_APPROXIMATED", "DOCX page size, margins, paragraph alignment/indent, and table widths are applied where available; exact fonts, line metrics, floating objects, and pagination are not preserved."));
+  }
 
   return {
     type: "binary",

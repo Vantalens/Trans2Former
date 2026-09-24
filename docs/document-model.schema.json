@@ -29,7 +29,8 @@
               "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
               "warnings": { "$ref": "#/$defs/warnings" },
               "level": { "type": "integer", "minimum": 1, "maximum": 6 },
-              "text": { "type": "string" }
+              "text": { "type": "string" },
+              "paragraphFormat": { "$ref": "#/$defs/paragraphFormat" }
             }
           },
           {
@@ -41,7 +42,8 @@
               "id": { "type": "string" },
               "sourceSpan": { "$ref": "#/$defs/sourceSpan" },
               "warnings": { "$ref": "#/$defs/warnings" },
-              "text": { "type": "string" }
+              "text": { "type": "string" },
+              "paragraphFormat": { "$ref": "#/$defs/paragraphFormat" }
             }
           },
           {
@@ -110,6 +112,24 @@
                 "type": "array",
                 "items": {
                   "enum": ["", "left", "center", "right"]
+                }
+              },
+              "columnWidths": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 1 }
+              },
+              "cellSpans": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "columnSpan": { "type": "integer", "minimum": 1 },
+                      "verticalMerge": { "enum": ["restart", "continue"] }
+                    }
+                  }
                 }
               },
               "chunk": { "type": "object" }
@@ -214,6 +234,33 @@
     }
   },
   "$defs": {
+    "paragraphFormat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "alignment": { "enum": ["left", "center", "right", "justify"] },
+        "indentLeft": { "type": "integer" },
+        "indentRight": { "type": "integer" },
+        "firstLineIndent": { "type": "integer" },
+        "hangingIndent": { "type": "integer" },
+        "spacingBefore": { "type": "integer", "minimum": 0 },
+        "spacingAfter": { "type": "integer", "minimum": 0 },
+        "lineSpacing": { "type": "integer", "minimum": 0 },
+        "tabStops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["position"],
+            "properties": {
+              "position": { "type": "integer", "minimum": 1 },
+              "alignment": { "enum": ["clear", "left", "center", "right", "decimal", "bar", "num"] },
+              "leader": { "enum": ["none", "dot", "hyphen", "underscore", "heavy", "middleDot"] }
+            }
+          }
+        }
+      }
+    },
     "sourceSpan": {
       "type": "object",
       "additionalProperties": false,

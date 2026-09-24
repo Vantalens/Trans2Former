@@ -77,6 +77,33 @@ export function validateDocumentModel(model) {
       if (["paragraph", "quote"].includes(block.type) && typeof block.text !== "string") {
         errors.push(`blocks[${index}].text must be a string`);
       }
+      if (["paragraph", "heading"].includes(block.type) && block.paragraphFormat !== undefined) {
+        const format = block.paragraphFormat;
+        const allowedAlignments = new Set(["left", "center", "right", "justify"]);
+        const numericKeys = ["indentLeft", "indentRight", "firstLineIndent", "hangingIndent", "spacingBefore", "spacingAfter", "lineSpacing"];
+        if (!isObject(format)) errors.push(`blocks[${index}].paragraphFormat must be an object`);
+        else {
+          if (format.alignment !== undefined && !allowedAlignments.has(format.alignment)) errors.push(`blocks[${index}].paragraphFormat.alignment is invalid`);
+          for (const key of numericKeys) {
+            if (format[key] !== undefined && !Number.isSafeInteger(format[key])) errors.push(`blocks[${index}].paragraphFormat.${key} must be an integer`);
+          }
+          for (const key of ["spacingBefore", "spacingAfter", "lineSpacing"]) {
+            if (format[key] !== undefined && format[key] < 0) errors.push(`blocks[${index}].paragraphFormat.${key} must be non-negative`);
+          }
+          if (format.tabStops !== undefined && (!Array.isArray(format.tabStops) || format.tabStops.some((tab) => !isObject(tab) || !Number.isSafeInteger(tab.position) || tab.position <= 0))) {
+            errors.push(`blocks[${index}].paragraphFormat.tabStops must contain positive positions`);
+          }
+          if (Array.isArray(format.tabStops)) format.tabStops.forEach((tab, tabIndex) => {
+            if (!isObject(tab)) return;
+            if (tab.alignment !== undefined && !["clear", "left", "center", "right", "decimal", "bar", "num"].includes(tab.alignment)) {
+              errors.push(`blocks[${index}].paragraphFormat.tabStops[${tabIndex}].alignment is invalid`);
+            }
+            if (tab.leader !== undefined && !["none", "dot", "hyphen", "underscore", "heavy", "middleDot"].includes(tab.leader)) {
+              errors.push(`blocks[${index}].paragraphFormat.tabStops[${tabIndex}].leader is invalid`);
+            }
+          });
+        }
+      }
       if (block.type === "list") {
         if (typeof block.ordered !== "boolean") errors.push(`blocks[${index}].ordered must be a boolean`);
         if (!Array.isArray(block.items) || block.items.some((item) => typeof item !== "string")) errors.push(`blocks[${index}].items must be string[]`);
@@ -90,6 +117,10 @@ export function validateDocumentModel(model) {
         if (!Array.isArray(block.headers) || block.headers.some((item) => typeof item !== "string")) errors.push(`blocks[${index}].headers must be string[]`);
         if (!Array.isArray(block.rows) || block.rows.some((row) => !Array.isArray(row) || row.some((cell) => typeof cell !== "string"))) errors.push(`blocks[${index}].rows must be string[][]`);
         if (block.alignments !== undefined && (!Array.isArray(block.alignments) || block.alignments.some((alignment) => typeof alignment !== "string"))) errors.push(`blocks[${index}].alignments must be string[]`);
+        if (block.columnWidths !== undefined && (!Array.isArray(block.columnWidths) || block.columnWidths.some((width) => !Number.isSafeInteger(width) || width <= 0))) errors.push(`blocks[${index}].columnWidths must contain positive integers`);
+        if (block.cellSpans !== undefined && (!Array.isArray(block.cellSpans) || block.cellSpans.some((row) => !Array.isArray(row) || row.some((cell) => !isObject(cell) || (cell.columnSpan !== undefined && (!Number.isSafeInteger(cell.columnSpan) || cell.columnSpan < 1)) || (cell.verticalMerge !== undefined && !["restart", "continue"].includes(cell.verticalMerge)))))) {
+          errors.push(`blocks[${index}].cellSpans must contain valid cell span metadata`);
+        }
       }
       if (block.type === "image") {
         if (typeof block.src !== "string") errors.push(`blocks[${index}].src must be a string`);
@@ -122,7 +153,11 @@ export function validateDocumentModel(model) {
   if (isObject(model.metadata)) {
     if (model.metadata.warnings !== undefined) validateWarnings(model.metadata.warnings, "metadata.warnings", errors);
     if (model.metadata.conversion !== undefined && !isObject(model.metadata.conversion)) errors.push("metadata.conversion must be an object");
-    if (model.metadata.qualityReport !== undefined && !isObject(model.metadata.qualityReport)) errors.push("metadata.qualityReport must be an object");
+  if (model.metadata.qualityReport !== undefined && !isObject(model.metadata.qualityReport)) errors.push("metadata.qualityReport must be an object");
+  if (isObject(model.metadata.qualityReport) && model.metadata.qualityReport.layoutFidelity !== undefined
+    && !["high", "medium", "low", "not-applicable"].includes(model.metadata.qualityReport.layoutFidelity)) {
+    errors.push("metadata.qualityReport.layoutFidelity is invalid");
+  }
   }
 
   return { ok: errors.length === 0, errors };

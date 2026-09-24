@@ -2,6 +2,7 @@ import { bytesToDataUrl, textToBytes } from "../core/binary-utils.js";
 import { writeStoredZip } from "../core/zip-writer.js";
 import { escapeXmlText } from "./text-utils.js";
 import { getCellInlineTokens, getInlineTokens, parseInlineMarkdown } from "./inline-tokens.js";
+import { createWarning } from "../core/warnings.js";
 
 const NS = "http" + "://schemas.openxmlformats.org";
 const DC_NS = "http" + "://purl.org/dc/elements/1.1/";
@@ -65,10 +66,18 @@ function runPropertiesXml(style) {
   return parts.length > 0 ? `<w:rPr>${parts.join("")}</w:rPr>` : "";
 }
 
+function textToWordXml(value) {
+  return String(value || "").replace(/\r\n?/g, "\n").split(/([\t\n])/).map((part) => {
+    if (part === "\t") return "<w:tab/>";
+    if (part === "\n") return "<w:br/>";
+    return part ? `<w:t xml:space="preserve">${escapeXmlText(part)}</w:t>` : "";
+  }).join("");
+}
+
 function renderRun(run, hyperlinks) {
   if (run.lineBreak) return `<w:r>${runPropertiesXml(run.style || {})}<w:br/></w:r>`;
   const rPr = runPropertiesXml(run.style || {});
-  const text = `<w:t xml:space="preserve">${escapeXmlText(run.text || "")}</w:t>`;
+  const text = textToWordXml(run.text);
   const baseRun = `<w:r>${rPr}${text}</w:r>`;
   if (run.hyperlinkHref) {
     const rId = hyperlinks.register(run.hyperlinkHref);
@@ -107,8 +116,45 @@ function paragraphFromRuns(runs, opts = {}) {
   ].filter(Boolean).join("\n");
 }
 
+function paragraphFormatProperties(format) {
+  if (!format || typeof format !== "object") return "";
+  const tabs = (Array.isArray(format.tabStops) ? format.tabStops : []).filter((tab) => Number.isSafeInteger(tab?.position) && tab.position > 0);
+  const tabProperties = tabs.length > 0
+    ? `<w:tabs>${tabs.map((tab) => {
+      const alignment = ["clear", "left", "center", "right", "decimal", "bar", "num"].includes(tab.alignment) ? tab.alignment : "left";
+      const leader = ["none", "dot", "hyphen", "underscore", "heavy", "middleDot"].includes(tab.leader) ? ` w:leader="${tab.leader}"` : "";
+      return `<w:tab w:val="${alignment}" w:pos="${tab.position}"${leader}/>`;
+    }).join("")}</w:tabs>`
+    : "";
+  const spacingAttributes = [["spacingBefore", "before"], ["spacingAfter", "after"], ["lineSpacing", "line"]]
+    .filter(([key]) => Number.isSafeInteger(format[key]) && format[key] >= 0);
+  const spacingProperties = spacingAttributes.length > 0
+    ? `<w:spacing ${spacingAttributes.map(([key, attr]) => `w:${attr}="${format[key]}"`).join(" ")}/>`
+    : "";
+  const indentAttributes = [
+    ["indentLeft", "left"], ["indentRight", "right"],
+    ["firstLineIndent", "firstLine"], ["hangingIndent", "hanging"],
+  ].filter(([key]) => Number.isSafeInteger(format[key]));
+  const indentProperties = indentAttributes.length > 0
+    ? `<w:ind ${indentAttributes.map(([key, attr]) => `w:${attr}="${format[key]}"`).join(" ")}/>`
+    : "";
+  const alignments = { left: "left", center: "center", right: "right", justify: "both" };
+  const alignmentProperties = alignments[format.alignment] ? `<w:jc w:val="${alignments[format.alignment]}"/>` : "";
+  return `${tabProperties}${spacingProperties}${indentProperties}${alignmentProperties}`;
+}
+
+function mergeParagraphProperties(base, format) {
+  const extra = paragraphFormatProperties(format);
+  if (!extra) return base || "";
+  const inner = String(base || "").replace(/^\s*<w:pPr\b[^>]*>/, "").replace(/<\/w:pPr>\s*$/, "");
+  return `<w:pPr>${inner}${extra}</w:pPr>`;
+}
+
 function paragraphBlock(block, hyperlinks, opts = {}) {
-  return paragraphFromRuns(runsFromBlock(block, hyperlinks), opts);
+  return paragraphFromRuns(runsFromBlock(block, hyperlinks), {
+    ...opts,
+    pPr: mergeParagraphProperties(opts.pPr, block.paragraphFormat),
+  });
 }
 
 function paragraphFromText(text, hyperlinks, opts = {}) {
@@ -133,16 +179,37 @@ function listItem(item, depth, ordered, hyperlinks, itemInlines) {
 
 function table(block, hyperlinks) {
   const rows = [block.headers, ...(block.rows || [])];
-  const columnCount = Math.max(1, block.headers?.length || 1);
-  const columnWidth = Math.max(1200, Math.floor(9000 / columnCount));
+  const cellSpans = Array.isArray(block.cellSpans) ? block.cellSpans : [];
+  const columnCount = Math.max(1, Array.isArray(block.columnWidths) ? block.columnWidths.length : 0, ...rows.map((row, rowIndex) =>
+    row.reduce((count, _cell, cellIndex) => count + (Number.isSafeInteger(cellSpans[rowIndex]?.[cellIndex]?.columnSpan) && cellSpans[rowIndex][cellIndex].columnSpan > 0 ? cellSpans[rowIndex][cellIndex].columnSpan : 1), 0)
+  ));
+  const sourceWidths = Array.isArray(block.columnWidths)
+    && block.columnWidths.length === columnCount
+    && block.columnWidths.every((width) => Number.isSafeInteger(width) && width > 0)
+    ? block.columnWidths
+    : null;
+  const fallbackWidth = Math.max(1200, Math.floor(9000 / columnCount));
+  const columnWidths = sourceWidths || Array.from({ length: columnCount }, () => fallbackWidth);
+  const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
   const rowXml = rows.map((row, rowIndex) => [
     "      <w:tr>",
-    ...row.map((cell) => {
+    ...row.map((cell, cellIndex) => {
+      const spanInfo = cellSpans[rowIndex]?.[cellIndex] || {};
+      const columnSpan = Number.isSafeInteger(spanInfo.columnSpan) && spanInfo.columnSpan > 0 ? spanInfo.columnSpan : 1;
+      const columnIndex = row.slice(0, cellIndex).reduce((count, _value, index) => {
+        const priorSpan = cellSpans[rowIndex]?.[index]?.columnSpan;
+        return count + (Number.isSafeInteger(priorSpan) && priorSpan > 0 ? priorSpan : 1);
+      }, 0);
+      const cellWidth = columnWidths.slice(columnIndex, columnIndex + columnSpan).reduce((sum, width) => sum + width, 0) || fallbackWidth * columnSpan;
       const cellRuns = runsFromCell(cell, hyperlinks).join("");
       const boldHeader = rowIndex === 0 ? '<w:pPr><w:rPr><w:b/></w:rPr></w:pPr>' : "";
+      const mergeXml = [
+        ...(columnSpan > 1 ? [`<w:gridSpan w:val="${columnSpan}"/>`] : []),
+        ...(spanInfo.verticalMerge === "restart" ? ['<w:vMerge w:val="restart"/>'] : spanInfo.verticalMerge === "continue" ? ["<w:vMerge/>"] : []),
+      ].join("");
       return [
         "        <w:tc>",
-        `          <w:tcPr><w:tcW w:w="${columnWidth}" w:type="dxa"/></w:tcPr>`,
+        `          <w:tcPr><w:tcW w:w="${cellWidth}" w:type="dxa"/>${mergeXml}</w:tcPr>`,
         `          <w:p>${boldHeader}${cellRuns}</w:p>`,
         "        </w:tc>",
       ].join("\n");
@@ -152,9 +219,10 @@ function table(block, hyperlinks) {
   return [
     "    <w:tbl>",
     "      <w:tblPr>",
-    '        <w:tblW w:w="9000" w:type="dxa"/>',
+    `        <w:tblW w:w="${tableWidth}" w:type="dxa"/>`,
     '        <w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders>',
     "      </w:tblPr>",
+    `      <w:tblGrid>${columnWidths.map((width) => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid>`,
     rowXml,
     "    </w:tbl>",
   ].join("\n");
@@ -164,7 +232,7 @@ function codeParagraph(block) {
   const lines = String(block.code ?? "").replace(/\r\n?/g, "\n").split("\n");
   const runs = lines.map((line, index) => {
     const breaks = index < lines.length - 1 ? "<w:br/>" : "";
-    return `<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="Consolas"/></w:rPr><w:t xml:space="preserve">${escapeXmlText(line)}</w:t>${breaks}</w:r>`;
+    return `<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="Consolas"/></w:rPr>${textToWordXml(line)}${breaks}</w:r>`;
   }).join("");
   return [
     "    <w:p>",
@@ -235,13 +303,34 @@ ${allRels}
 }
 
 export function writeDocx({ model, title = model.title }) {
+  const warnings = [];
+  if (model.sourceFormat === "pdf") {
+    warnings.push(createWarning("lossy", "DOCX_PDF_LAYOUT_APPROXIMATED", "PDF coordinates and visual styling were converted to editable DOCX flow; exact page positions, fonts, and pagination are not preserved."));
+  }
+  if (model.sourceFormat === "docx" || model.metadata?.ooxml?.pageLayout) {
+    warnings.push(createWarning("lossy", "DOCX_LAYOUT_PARTIAL", "Page geometry, paragraph alignment/indent/tabs, and supported table widths/merges are preserved; themes, exact fonts, borders, cell padding, floating objects, and pagination are regenerated or omitted."));
+  }
   const hyperlinks = createHyperlinkRegistry();
   const bodyXml = model.blocks.map((block) => blockToWordXml(block, hyperlinks)).join("\n");
+  const pageLayout = model.metadata?.ooxml?.pageLayout || {};
+  const dimension = (value, fallback) => Number.isSafeInteger(value) && value > 0 ? value : fallback;
+  const margin = (value, fallback) => Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+  const pageWidth = dimension(pageLayout.width, 11906);
+  const pageHeight = dimension(pageLayout.height, 16838);
+  const orientation = ["portrait", "landscape"].includes(pageLayout.orientation)
+    ? pageLayout.orientation
+    : pageWidth > pageHeight ? "landscape" : "portrait";
+  const pageMargins = [
+    ["top", "marginTop", 1440], ["right", "marginRight", 1440],
+    ["bottom", "marginBottom", 1440], ["left", "marginLeft", 1440],
+    ["header", "headerDistance", 720], ["footer", "footerDistance", 720],
+    ["gutter", "gutter", 0],
+  ].map(([attribute, key, fallback]) => `w:${attribute}="${margin(pageLayout[key], fallback)}"`).join(" ");
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="${NS}/wordprocessingml/2006/main" xmlns:r="${REL_NS}">
   <w:body>
 ${bodyXml}
-    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+    <w:sectPr><w:pgSz w:w="${pageWidth}" w:h="${pageHeight}" w:orient="${orientation}"/><w:pgMar ${pageMargins}/></w:sectPr>
   </w:body>
 </w:document>`;
   const zipBytes = writeStoredZip([
@@ -315,5 +404,6 @@ ${bodyXml}
     format: "docx",
     data: bytesToDataUrl(zipBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
     mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    warnings: warnings.length > 0 ? warnings : undefined,
   };
 }

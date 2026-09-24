@@ -395,14 +395,16 @@ function shouldSeparatePdfItems(previous, current) {
   if (!previousText || !currentText || /\s$/.test(previousText) || /^\s/.test(currentText)) return false;
 
   // PDF.js often returns one text item per glyph/word and omits literal spaces.
-  // Use the measured horizontal gap when available, with an alphanumeric fallback
-  // for synthetic PDFs whose width/position fields are zero.
-  const previousEnd = Number(previous?.x || 0) + Number(previous?.width || 0);
-  const currentStart = Number(current?.x || 0);
-  const gap = currentStart - previousEnd;
-  const height = Math.max(Number(previous?.height || 0), Number(current?.height || 0), 12);
-  if (gap > Math.max(1.5, height * 0.12)) return true;
-  return /[A-Za-z0-9]$/.test(previousText) && /^[A-Za-z0-9]/.test(currentText);
+  // Only insert one when actual horizontal geometry proves a word gap. Character
+  // classes alone are not evidence of whitespace: they split English words and IDs.
+  if (previous?.hasHorizontalGeometry && current?.hasPosition) {
+    const previousEnd = Number(previous.x) + Number(previous.width);
+    const currentStart = Number(current.x);
+    const gap = currentStart - previousEnd;
+    const height = Math.max(Number(previous.height) || 0, Number(current.height) || 0, 12);
+    return gap > Math.max(1.5, height * 0.12);
+  }
+  return false;
 }
 
 function joinPdfItems(items, separator = " ") {
@@ -482,6 +484,8 @@ async function extractTextWithPdfJs(content) {
           y: item.transform?.[5] ?? 0,
           width: Number(item.width) || 0,
           height: item.height || Math.abs(item.transform?.[3] ?? 0) || 12,
+          hasPosition: Number.isFinite(item.transform?.[4]),
+          hasHorizontalGeometry: Number.isFinite(item.transform?.[4]) && Number(item.width) > 0,
           fontName: String(item.fontName || ""),
           hasEOL: Boolean(item.hasEOL),
         }));
@@ -550,9 +554,98 @@ async function collectPdfJsAnnotations(page) {
   }
 }
 
+function distinctLayoutLineCount(segments, tolerance) {
+  const yValues = segments.map((segment) => segment.y).sort((a, b) => b - a);
+  let count = 0;
+  let previous = null;
+  for (const y of yValues) {
+    if (previous === null || Math.abs(previous - y) >= tolerance) {
+      count += 1;
+      previous = y;
+    }
+  }
+  return count;
+}
+
+// Detect a persistent vertical gutter from line segments. Requiring at least three
+// aligned rows per side avoids treating a normal label/value pair as columns.
+function splitPageColumns(items) {
+  if (!Array.isArray(items) || items.length < 6 || items.some((item) => !Number.isFinite(item.x) || !Number.isFinite(item.y) || !(Number(item.width) > 0))) return null;
+  const heights = items.map((item) => Number(item.height) || 12).sort((a, b) => a - b);
+  const medianHeight = heights[Math.floor(heights.length / 2)] || 12;
+  const lineTolerance = medianHeight * 0.5;
+  const rowItems = [];
+  for (const item of [...items].sort((a, b) => b.y - a.y || a.x - b.x)) {
+    const row = rowItems[rowItems.length - 1];
+    if (row && Math.abs(row.y - item.y) < Math.max(lineTolerance, (Number(item.height) || 12) * 0.5)) {
+      row.items.push(item);
+    } else {
+      rowItems.push({ y: item.y, items: [item] });
+    }
+  }
+
+  const segments = [];
+  const gutterThreshold = Math.max(42, medianHeight * 3);
+  for (const row of rowItems) {
+    const rowSegments = [];
+    for (const item of row.items.sort((a, b) => a.x - b.x)) {
+      const previous = rowSegments[rowSegments.length - 1];
+      const previousItem = previous?.items[previous.items.length - 1];
+      const gap = previousItem ? item.x - (previousItem.x + previousItem.width) : 0;
+      if (!previous || gap > gutterThreshold) rowSegments.push({ y: row.y, items: [item] });
+      else previous.items.push(item);
+    }
+    for (const segment of rowSegments) {
+      segment.minX = segment.items[0].x;
+      segment.maxX = segment.items.reduce((maximum, item) => Math.max(maximum, item.x + item.width), segment.minX);
+      segments.push(segment);
+    }
+  }
+
+  const starts = [...new Set(segments.map((segment) => segment.minX))].sort((a, b) => a - b);
+  let best = null;
+  for (let index = 1; index < starts.length; index += 1) {
+    const gap = starts[index] - starts[index - 1];
+    if (gap <= gutterThreshold) continue;
+    const threshold = (starts[index] + starts[index - 1]) / 2;
+    const left = segments.filter((segment) => segment.maxX < threshold);
+    const right = segments.filter((segment) => segment.minX > threshold);
+    const spanning = segments.filter((segment) => segment.minX <= threshold && segment.maxX >= threshold);
+    if (distinctLayoutLineCount(left, lineTolerance) < 3 || distinctLayoutLineCount(right, lineTolerance) < 3) continue;
+    const topY = Math.max(...[...left, ...right].map((segment) => segment.y));
+    const bottomY = Math.min(...[...left, ...right].map((segment) => segment.y));
+    const spansContent = spanning.some((segment) => segment.y < topY - lineTolerance && segment.y > bottomY + lineTolerance);
+    if (spansContent) continue;
+    if (!best || gap > best.gap) best = { gap, threshold, left, right, spanning, topY, bottomY };
+  }
+  if (!best) return null;
+  const top = best.spanning.filter((segment) => segment.y > best.topY + lineTolerance).flatMap((segment) => segment.items);
+  const bottom = best.spanning.filter((segment) => segment.y < best.bottomY - lineTolerance).flatMap((segment) => segment.items);
+  const flatten = (list) => list.flatMap((segment) => segment.items);
+  return {
+    top,
+    left: flatten(best.left),
+    right: flatten(best.right),
+    bottom,
+  };
+}
+
 // 把 PDF 文本 item 按 y 坐标聚成行，再按字号 / 间距 / 行首符号区分
 // 标题 / 列表 / 段落。坐标系 y 越大越靠上（PDF 原点在左下）。
-function analyzePageLayout(items) {
+export function analyzePageLayout(items) {
+  const columns = splitPageColumns(items);
+  if (columns) {
+    return [
+      ...analyzeSingleColumnLayout(columns.top),
+      ...analyzeSingleColumnLayout(columns.left),
+      ...analyzeSingleColumnLayout(columns.right),
+      ...analyzeSingleColumnLayout(columns.bottom),
+    ];
+  }
+  return analyzeSingleColumnLayout(items);
+}
+
+function analyzeSingleColumnLayout(items) {
   if (!items || items.length === 0) return [];
   const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
   const lines = [];

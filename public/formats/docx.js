@@ -126,17 +126,101 @@ function scanTopLevelBlocks(body) {
 }
 
 function parseTable(xml) {
-  const hasMergedCells = /<w:(gridSpan|vMerge)\b/.test(xml);
+  // gridSpan / vMerge are represented in the model below; legacy hMerge is still lossy.
+  const hasMergedCells = /<w:hMerge\b/.test(xml);
   const hasNestedTable = (String(xml ?? "").match(/<w:tbl\b/g) || []).length > 1;
+  const gridXml = String(xml ?? "").match(/<w:tblGrid\b[^>]*>([\s\S]*?)<\/w:tblGrid>/)?.[1] || "";
+  const columnWidths = [...gridXml.matchAll(/<w:gridCol\b[^>]*\/?\s*>/g)]
+    .map((match) => Number(getAttr(match[0], "w:w")))
+    .filter((width) => Number.isFinite(width) && width > 0);
   // 嵌套表文本经 extractText 平铺进外层单元格；压缩连续换行/空格为单空格防止单元格内
   // 换行破坏 md 表格，但保留 \t（issue #92——表格单元格内含制表符的真实文档存在）
-  const rows = scanBalanced(xml, "w:tr")
-    .map((rowXml) => scanBalanced(rowXml, "w:tc")
-      .map((cellXml) => extractText(cellXml).replace(/[ \n\r]+/g, " ").trim()))
+  const parsedRows = scanBalanced(xml, "w:tr")
+    .map((rowXml) => scanBalanced(rowXml, "w:tc").map((cellXml) => {
+      const gridSpan = cellXml.match(/<w:gridSpan\b[^>]*\/?\s*>/)?.[0] || "";
+      const spanValue = Number(getAttr(gridSpan, "w:val"));
+      const mergeTag = cellXml.match(/<w:vMerge\b[^>]*\/?\s*>/)?.[0] || "";
+      const verticalMerge = mergeTag
+        ? (getAttr(mergeTag, "w:val") === "restart" ? "restart" : "continue")
+        : "";
+      return {
+        text: extractText(cellXml).replace(/[ \n\r]+/g, " ").trim(),
+        columnSpan: Number.isSafeInteger(spanValue) && spanValue > 1 ? spanValue : 1,
+        verticalMerge,
+      };
+    }))
     .filter((row) => row.length > 0);
+  const rows = parsedRows
+    .map((row) => row.map((cell) => cell.text))
+    .filter((row) => row.length > 0);
+  const cellSpans = parsedRows.map((row) => row.map(({ columnSpan, verticalMerge }) => ({
+    columnSpan,
+    ...(verticalMerge ? { verticalMerge } : {}),
+  })));
   const headers = rows.shift() || [];
   const table = headers.length > 0 ? createTable(headers, rows) : null;
+  if (table && columnWidths.length > 0) {
+    table.columnWidths = columnWidths;
+  }
+  if (table && cellSpans.some((row) => row.some((cell) => cell.columnSpan > 1 || cell.verticalMerge))) {
+    table.cellSpans = cellSpans;
+  }
   return { table, hasMergedCells, hasNestedTable };
+}
+
+function parseParagraphFormat(xml) {
+  const pPr = String(xml ?? "").match(/<w:pPr\b[\s\S]*?<\/w:pPr>/)?.[0] || "";
+  if (!pPr) return null;
+  const format = {};
+  const alignment = getAttr(pPr.match(/<w:jc\b[^>]*\/?\s*>/)?.[0] || "", "w:val");
+  const normalizedAlignment = { start: "left", end: "right", both: "justify", distribute: "justify" }[alignment] || alignment;
+  if (["left", "center", "right", "justify"].includes(normalizedAlignment)) format.alignment = normalizedAlignment;
+
+  const indent = pPr.match(/<w:ind\b[^>]*\/?\s*>/)?.[0] || "";
+  for (const [attribute, key] of [["w:left", "indentLeft"], ["w:right", "indentRight"], ["w:firstLine", "firstLineIndent"], ["w:hanging", "hangingIndent"]]) {
+    const value = getAttr(indent, attribute);
+    if (/^-?\d+$/.test(value)) format[key] = Number(value);
+  }
+
+  const spacing = pPr.match(/<w:spacing\b[^>]*\/?\s*>/)?.[0] || "";
+  for (const [attribute, key] of [["w:before", "spacingBefore"], ["w:after", "spacingAfter"], ["w:line", "lineSpacing"]]) {
+    const value = getAttr(spacing, attribute);
+    if (/^\d+$/.test(value)) format[key] = Number(value);
+  }
+
+  const tabStops = [...pPr.matchAll(/<w:tab\b[^>]*\/?\s*>/g)].map((match) => {
+    const position = Number(getAttr(match[0], "w:pos"));
+    const alignmentValue = getAttr(match[0], "w:val") || "left";
+    const leader = getAttr(match[0], "w:leader");
+    if (!Number.isSafeInteger(position) || position <= 0) return null;
+    return {
+      position,
+      ...( ["clear", "left", "center", "right", "decimal", "bar", "num"].includes(alignmentValue) ? { alignment: alignmentValue } : {}),
+      ...( ["none", "dot", "hyphen", "underscore", "heavy", "middleDot"].includes(leader) ? { leader } : {}),
+    };
+  }).filter(Boolean);
+  if (tabStops.length > 0) format.tabStops = tabStops;
+  return Object.keys(format).length > 0 ? format : null;
+}
+
+function parsePageLayout(xml) {
+  const sections = [...String(xml ?? "").matchAll(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g)];
+  const section = sections.at(-1)?.[0] || "";
+  if (!section) return null;
+  const pageSize = section.match(/<w:pgSz\b[^>]*\/?\s*>/)?.[0] || "";
+  const pageMargins = section.match(/<w:pgMar\b[^>]*\/?\s*>/)?.[0] || "";
+  const layout = {};
+  for (const [attribute, key] of [["w:w", "width"], ["w:h", "height"]]) {
+    const value = getAttr(pageSize, attribute);
+    if (/^\d+$/.test(value) && Number(value) > 0) layout[key] = Number(value);
+  }
+  const orientation = getAttr(pageSize, "w:orient");
+  if (["portrait", "landscape"].includes(orientation)) layout.orientation = orientation;
+  for (const [attribute, key] of [["w:top", "marginTop"], ["w:right", "marginRight"], ["w:bottom", "marginBottom"], ["w:left", "marginLeft"], ["w:header", "headerDistance"], ["w:footer", "footerDistance"], ["w:gutter", "gutter"]]) {
+    const value = getAttr(pageMargins, attribute);
+    if (/^\d+$/.test(value)) layout[key] = Number(value);
+  }
+  return Object.keys(layout).length > 0 ? layout : null;
 }
 
 // 从 styles.xml 解析每个 paragraph style 对应的 heading level（如果有）。
@@ -271,6 +355,7 @@ function parseParagraph(xml, relationships, assetStore, zip, warnings, reference
   // issue #92：preserve tab，只压缩连续换行/空格为单空格
   const text = inlinesToPlainText(inlines).replace(/[ \n\r]+/g, " ").trim();
   const imageIds = [...xml.matchAll(/<a:blip\b[^>]*r:embed="([^"]+)"/g)].map((match) => match[1]);
+  const paragraphFormat = parseParagraphFormat(xml);
   const numPr = xml.match(/<w:numPr\b[\s\S]*?<\/w:numPr>/)?.[0] || "";
   const listMeta = numPr ? {
     depth: Number(getAttr(numPr.match(/<w:ilvl\b[^>]*\/?>/)?.[0] || "", "w:val")) || 0,
@@ -292,10 +377,12 @@ function parseParagraph(xml, relationships, assetStore, zip, warnings, reference
         : references.headingStyles.get(style);
       const heading = createHeading(level, text);
       if (inlines.length > 0) heading.inlines = inlines;
+      if (paragraphFormat) heading.paragraphFormat = paragraphFormat;
       blocks.push(heading);
     } else {
       const paragraph = createParagraph(text);
       if (inlines.length > 0) paragraph.inlines = inlines;
+      if (paragraphFormat) paragraph.paragraphFormat = paragraphFormat;
       blocks.push(paragraph);
     }
   }
@@ -363,6 +450,7 @@ export function readDocx({ content, title = "document", fileName = "", format = 
   const warnings = [];
   const blocks = [];
   const body = documentXml.match(/<w:body\b[\s\S]*<\/w:body>/)?.[0] || documentXml;
+  const pageLayout = parsePageLayout(body);
   const references = {
     orderedNumIds: parseNumbering(zip.getText("word/numbering.xml")),
     headingStyles: parseHeadingStyleMap(zip.getText("word/styles.xml")),
@@ -406,6 +494,7 @@ export function readDocx({ content, title = "document", fileName = "", format = 
         relationshipCount: relationships.size,
         compressionMethods: zip.methods(),
         fileName,
+        ...(pageLayout ? { pageLayout } : {}),
       },
     }, warnings),
   });

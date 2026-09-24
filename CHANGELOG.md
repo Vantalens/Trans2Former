@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **Issue #214 跨格式文本与字段偏移**：TXT 保留单换行、缩进和普通下划线字段名；PDF 只在实测坐标支持时补空格，并按重复双栏分离阅读顺序；DOCX 往返保留页面尺寸/页边距、段落对齐/缩进/制表位、表格列宽和 `gridSpan` / `vMerge`。PDF、HTML、DOCX writer 对尚未支持的版面特性发出降级 warning，QualityReport 增加 `layoutFidelity`。新增英文表单布局回归测试。
+
 ## [2.4.0] - 2026-07-17
 
 ### 稳定性

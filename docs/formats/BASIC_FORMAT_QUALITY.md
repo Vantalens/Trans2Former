@@ -2,7 +2,7 @@
 
 版本：v0.1.0  
 状态：P0 生效  
-最后更新：2026-04-30
+最后更新：2026-09-24
 
 本文记录免下载基础格式的 before/after 样例、保真范围和可解释降级路径。基础格式包括 Markdown、HTML、TXT、JSON、CSV、XML、PNG input 和 PDF output；文档到 PNG/JPEG 的视觉输出在真实渲染器完成前不进入输出矩阵。
 
@@ -93,9 +93,10 @@ After:
 After:
 
 - 连续文本段落进入 `paragraph`。
-- 纯文本不推断复杂样式。
+- 段落内单换行、行首空格和普通下划线字段名保留。
+- 质量报告将 `layoutFidelity` 与 `textFidelity`、`structureFidelity` 分开；不承载页面布局的输入标为 `not-applicable`。
 
-降级说明：TXT 没有结构元数据，输出质量取决于原始换行和段落边界。
+降级说明：TXT 没有字体、分页、坐标等页面布局元数据；连续空行按段落边界规范化。
 
 ## JSON
 

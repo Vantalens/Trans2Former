@@ -236,7 +236,7 @@ function createAdvancedDocxFixture() {
   <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Advanced Docx</w:t></w:r></w:p>
   <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>First item</w:t></w:r></w:p>
   <w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Nested item</w:t></w:r></w:p>
-  <w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Merged</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+  <w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Merged</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:tcPr><w:hMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>Legacy merged</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:hMerge/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>
   <w:p><w:r><w:t>Main body</w:t></w:r><w:footnoteReference w:id="2"/><w:commentReference w:id="4"/></w:p>
   <w:p><w:r><w:drawing><wp:inline><wp:docPr id="9" name="Logo" descr="Logo alt text"/><a:graphic><a:graphicData><a:blip r:embed="rImg"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
 </w:body></w:document>`,
@@ -442,7 +442,7 @@ test("DOCX reader emits structured inline nodes for runs and hyperlinks (P9-C)",
   assert.match(md, /Hello \[Example\]\(https:\/\/example\.com\)/);
 });
 
-test("DOCX input enhancement extracts lists, header/footer, footnotes, comments, merge warnings, and image alt text", () => {
+test("DOCX input enhancement extracts lists, header/footer, footnotes, comments, merged cells, and image alt text", () => {
   const model = toDocumentModel(createAdvancedDocxFixture(), "docx", "advanced.docx");
   assert.equal(validateDocumentModel(model).ok, true);
   assert.equal(model.blocks.some((block) => block.type === "list" && block.items.includes("First item")), true);
@@ -452,6 +452,8 @@ test("DOCX input enhancement extracts lists, header/footer, footnotes, comments,
   assert.equal(model.blocks.some((block) => block.type === "paragraph" && block.text.includes("Comment text")), true);
   assert.equal(model.blocks.some((block) => block.type === "asset" && block.alt === "Logo alt text"), true);
   assert.equal(model.metadata.warnings.some((warning) => warning.code === "DOCX_TABLE_MERGE_APPROXIMATED"), true);
+  const mergedTable = model.blocks.find((block) => block.type === "table");
+  assert.equal(mergedTable.cellSpans?.[0]?.[0]?.columnSpan, 2);
   assert.equal(model.metadata.ooxml.compressionMethods.includes(8), true);
 });
 
