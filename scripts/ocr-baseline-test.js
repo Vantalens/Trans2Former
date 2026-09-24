@@ -979,99 +979,103 @@ function makeStubEngine(overrides = {}) {
 }
 
 // 29c. Mixed PDF OCR handles only textless pages and retains page order.
-{
-  const pdf = writePdfHighFidelity({
-    model: {
-      title: "mixed-text-scan",
-      fixedLayout: {
-        pages: [
-          { size: { width: 612, height: 792 }, textRuns: [
-            { text: "FIRST", bbox: { x: 100, y: 700, w: 100, h: 12 }, fontSize: 12 },
-          ] },
-          { size: { width: 612, height: 792 }, textRuns: [] },
-          { size: { width: 612, height: 792 }, textRuns: [
-            { text: "LAST", bbox: { x: 100, y: 700, w: 100, h: 12 }, fontSize: 12 },
-          ] },
-        ],
+// 依赖 pdfjs-dist 提取文本页；可选依赖缺失的环境（npm ci 可选安装失败）跳过本组。
+const pdfjsAvailableForMixed = await import("pdfjs-dist").then(() => true, () => false);
+if (pdfjsAvailableForMixed) {
+    const pdf = writePdfHighFidelity({
+      model: {
+        title: "mixed-text-scan",
+        fixedLayout: {
+          pages: [
+            { size: { width: 612, height: 792 }, textRuns: [
+              { text: "FIRST", bbox: { x: 100, y: 700, w: 100, h: 12 }, fontSize: 12 },
+            ] },
+            { size: { width: 612, height: 792 }, textRuns: [] },
+            { size: { width: 612, height: 792 }, textRuns: [
+              { text: "LAST", bbox: { x: 100, y: 700, w: 100, h: 12 }, fontSize: 12 },
+            ] },
+          ],
+        },
       },
-    },
-  });
-  const detection = await isScannedPdf(pdf.data);
-  assert.equal(detection.reason, "mixed-text-and-textless-pages");
-  assert.deepEqual(detection.pageIndices, [1]);
-  const rasterizedPages = [];
-  setPdfPageRasterizer({
-    async countPages() { return 3; },
-    async rasterize({ pageIndex }) {
-      rasterizedPages.push(pageIndex);
-      return { dataUrl: "data:image/png;base64,YQ==", width: 100, height: 100 };
-    },
-  });
-  const engine = {
-    id: "mixed-page-engine",
-    taskCapabilities: ["ocr-text"],
-    isAvailable: () => true,
-    recognize: async () => createOCRResult({
-      pages: [{ pageIndex: 0, width: 100, height: 100, lines: [
-        { text: "OCR MIDDLE", confidence: 0.9, bbox: { x: 10, y: 20, w: 40, h: 10 } },
-      ] }],
-      fullText: "OCR MIDDLE",
-      averageConfidence: 0.9,
-    }),
-  };
-  defaultOCRRegistry.register(engine);
-  try {
-    const output = await convertContentAsync({
-      content: pdf.data,
-      from: "pdf",
-      to: "txt",
-      title: "mixed-text-scan",
-      options: { repair: false },
     });
-    assert.deepEqual(rasterizedPages, [1], "existing text pages must not be OCR'ed again");
-    assert.deepEqual(output.data.trim().split(/\n\s*\n/), ["FIRST", "OCR MIDDLE", "LAST"]);
-    const pdfOutput = await convertContentAsync({
-      content: pdf.data,
-      from: "pdf",
-      to: "pdf",
-      title: "mixed-text-scan",
-      options: { repair: false },
+    const detection = await isScannedPdf(pdf.data);
+    assert.equal(detection.reason, "mixed-text-and-textless-pages");
+    assert.deepEqual(detection.pageIndices, [1]);
+    const rasterizedPages = [];
+    setPdfPageRasterizer({
+      async countPages() { return 3; },
+      async rasterize({ pageIndex }) {
+        rasterizedPages.push(pageIndex);
+        return { dataUrl: "data:image/png;base64,YQ==", width: 100, height: 100 };
+      },
     });
-    assert.deepEqual(rasterizedPages, [1], "PDF identity copy must not run OCR or redraw pages");
-    assert.equal(pdfOutput.data, pdf.data, "PDF to PDF should preserve the source bytes");
-    assert.ok((pdfOutput.warnings || []).some((warning) => warning.code === "PDF_ORIGINAL_PRESERVED"));
-    const readBack = readPdf({ content: await expandPdfContentForTextExtraction(pdfOutput.data) });
-    assert.equal(readBack.metadata.pdf.pageCount, 3);
-    assert.equal(readBack.blocks.some((block) => String(block.text || "").includes("OCR MIDDLE")), false);
-    const verifiedOutput = await convertContentAsync({
-      content: pdf.data,
-      from: "pdf",
-      to: "txt",
-      title: "mixed-text-scan",
-    });
-    assert.deepEqual(verifiedOutput.quality.qualityReport.unresolvedPdfPages, []);
-    const incompleteOutput = await convertContentAsync({
-      content: pdf.data,
-      from: "pdf",
-      to: "txt",
-      title: "mixed-text-scan",
-      options: { ocr: { enabled: false } },
-    });
-    assert.deepEqual(incompleteOutput.quality.qualityReport.unresolvedPdfPages, [2]);
-    assert.ok(incompleteOutput.quality.warnings.some((warning) => warning.code === "PDF_PAGES_WITHOUT_TEXT"));
-    const bareOutput = await convertContentAsync({
-      content: pdf.data,
-      from: "pdf",
-      to: "txt",
-      title: "mixed-text-scan",
-      options: { repair: false, ocr: { enabled: false } },
-    });
-    assert.deepEqual(bareOutput.unresolvedPdfPages, [2]);
-    assert.ok(bareOutput.warnings.some((warning) => warning.code === "PDF_PAGES_WITHOUT_TEXT"));
-  } finally {
-    defaultOCRRegistry.unregister(engine.id);
-    resetPdfPageRasterizer();
-  }
+    const engine = {
+      id: "mixed-page-engine",
+      taskCapabilities: ["ocr-text"],
+      isAvailable: () => true,
+      recognize: async () => createOCRResult({
+        pages: [{ pageIndex: 0, width: 100, height: 100, lines: [
+          { text: "OCR MIDDLE", confidence: 0.9, bbox: { x: 10, y: 20, w: 40, h: 10 } },
+        ] }],
+        fullText: "OCR MIDDLE",
+        averageConfidence: 0.9,
+      }),
+    };
+    defaultOCRRegistry.register(engine);
+    try {
+      const output = await convertContentAsync({
+        content: pdf.data,
+        from: "pdf",
+        to: "txt",
+        title: "mixed-text-scan",
+        options: { repair: false },
+      });
+      assert.deepEqual(rasterizedPages, [1], "existing text pages must not be OCR'ed again");
+      assert.deepEqual(output.data.trim().split(/\n\s*\n/), ["FIRST", "OCR MIDDLE", "LAST"]);
+      const pdfOutput = await convertContentAsync({
+        content: pdf.data,
+        from: "pdf",
+        to: "pdf",
+        title: "mixed-text-scan",
+        options: { repair: false },
+      });
+      assert.deepEqual(rasterizedPages, [1], "PDF identity copy must not run OCR or redraw pages");
+      assert.equal(pdfOutput.data, pdf.data, "PDF to PDF should preserve the source bytes");
+      assert.ok((pdfOutput.warnings || []).some((warning) => warning.code === "PDF_ORIGINAL_PRESERVED"));
+      const readBack = readPdf({ content: await expandPdfContentForTextExtraction(pdfOutput.data) });
+      assert.equal(readBack.metadata.pdf.pageCount, 3);
+      assert.equal(readBack.blocks.some((block) => String(block.text || "").includes("OCR MIDDLE")), false);
+      const verifiedOutput = await convertContentAsync({
+        content: pdf.data,
+        from: "pdf",
+        to: "txt",
+        title: "mixed-text-scan",
+      });
+      assert.deepEqual(verifiedOutput.quality.qualityReport.unresolvedPdfPages, []);
+      const incompleteOutput = await convertContentAsync({
+        content: pdf.data,
+        from: "pdf",
+        to: "txt",
+        title: "mixed-text-scan",
+        options: { ocr: { enabled: false } },
+      });
+      assert.deepEqual(incompleteOutput.quality.qualityReport.unresolvedPdfPages, [2]);
+      assert.ok(incompleteOutput.quality.warnings.some((warning) => warning.code === "PDF_PAGES_WITHOUT_TEXT"));
+      const bareOutput = await convertContentAsync({
+        content: pdf.data,
+        from: "pdf",
+        to: "txt",
+        title: "mixed-text-scan",
+        options: { repair: false, ocr: { enabled: false } },
+      });
+      assert.deepEqual(bareOutput.unresolvedPdfPages, [2]);
+      assert.ok(bareOutput.warnings.some((warning) => warning.code === "PDF_PAGES_WITHOUT_TEXT"));
+    } finally {
+      defaultOCRRegistry.unregister(engine.id);
+      resetPdfPageRasterizer();
+    }
+} else {
+  console.log("⊘ 29c mixed-page OCR skipped: pdfjs-dist not installed");
 }
 
 // 30. convertContentAsync routes scanned PDF through OCR stage when stubs registered
