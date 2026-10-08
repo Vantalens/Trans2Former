@@ -1,5 +1,9 @@
-// 统一按钮实现测试
-// Issue #42: 验证按钮样式使用统一的 CSS token 和渐变
+// 统一按钮实现测试（稿纸蓝图 · 朱砂实色体系）
+// Issue #42 后续：渐变体系已移除，验证统一的实色印章按钮实现
+// - styles.css 定义朱砂实色 .primary-button + .btn-stamp 变体
+// - hover 统一 translateY(-1px) + --accent-strong
+// - data-loading 45° 斜纹动画
+// - landing.css / preview.css / preview.html / landing-view.js 全部使用新类串
 
 import { strict as assert } from "assert";
 import { readFileSync } from "fs";
@@ -10,160 +14,169 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = join(__dirname, "..");
 
-console.log("Testing unified button implementation (Issue #42)...");
+console.log("Testing unified button implementation (paper-blueprint stamp system)...");
 
-// 测试 1: 验证 styles.css 定义了统一的按钮 token
+// 测试 1: styles.css 定义朱砂实色主按钮，渐变 token 已删除
 function testButtonTokens() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
+  const stylesContent = readFileSync(join(projectRoot, "public/styles.css"), "utf-8");
 
-  // 应该定义 --btn-gradient-primary token
   assert.ok(
-    stylesContent.includes("--btn-gradient-primary"),
-    "styles.css 应定义 --btn-gradient-primary token"
+    !stylesContent.includes("--btn-gradient-primary"),
+    "styles.css 不应再定义 --btn-gradient-primary token"
   );
 
-  // 应该使用 var(--accent) 和 var(--accent-strong)
   assert.ok(
-    stylesContent.includes("linear-gradient(180deg, var(--accent), var(--accent-strong))"),
-    "--btn-gradient-primary 应使用 CSS 变量"
+    stylesContent.includes("--accent: #c72c41"),
+    "应定义朱砂 --accent: #c72c41"
+  );
+  assert.ok(
+    stylesContent.includes("--accent-strong: #a82133"),
+    "应定义深朱砂 --accent-strong: #a82133"
   );
 
-  console.log("  ✅ styles.css 定义了统一的按钮 token");
+  const primaryBlock = stylesContent.match(/\.primary-button\s*\{([^}]+)\}/);
+  assert.ok(primaryBlock, "应有 .primary-button 独立规则块");
+  assert.ok(
+    primaryBlock[1].includes("background: var(--accent)"),
+    ".primary-button 应为朱砂实色背景"
+  );
+
+  console.log("  ✅ styles.css 定义朱砂实色主按钮，渐变 token 已删除");
 }
 
-// 测试 2: 验证 landing.css 使用统一的渐变 token
-function testLandingButtons() {
-  const landingPath = join(projectRoot, "public/styles/landing.css");
-  const landingContent = readFileSync(landingPath, "utf-8");
-
-  // 应该使用 var(--btn-gradient-primary)
-  assert.ok(
-    landingContent.includes("background: var(--btn-gradient-primary)"),
-    "landing.css 应使用 var(--btn-gradient-primary)"
-  );
-
-  // 不应该有硬编码的渐变（#0d9488 和 #0f766e）
-  const hardcodedGradientPattern = /linear-gradient\([^)]*#0d9488[^)]*#0f766e[^)]*\)/;
-  assert.ok(
-    !hardcodedGradientPattern.test(landingContent),
-    "landing.css 不应有硬编码的渐变"
-  );
-
-  // 应该使用 var(--radius-lg)
-  assert.ok(
-    landingContent.includes("border-radius: var(--radius-lg)"),
-    "landing.css 应使用 var(--radius-lg)"
-  );
-
-  console.log("  ✅ landing.css 使用统一的按钮 token");
-}
-
-// 测试 3: 验证 preview.css 使用统一的渐变 token
-function testPreviewButtons() {
-  const previewPath = join(projectRoot, "public/styles/preview.css");
-  const previewContent = readFileSync(previewPath, "utf-8");
-
-  // 应该使用 var(--btn-gradient-primary)
-  const gradientUsages = (previewContent.match(/var\(--btn-gradient-primary\)/g) || []).length;
-  assert.ok(
-    gradientUsages >= 2,
-    `preview.css 应至少使用 2 次 var(--btn-gradient-primary)，实际 ${gradientUsages} 次`
-  );
-
-  // 不应该有硬编码的渐变
-  const hardcodedGradientPattern = /linear-gradient\([^)]*#0d9488[^)]*#0f766e[^)]*\)/;
-  assert.ok(
-    !hardcodedGradientPattern.test(previewContent),
-    "preview.css 不应有硬编码的渐变"
-  );
-
-  console.log("  ✅ preview.css 使用统一的按钮 token");
-}
-
-// 测试 4: 验证 styles.css 提供了按钮变体类
+// 测试 2: 印章变体与尺寸变体
 function testButtonVariants() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
+  const stylesContent = readFileSync(join(projectRoot, "public/styles.css"), "utf-8");
 
-  // 应该有渐变变体
   assert.ok(
-    stylesContent.includes(".primary-button.btn-gradient"),
-    "styles.css 应提供 .btn-gradient 变体"
+    stylesContent.includes(".primary-button.btn-stamp"),
+    "styles.css 应提供 .btn-stamp 印章实色变体"
+  );
+  assert.ok(
+    !stylesContent.includes(".btn-gradient"),
+    "styles.css 不应再有 .btn-gradient 变体"
   );
 
-  // 应该有大尺寸变体
-  assert.ok(
-    stylesContent.includes(".primary-button.btn-lg"),
-    "styles.css 应提供 .btn-lg 变体"
-  );
+  const btnLg = stylesContent.match(/\.primary-button\.btn-lg\s*\{([^}]+)\}/);
+  assert.ok(btnLg, "应定义 .btn-lg 大尺寸变体");
+  assert.ok(btnLg[1].includes("padding: 14px 28px"), ".btn-lg 应使用 14px 28px padding");
+  assert.ok(btnLg[1].includes("font-size: var(--text-base)"), ".btn-lg 应使用 --text-base 字号");
 
-  // 应该有中等尺寸变体
-  assert.ok(
-    stylesContent.includes(".primary-button.btn-md"),
-    "styles.css 应提供 .btn-md 变体"
-  );
+  const btnMd = stylesContent.match(/\.primary-button\.btn-md\s*\{([^}]+)\}/);
+  assert.ok(btnMd, "应定义 .btn-md 中等尺寸变体");
+  assert.ok(btnMd[1].includes("padding: 10px 20px"), ".btn-md 应使用 10px 20px padding");
 
-  console.log("  ✅ styles.css 提供了按钮变体类");
+  console.log("  ✅ .btn-stamp / .btn-lg / .btn-md 变体定义正确");
 }
 
-// 测试 5: 验证统一的 hover 行为
+// 测试 3: 统一的 hover / active 行为（translateY(-1px) + 深朱砂）
 function testUnifiedHoverBehavior() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
+  const stylesContent = readFileSync(join(projectRoot, "public/styles.css"), "utf-8");
 
-  // .btn-gradient 应该有统一的 hover 行为
+  const hover = stylesContent.match(/\.primary-button:hover:not\(:disabled\)\s*\{([^}]+)\}/);
+  assert.ok(hover, "应有 .primary-button:hover 规则");
   assert.ok(
-    stylesContent.includes(".primary-button.btn-gradient:hover") &&
-    stylesContent.includes("filter: brightness(1.05)") &&
-    stylesContent.includes("transform: translateY(-2px)"),
-    ".btn-gradient 应有统一的 hover 行为"
+    hover[1].includes("background: var(--accent-strong)"),
+    "hover 应切换到 --accent-strong"
+  );
+  assert.ok(
+    hover[1].includes("transform: translateY(-1px)"),
+    "hover 应上浮 translateY(-1px)"
   );
 
-  console.log("  ✅ 统一的 hover 行为定义正确");
+  const active = stylesContent.match(/\.primary-button:active:not\(:disabled\)\s*\{([^}]+)\}/);
+  assert.ok(active && active[1].includes("translateY(0)"), "active 应回到 translateY(0)");
+
+  console.log("  ✅ 统一的 hover/active 行为（accent-strong + translateY(-1px)）");
 }
 
-// 测试 6: 验证品牌色使用 CSS 变量
-function testBrandColorVariables() {
-  const stylesPath = join(projectRoot, "public/styles.css");
-  const stylesContent = readFileSync(stylesPath, "utf-8");
+// 测试 4: data-loading 45° 斜纹加载动画
+function testLoadingStripes() {
+  const stylesContent = readFileSync(join(projectRoot, "public/styles.css"), "utf-8");
 
-  // 应该定义 --accent 和 --accent-strong
+  const loading = stylesContent.match(/\.primary-button\[data-loading="true"\]\s*\{([^}]+)\}/);
+  assert.ok(loading, "应有 .primary-button[data-loading=\"true\"] 规则");
   assert.ok(
-    stylesContent.includes("--accent: #0d9488"),
-    "应定义 --accent 变量"
+    loading[1].includes("linear-gradient(45deg"),
+    "加载态应使用 45° 斜纹"
   );
   assert.ok(
-    stylesContent.includes("--accent-strong: #0f766e"),
-    "应定义 --accent-strong 变量"
+    loading[1].includes("background-size: 16px 16px"),
+    "斜纹尺寸应为 16px 16px"
   );
-
-  // --btn-gradient-primary 应使用这些变量
-  const gradientDef = stylesContent.match(/--btn-gradient-primary:\s*([^;]+)/);
   assert.ok(
-    gradientDef && gradientDef[1].includes("var(--accent)") && gradientDef[1].includes("var(--accent-strong)"),
-    "--btn-gradient-primary 应使用品牌色变量"
+    loading[1].includes("animation: btn-stripes"),
+    "加载态应运行 btn-stripes 动画"
+  );
+  assert.ok(
+    /@keyframes\s+btn-stripes/.test(stylesContent),
+    "应定义 @keyframes btn-stripes"
   );
 
-  console.log("  ✅ 品牌色使用 CSS 变量");
+  console.log("  ✅ data-loading 斜纹加载动画定义正确");
+}
+
+// 测试 5: landing.css / preview.css 不再引用渐变 token
+function testSubStylesheets() {
+  const landingContent = readFileSync(join(projectRoot, "public/styles/landing.css"), "utf-8");
+  const previewContent = readFileSync(join(projectRoot, "public/styles/preview.css"), "utf-8");
+
+  for (const [name, content] of [["landing.css", landingContent], ["preview.css", previewContent]]) {
+    assert.ok(!content.includes("--btn-gradient-primary"), `${name} 不应引用渐变 token`);
+    assert.ok(!content.includes("btn-gradient"), `${name} 不应引用 .btn-gradient`);
+    const hardcodedGradient = /linear-gradient\([^)]*#0d9488[^)]*#0f766e[^)]*\)/;
+    assert.ok(!hardcodedGradient.test(content), `${name} 不应有硬编码的旧品牌渐变`);
+  }
+
+  assert.ok(
+    landingContent.includes("var(--accent)"),
+    "landing.css 应使用朱砂 var(--accent)"
+  );
+  assert.ok(
+    previewContent.includes(".preview-tool-button:not(.primary-button)"),
+    "preview.css 工具按钮应为 ghost 风格（不覆盖主按钮实色）"
+  );
+
+  console.log("  ✅ landing.css / preview.css 已切换到实色体系");
+}
+
+// 测试 6: HTML / JS 使用统一的 btn-stamp 类串
+function testCallSites() {
+  const previewHtml = readFileSync(join(projectRoot, "public/preview.html"), "utf-8");
+  const landingJs = readFileSync(join(projectRoot, "public/landing-view.js"), "utf-8");
+
+  assert.ok(
+    previewHtml.includes('class="preview-tool-button primary-button btn-stamp"'),
+    "preview.html 下载按钮应使用 btn-stamp"
+  );
+  assert.ok(
+    previewHtml.includes('class="primary-button btn-stamp btn-md"'),
+    "preview.html 返回按钮应使用 btn-stamp btn-md"
+  );
+  assert.ok(!previewHtml.includes("btn-gradient"), "preview.html 不应残留 btn-gradient");
+
+  const stampUsages = (landingJs.match(/class="primary-button btn-stamp btn-lg"/g) || []).length;
+  assert.ok(stampUsages === 2, `landing-view.js 应有 2 处 btn-stamp btn-lg，实际 ${stampUsages} 处`);
+  assert.ok(!landingJs.includes("btn-gradient"), "landing-view.js 不应残留 btn-gradient");
+
+  console.log("  ✅ preview.html / landing-view.js 使用统一的 btn-stamp 类串");
 }
 
 // 运行测试
 try {
   testButtonTokens();
-  testLandingButtons();
-  testPreviewButtons();
   testButtonVariants();
   testUnifiedHoverBehavior();
-  testBrandColorVariables();
+  testLoadingStripes();
+  testSubStylesheets();
+  testCallSites();
 
-  console.log("\n✅ Unified button implementation test passed (Issue #42)");
-  console.log("   - styles.css 定义统一的 --btn-gradient-primary token");
-  console.log("   - landing.css 和 preview.css 使用统一的渐变 token");
-  console.log("   - 品牌色集中管理（var(--accent) / var(--accent-strong)）");
-  console.log("   - 提供按钮变体类（.btn-gradient / .btn-lg / .btn-md）");
-  console.log("   - 统一的 hover 行为（brightness + translateY）");
-  console.log("   - 改主色只需修改 1 处（--accent / --accent-strong）");
+  console.log("\n✅ Unified button implementation test passed (paper-blueprint)");
+  console.log("   - styles.css 定义朱砂实色 .primary-button + .btn-stamp 变体");
+  console.log("   - 渐变体系（--btn-gradient-primary / .btn-gradient）已移除");
+  console.log("   - 统一 hover：--accent-strong + translateY(-1px)");
+  console.log("   - data-loading 45° 斜纹动画（btn-stripes）");
+  console.log("   - preview.html / landing-view.js 全部使用 btn-stamp 类串");
   process.exit(0);
 } catch (error) {
   console.error("\n❌ Unified button implementation test failed:", error.message);

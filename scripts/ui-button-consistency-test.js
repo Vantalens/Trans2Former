@@ -46,10 +46,10 @@ test("styles.css 定义 .primary-button 基础类", () => {
   assert(content.includes(".primary-button {"), "应该有 .primary-button 独立样式");
 });
 
-test("styles.css 定义渐变变体 .btn-gradient", () => {
+test("styles.css 定义印章实色变体 .btn-stamp", () => {
   const content = fs.readFileSync(stylesMainPath, "utf-8");
-  assert(content.includes(".primary-button.btn-gradient"), "应该定义 .btn-gradient 修饰符");
-  assert(content.includes("var(--btn-gradient-primary)"), "渐变应使用 CSS 变量");
+  assert(content.includes(".primary-button.btn-stamp"), "应该定义 .btn-stamp 修饰符");
+  assert(!content.includes(".btn-gradient"), "不应再定义 .btn-gradient 修饰符");
 });
 
 test("styles.css 定义尺寸变体 .btn-lg 和 .btn-md", () => {
@@ -58,11 +58,11 @@ test("styles.css 定义尺寸变体 .btn-lg 和 .btn-md", () => {
   assert(content.includes(".primary-button.btn-md"), "应该定义 .btn-md 中等尺寸变体");
 });
 
-test("styles.css 定义 --btn-gradient-primary 变量", () => {
+test("styles.css 移除渐变变量并锁定朱砂实色", () => {
   const content = fs.readFileSync(stylesMainPath, "utf-8");
-  assert(content.includes("--btn-gradient-primary:"), "应该定义渐变变量");
-  assert(content.includes("linear-gradient(180deg, var(--accent), var(--accent-strong))"),
-    "渐变应使用品牌色变量");
+  assert(!content.includes("--btn-gradient-primary"), "不应再定义渐变变量");
+  assert(content.includes("--accent: #c72c41"), "应定义朱砂 --accent");
+  assert(content.includes("--accent-strong: #a82133"), "应定义深朱砂 --accent-strong");
 });
 
 // 测试 2: landing.css 不包含旧的独立类
@@ -106,10 +106,12 @@ test("preview.css 不包含 .preview-back-cta 定义", () => {
 // 测试 4: HTML 使用统一类名
 test("preview.html 使用统一的 .primary-button 类名", () => {
   const content = fs.readFileSync(previewHtmlPath, "utf-8");
-  assert(content.includes('class="preview-tool-button primary-button btn-gradient"'),
+  assert(content.includes('class="preview-tool-button primary-button btn-stamp"'),
     "下载按钮应使用统一类名");
-  assert(content.includes('class="primary-button btn-gradient btn-md"'),
+  assert(content.includes('class="primary-button btn-stamp btn-md"'),
     "返回按钮应使用统一类名");
+  assert(!content.includes("btn-gradient"),
+    "不应残留旧的 btn-gradient 类名");
   assert(!content.includes("preview-tool-primary"),
     "不应使用旧的 preview-tool-primary 类名");
   assert(!content.includes("preview-back-cta"),
@@ -119,8 +121,10 @@ test("preview.html 使用统一的 .primary-button 类名", () => {
 // 测试 5: JS 使用统一类名
 test("landing-view.js 使用统一的 .primary-button 类名", () => {
   const content = fs.readFileSync(landingViewJsPath, "utf-8");
-  assert(content.includes('class="primary-button btn-gradient btn-lg"'),
+  assert(content.includes('class="primary-button btn-stamp btn-lg"'),
     "landing 按钮应使用统一类名");
+  assert(!content.includes("btn-gradient"),
+    "不应残留旧的 btn-gradient 类名");
   assert(!content.includes("landing-cta-primary"),
     "不应使用旧的 landing-cta-primary 类名");
 });
@@ -129,28 +133,32 @@ test("landing-view.js 使用统一的 .primary-button 类名", () => {
 test("所有主操作按钮使用相同的圆角系统", () => {
   const stylesMain = fs.readFileSync(stylesMainPath, "utf-8");
 
-  // 检查基础圆角使用 var(--radius-sm)
+  // 基础圆角使用 var(--radius-sm)
   assert(stylesMain.includes("border-radius: var(--radius-sm)"),
     "基础按钮应使用 --radius-sm 变量");
 
-  // 检查大尺寸圆角使用 var(--radius-lg)
-  const btnLgMatch = stylesMain.match(/\.primary-button\.btn-lg[^}]+border-radius:\s*var\(--radius-lg\)/s);
-  assert(btnLgMatch, ".btn-lg 应使用 --radius-lg 变量");
+  // 尺寸变体不再覆盖圆角（制图工具感统一小圆角）
+  const btnLgMatch = stylesMain.match(/\.primary-button\.btn-lg\s*\{[^}]+border-radius/s);
+  assert(!btnLgMatch, ".btn-lg 不应覆盖基础圆角");
 });
 
 test("所有主操作按钮 hover 行为统一", () => {
   const stylesMain = fs.readFileSync(stylesMainPath, "utf-8");
 
-  // 纯色变体使用背景色变化
+  // 实色主按钮 hover：深朱砂 + 上浮 1px
   const primaryHoverMatch = stylesMain.match(/\.primary-button:hover:not\(:disabled\)[^}]+background:\s*var\(--accent-strong\)/s);
-  assert(primaryHoverMatch, "纯色按钮 hover 应切换到 --accent-strong");
+  assert(primaryHoverMatch, "主按钮 hover 应切换到 --accent-strong");
 
-  // 渐变变体使用 brightness + translateY
-  const gradientHoverMatch = stylesMain.match(/\.primary-button\.btn-gradient:hover:not\(:disabled\)[^}]+filter:\s*brightness\(1\.05\)/s);
-  assert(gradientHoverMatch, "渐变按钮 hover 应使用 brightness(1.05)");
+  const primaryTransformMatch = stylesMain.match(/\.primary-button:hover:not\(:disabled\)[^}]+transform:\s*translateY\(-1px\)/s);
+  assert(primaryTransformMatch, "主按钮 hover 应使用 translateY(-1px)");
 
-  const gradientTransformMatch = stylesMain.match(/\.primary-button\.btn-gradient:hover:not\(:disabled\)[^}]+transform:\s*translateY\(-2px\)/s);
-  assert(gradientTransformMatch, "渐变按钮 hover 应使用 translateY(-2px)");
+  // 印章变体沿用同一 hover 行为
+  const stampHoverMatch = stylesMain.match(/\.primary-button\.btn-stamp:hover:not\(:disabled\)[^}]+transform:\s*translateY\(-1px\)/s);
+  assert(stampHoverMatch, "印章按钮 hover 应使用 translateY(-1px)");
+
+  // 加载态斜纹
+  const loadingMatch = stylesMain.match(/\.primary-button\[data-loading="true"\][^}]+animation:\s*btn-stripes/s);
+  assert(loadingMatch, "加载态应运行 btn-stripes 斜纹动画");
 });
 
 // 运行所有测试

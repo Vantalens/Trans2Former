@@ -40,12 +40,30 @@ const expectedTokens = {
     '--duration-fast', '--duration-base', '--duration-slow'
   ],
   fonts: [
-    '--font-ui', '--mono'
+    '--font-ui', '--font-display', '--mono'
   ],
-  gradients: [
-    '--btn-gradient-primary'
+  easing: [
+    '--ease-out', '--ease-spring'
   ]
 };
+
+// 「稿纸蓝图」重构后的关键令牌值（§2 设计规范锁定）
+const expectedTokenValues = [
+  ['--bg', '#f4f1e8'],
+  ['--surface', '#fdfcf7'],
+  ['--surface-raised', '#ffffff'],
+  ['--text', '#201d17'],
+  ['--muted', '#6e685a'],
+  ['--border', '#e0dac5'],
+  ['--accent', '#c72c41'],
+  ['--accent-strong', '#a82133'],
+  ['--color-success', '#2f7a57'],
+  ['--color-warning', '#a16a0b'],
+  ['--danger', '#a32c2c']
+];
+
+// 已删除的令牌（渐变体系随重构移除）
+const removedTokens = ['--btn-gradient-primary'];
 
 // 定义不应该出现的硬编码模式（排除 token 定义本身）
 const hardcodedPatterns = [
@@ -95,6 +113,33 @@ if (!rootBlock) {
     totalErrors += missingTokens.length;
   } else {
     console.log('✅ 所有必需的 Token 都已定义');
+  }
+
+  // 1b. 关键令牌值必须与「稿纸蓝图」设计规范一致
+  let wrongValues = [];
+  for (const [token, value] of expectedTokenValues) {
+    const regex = new RegExp(`${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*;`, 'i');
+    if (!regex.test(rootContent)) {
+      wrongValues.push(`${token}: ${value}`);
+    }
+  }
+  if (wrongValues.length > 0) {
+    console.error(`❌ ${wrongValues.length} 个 Token 值与设计规范不符:`);
+    wrongValues.forEach(token => console.error(`   - ${token}`));
+    totalErrors += wrongValues.length;
+  } else {
+    console.log('✅ 关键 Token 值与稿纸蓝图规范一致');
+  }
+
+  // 1c. 已移除的令牌不得复活
+  for (const token of removedTokens) {
+    if (rootContent.includes(token)) {
+      console.error(`❌ 已移除的 Token 重新出现: ${token}`);
+      totalErrors++;
+    }
+  }
+  if (removedTokens.every(token => !rootContent.includes(token))) {
+    console.log('✅ 渐变体系 Token 已移除（--btn-gradient-primary）');
   }
 }
 

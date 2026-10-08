@@ -128,7 +128,7 @@ function buildHero(host, stats) {
       <h2 class="landing-hero-title">把文档跨格式转换变成<br/><span class="landing-hero-accent">可验证、可修复、<wbr/>可解释</span>的工程</h2>
       <p class="landing-hero-sub"><span class="keep-together">${stats.inputFormats} 种输入 × ${stats.outputFormats} 种输出</span><span class="landing-hero-sep">//</span><span class="keep-together">${stats.recommendedRoutes} 条推荐路径</span><span class="landing-hero-sep">//</span><span class="keep-together">Repair Engine 2/7 动作已实现</span><span class="landing-hero-sep">//</span><span class="keep-together">处理阶段禁联网</span></p>
       <div class="landing-hero-actions">
-        <button type="button" class="primary-button btn-gradient btn-lg" data-landing-cta>立即体验 ${svgIcon("arrow")}</button>
+        <button type="button" class="primary-button btn-stamp btn-lg" data-landing-cta>立即体验 ${svgIcon("arrow")}</button>
         <a href="#formats" class="landing-cta-ghost">查看路径矩阵</a>
       </div>
     </div>
@@ -270,7 +270,7 @@ function buildCta(host) {
     <span class="landing-cta-eyebrow">READY / 开始</span>
     <h3>现在就开始一次<span class="landing-cta-accent">本地优先</span>的转换</h3>
     <p>无需注册、无云端依赖、无插件安装。打开工作台，拖入文件，立刻看到结构化质量报告。</p>
-    <button type="button" class="primary-button btn-gradient btn-lg" data-landing-cta>打开工作台 ${svgIcon("arrow")}</button>
+    <button type="button" class="primary-button btn-stamp btn-lg" data-landing-cta>打开工作台 ${svgIcon("arrow")}</button>
   `;
   host.appendChild(wrapper);
 }
@@ -285,6 +285,33 @@ function buildFooter(host) {
     </div>
   `;
   host.appendChild(footer);
+}
+
+// Registry 快照读数的 count-up：rAF 900ms ease-out，从 0 滚到目标值。
+// 非纯数字值（"OFF"、"2/7"）直接保持原文；prefers-reduced-motion 下不滚动。
+// 只在面板获得 is-revealed 后触发一次。
+function animateReadoutValues(panel) {
+  if (!panel || panel.dataset.counted === "1") return;
+  panel.dataset.counted = "1";
+  const reduce = typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) return;
+  for (const el of panel.querySelectorAll(".landing-readout-value")) {
+    const finalText = (el.textContent || "").trim();
+    if (!/^\d+$/.test(finalText)) continue;
+    const target = Number.parseInt(finalText, 10);
+    const start = performance.now();
+    const duration = 900;
+    el.textContent = "0";
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      el.textContent = String(Math.round(target * eased));
+      if (t < 1) requestAnimationFrame(tick);
+      else el.textContent = finalText;
+    };
+    requestAnimationFrame(tick);
+  }
 }
 
 function attachRevealObserver(root) {
@@ -305,6 +332,9 @@ function attachRevealObserver(root) {
     for (const entry of entries) {
       if (entry.isIntersecting) {
         entry.target.classList.add("is-revealed");
+        if (entry.target.classList.contains("landing-feature-readout")) {
+          animateReadoutValues(entry.target);
+        }
         observer.unobserve(entry.target);
       }
     }
