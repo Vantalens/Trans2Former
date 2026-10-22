@@ -55,7 +55,7 @@
 
 .preview-back:hover {
   border-color: var(--muted);
-  background: rgba(32, 29, 23, 0.04);
+  background: var(--ink-wash);
   transform: translateX(-2px);
 }
 
@@ -95,22 +95,23 @@
 /* ghost 风格工具按钮（主按钮变体由 styles.css 的 .primary-button 承担） */
 .preview-tool-button:not(.primary-button) {
   appearance: none;
-  border: 0;
+  border: 1px solid var(--border-strong);
   background: transparent;
   color: var(--text);
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
 }
 
 .preview-tool-button:not(.primary-button):hover {
-  background: rgba(32, 29, 23, 0.05);
+  background: var(--ink-wash);
+  border-color: var(--muted);
 }
 
 .preview-tool-button:disabled {
-  opacity: 0.45;
+  opacity: 0.62;
   cursor: not-allowed;
 }
 
@@ -204,13 +205,23 @@
   line-height: 1.6;
 }
 
+/* 行内代码：与工作台 .preview-markdown code 同款（朱砂字 + 淡底发丝线 chip） */
 .preview-canvas code {
-  background: var(--surface-soft);
+  padding: 0.12em 0.36em;
   border: 1px solid var(--border);
-  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
+  background: var(--surface-soft);
   font-family: var(--mono);
-  font-size: 0.9em;
+  font-size: 0.88em;
+  color: var(--accent-strong);
+}
+
+/* 深色代码块内的 code 还原透明，不套行内 chip */
+.preview-canvas pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
 }
 
 .preview-canvas table {
@@ -231,8 +242,7 @@
   font-weight: 600;
 }
 
-.preview-pdf-frame,
-.preview-iframe {
+.preview-pdf-frame {
   width: 100%;
   height: calc(100vh - 140px);
   border: 1px solid var(--border);
@@ -298,8 +308,7 @@
   .preview-topbar { padding: var(--space-3) var(--space-4); flex-wrap: wrap; gap: var(--space-2); }
   .preview-stage { padding: var(--space-4); }
   .preview-canvas { padding: var(--space-7) var(--space-5); }
-  .preview-pdf-frame,
-  .preview-iframe { height: calc(100vh - 180px); }
+  .preview-pdf-frame { height: calc(100vh - 180px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

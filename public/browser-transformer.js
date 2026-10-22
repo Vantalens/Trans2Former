@@ -672,9 +672,8 @@ export function toConversionDocumentModel(content, fromFormat, toFormat, title =
   return registry.prepareConversionModel({ content, from: fromFormat, to: toFormat, title, fileName });
 }
 
-export function renderPreviewHtml(content, fromFormat, title = "document") {
-  const model = toDocumentModel(content, fromFormat, title);
-  return modelToBodyHtml(model);
+export function renderPreviewHtml(content, fromFormat, title = "document", model = null) {
+  return modelToBodyHtml(model || toDocumentModel(content, fromFormat, title));
 }
 
 export function convertContent({ content, from, to, title = "document", fileName = "", options = {} }) {

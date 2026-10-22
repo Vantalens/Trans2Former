@@ -1043,6 +1043,18 @@ if (pdfjsAvailableForMixed) {
       assert.deepEqual(rasterizedPages, [1], "PDF identity copy must not run OCR or redraw pages");
       assert.equal(pdfOutput.data, pdf.data, "PDF to PDF should preserve the source bytes");
       assert.ok((pdfOutput.warnings || []).some((warning) => warning.code === "PDF_ORIGINAL_PRESERVED"));
+      rasterizedPages.length = 0;
+      const forcedOutput = await convertContentAsync({
+        content: pdf.data,
+        from: "pdf",
+        to: "txt",
+        title: "forced-recheck",
+        options: { repair: false, ocr: { mode: "force" } },
+      });
+      assert.deepEqual(rasterizedPages, [0, 1, 2], "force mode must OCR every page");
+      assert.equal(forcedOutput.data.includes("FIRST"), false, "source text must be replaced, not appended");
+      assert.equal(forcedOutput.data.includes("LAST"), false, "source text must be replaced, not appended");
+      assert.equal((forcedOutput.data.match(/OCR MIDDLE/g) || []).length, 3);
       const readBack = readPdf({ content: await expandPdfContentForTextExtraction(pdfOutput.data) });
       assert.equal(readBack.metadata.pdf.pageCount, 3);
       assert.equal(readBack.blocks.some((block) => String(block.text || "").includes("OCR MIDDLE")), false);
@@ -1078,6 +1090,60 @@ if (pdfjsAvailableForMixed) {
 } else {
   console.log("⊘ 29c mixed-page OCR skipped: pdfjs-dist not installed");
 }
+
+await assert.rejects(
+  runScannedPdfOCRStage({ blocks: [], metadata: {} }, {
+    options: { ocr: { mode: "force" } },
+    ocrRegistry: { pickForTask: () => null },
+  }),
+  (error) => error.code === "PDF_FORCED_OCR_UNAVAILABLE",
+);
+await assert.rejects(
+  runScannedPdfOCRStage({ blocks: [{ type: "paragraph", text: "SOURCE" }], metadata: {} }, {
+    options: { ocr: { mode: "force" } },
+    ocrEngine: {
+      id: "empty-force-engine",
+      isAvailable: () => true,
+      recognize: async () => ({ pages: [{ lines: [] }] }),
+    },
+    rasterizer: {
+      countPages: async () => 1,
+      rasterize: async () => ({ dataUrl: "data:image/png;base64,YQ==" }),
+      dispose: async () => {},
+    },
+  }),
+  (error) => error.code === "PDF_FORCED_OCR_EMPTY",
+);
+const forcedStage = await runScannedPdfOCRStage({
+  title: "forced-layout",
+  sourceFormat: "pdf",
+  blocks: [{ type: "paragraph", text: "SOURCE" }],
+  metadata: { pdf: { pageBlockCounts: [1] } },
+  fixedLayout: { pages: [{ size: { width: 612, height: 792 }, textRuns: [
+    { text: "SOURCE", bbox: { x: 30, y: 700, w: 60, h: 12 } },
+  ] }] },
+}, {
+  options: { ocr: { mode: "force" } },
+  ocrEngine: {
+    id: "forced-engine",
+    isAvailable: () => true,
+    recognize: async () => createOCRResult({
+      pages: [{ pageIndex: 0, width: 100, height: 100, lines: [
+        { text: "OCR VALUE", confidence: 0.9, bbox: { x: 10, y: 20, w: 50, h: 10 } },
+      ] }],
+      fullText: "OCR VALUE",
+      averageConfidence: 0.9,
+    }),
+  },
+  rasterizer: {
+    countPages: async () => 1,
+    rasterize: async () => ({ dataUrl: "data:image/png;base64,YQ==" }),
+    dispose: async () => {},
+  },
+});
+assert.equal(forcedStage.blocks.some((block) => String(block.text || "").includes("SOURCE")), false);
+assert.equal(forcedStage.fixedLayout.pages[0].textRuns.some((run) => run.text === "SOURCE"), false);
+assert.equal(forcedStage.fixedLayout.pages[0].textRuns.some((run) => run.text === "OCR VALUE"), true);
 
 // 30. convertContentAsync routes scanned PDF through OCR stage when stubs registered
 {

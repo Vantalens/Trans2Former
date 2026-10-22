@@ -76,6 +76,8 @@ const outputMeta = byId("outputMeta");
 const markdownProfileSelect = byId("markdownProfileSelect");
 const persistHistoryCheckbox = byId("persistHistoryCheckbox");
 const applyFallbackCheckbox = byId("applyFallbackCheckbox");
+const forcePdfOcrCheckbox = byId("forcePdfOcrCheckbox");
+const forcePdfOcrField = byId("forcePdfOcrField");
 const clearHistoryButton = byId("clearHistoryButton");
 const refreshPreviewButton = byId("refreshPreviewButton");
 const largePreviewModeSelect = byId("largePreviewModeSelect");
@@ -157,6 +159,7 @@ let outputDirectoryHandle = null;
 let sessionVersions = [];
 let outputVersionIndex = -1;
 let currentDocumentModel = null;
+let inputModelCache = null;
 let currentConversionQuality = null;
 let currentOutputFormat = "";
 let currentOutputMime = "";
@@ -1091,7 +1094,7 @@ function syncInputEditorMode(format = fromFormatSelect.value) {
   fitInputEditorHeight();
 }
 
-function createReadableInputDisplay(rawContent, format, fileName) {
+function createReadableInputDisplay(rawContent, format, fileName, model = null) {
   return createReadableInputDisplayState({
     rawContent,
     format,
@@ -1099,6 +1102,7 @@ function createReadableInputDisplay(rawContent, format, fileName) {
     binaryFormats: BINARY_INPUT_FORMATS,
     toDocumentModel,
     getPlainText,
+    model,
   });
 }
 
@@ -1347,6 +1351,15 @@ function syncPdfPaperControl() {
   if (paperField) {
     paperField.hidden = toFormatSelect.value !== "pdf";
   }
+  syncPdfOcrControl();
+}
+
+function syncPdfOcrControl() {
+  if (!forcePdfOcrCheckbox || !forcePdfOcrField) return;
+  const available = fromFormatSelect.value === "pdf" && toFormatSelect.value !== "pdf";
+  forcePdfOcrField.hidden = !available;
+  forcePdfOcrCheckbox.disabled = !available;
+  if (!available) forcePdfOcrCheckbox.checked = false;
 }
 
 function syncMarkdownProfileControl() {
@@ -1383,6 +1396,7 @@ function syncFormatOptions() {
     .filter((item) => item.canWrite && allowedOutputs.has(item.format))
     .map((item) => new Option(item.label, item.format)));
   toFormatSelect.value = [...toFormatSelect.options].some((option) => option.value === currentTo) ? currentTo : toFormatSelect.options[0]?.value || "html";
+  syncPdfOcrControl();
   updateFormatCapabilityNote();
 }
 
@@ -1449,7 +1463,7 @@ function describeNoTextRunsPdf(model) {
   const warning = getPdfNoTextRunsWarning(model);
   const pageCount = Number(warning?.details?.pageCount) || Number(model?.metadata?.pdf?.pageCount) || 0;
   const pagesText = pageCount > 0 ? `共 ${pageCount} 页，` : "";
-  return `这份 PDF ${pagesText}均无文本层，疑似扫描件/图片型——点击转换将使用本地 OCR 识别。`;
+  return `这份 PDF ${pagesText}未提取到可编辑文字，可能为空白页、扫描件或编码问题。点击转换会尝试本地 OCR；识别不可用时将明确报错。`;
 }
 
 function renderLargeDocumentPreview(rawContent, fileName = currentFileName) {
@@ -1501,8 +1515,13 @@ function renderPreview() {
     renderLargeDocumentPreview(content, currentFileName);
     return;
   }
-  const model = toDocumentModel(content, fromFormatSelect.value, currentFileName);
-  const bodyHtml = renderPreviewHtml(content, fromFormatSelect.value, currentFileName);
+  const format = fromFormatSelect.value;
+  const cached = inputModelCache;
+  const model = cached?.content === content && cached.format === format && cached.fileName === currentFileName
+    ? cached.model
+    : toDocumentModel(content, format, currentFileName);
+  inputModelCache = { content, format, fileName: currentFileName, model };
+  const bodyHtml = renderPreviewHtml(content, format, currentFileName, model);
   htmlPreview.innerHTML = bodyHtml;
   if (String(bodyHtml || "").trim()) {
     delete htmlPreview.dataset.emptyHint;
@@ -1637,18 +1656,19 @@ async function handleInputText(rawContent, fileName = currentFileName, { renderI
   setWorkflowStep("preview");
   currentFileName = fileName;
   currentInputContent = String(rawContent ?? "");
-  let inputDisplayText = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName);
+  let inputModel = null;
   if (String(fromFormatSelect.value).toLowerCase() === "pdf") {
-    // 扫描件/图片型 PDF：占位文案明确引导本地 OCR（与加密提示并列的专门分支）
     try {
-      const inputModel = toDocumentModel(currentInputContent, fromFormatSelect.value, fileName);
-      if (isNoTextRunsPdfModel(inputModel)) {
-        inputDisplayText = describeNoTextRunsPdf(inputModel);
-      }
+      inputModel = toDocumentModel(currentInputContent, fromFormatSelect.value, fileName);
     } catch {
       // 解析失败时保留默认可读摘要
     }
   }
+  let inputDisplayText = createReadableInputDisplay(currentInputContent, fromFormatSelect.value, fileName, inputModel);
+  if (isNoTextRunsPdfModel(inputModel)) inputDisplayText = describeNoTextRunsPdf(inputModel);
+  inputModelCache = inputModel
+    ? { content: currentInputContent, format: fromFormatSelect.value, fileName, model: inputModel }
+    : null;
   inputContent.value = inputDisplayText;
   syncInputEditorMode();
   fitInputEditorHeight();
@@ -1908,6 +1928,9 @@ async function transformContent() {
         applyFallback: applyFallbackCheckbox?.checked || false,
       },
     };
+    if (from === "pdf" && to !== "pdf") {
+      options.ocr = { mode: forcePdfOcrCheckbox?.checked ? "force" : "auto" };
+    }
 
     // 如果输出为 PDF，读取纸张格式选项
     if (to === "pdf" && paperFormatSelect) {

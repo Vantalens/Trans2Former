@@ -150,6 +150,8 @@ try {
   }, mixedPdf.data.split(",")[1]);
   await page.waitForFunction(() => document.getElementById("fromFormatSelect")?.value === "pdf", { timeout: 10000 });
   await page.select("#toFormatSelect", "txt");
+  assert.equal(await page.$eval("#forcePdfOcrField", (element) => element.hidden), false);
+  assert.equal(await page.$eval("#forcePdfOcrCheckbox", (element) => element.disabled), false);
   await page.click("#transformButton");
   await page.waitForFunction(
     () => document.getElementById("downloadOutputButton")?.getAttribute("download") === "mixed-ui.txt",
@@ -168,6 +170,7 @@ try {
   assert.match(pdfResult.warningDetails, /PDF_PAGES_WITHOUT_TEXT/);
   assert.match(pdfResult.output, /FIRST/);
   await page.select("#toFormatSelect", "pdf");
+  assert.equal(await page.$eval("#forcePdfOcrField", (element) => element.hidden), true);
   await page.click("#transformButton");
   await page.waitForFunction(
     () => document.querySelector("#pdfPreview img.input-pdf-page")?.getAttribute("src")?.startsWith("data:image/png"),
@@ -185,6 +188,19 @@ try {
     return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
   });
   assert.equal(downloadedPdfBase64, mixedPdf.data.split(",")[1], "PDF to PDF download must preserve the source bytes");
+  const blankPdf = writePdfHighFidelity({
+    model: { title: "blank-ui", fixedLayout: { pages: [{ size: { width: 612, height: 792 }, textRuns: [] }] } },
+  });
+  await page.evaluate((base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], "blank-ui.pdf", { type: "application/pdf" }));
+    const input = document.getElementById("fileInput");
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, blankPdf.data.split(",")[1]);
+  await page.waitForFunction(() => document.getElementById("inputContent")?.value.includes("未提取到可编辑文字"), { timeout: 15000 });
+  assert.match(await page.$eval("#inputContent", (element) => element.value), /可能为空白页、扫描件或编码问题/);
   assert.deepEqual(pageErrors, [], `UI should not emit page errors:\n${pageErrors.join("\n")}`);
   assert.deepEqual(
     consoleErrors.filter((entry) => !entry.includes("404 (Not Found)")),

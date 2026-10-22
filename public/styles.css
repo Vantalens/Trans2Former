@@ -23,6 +23,7 @@
   /* 发丝线 */
   --border: #e0dac5;
   --border-strong: #c8c0a4;
+  --ink-wash: rgba(32, 29, 23, 0.04);  /* hover 油墨淡染 */
 
   /* 朱砂印章红 —— 唯一强调色 */
   --accent: #c72c41;
@@ -144,9 +145,15 @@ details:not([open]) > :not(summary) {
 }
 
 /* 统一焦点：朱砂细圈 */
-:is(a, button, summary, [role="button"], select):focus-visible {
+:is(a, button, summary, [role="button"], select, input):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* 选中态：朱砂淡染底 + 深朱砂文字 */
+::selection {
+  background: var(--focus);
+  color: var(--accent-strong);
 }
 
 /* 全局滚动条：透明轨 + 油墨淡拇指 */
@@ -382,13 +389,7 @@ body[data-active-view="landing"] .topbar-actions {
   font-weight: 700;
 }
 
-/* 状态 chip 按 data-type 淡底描边 */
-.status-chip[data-type="info"] {
-  border-color: var(--border);
-  background: var(--surface-soft);
-  color: var(--muted-strong);
-}
-
+/* 状态 chip 按 data-type 淡底描边（info 与基座样式一致，不重复定义） */
 .status-chip[data-type="success"] {
   border-color: rgba(47, 122, 87, 0.35);
   background: var(--color-success-soft);
@@ -555,7 +556,7 @@ body[data-active-view="landing"] .topbar-actions {
 
 .ghost-button:hover:not(:disabled):not(.disabled) {
   border-color: var(--muted);
-  background: rgba(32, 29, 23, 0.04);
+  background: var(--ink-wash);
 }
 
 .ghost-button.disabled {
@@ -576,6 +577,17 @@ button:disabled {
   opacity: 0.62;
 }
 
+/* 主按钮禁用态：朱砂淡底 + 朱砂文字（避免整钮半透明糊成色渍） */
+.primary-button:disabled {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-soft);
+  cursor: not-allowed;
+  opacity: 1;
+  transform: none;
+  box-shadow: none;
+}
+
 /* 小按钮：mono 小一号 + 发丝线描边 */
 .mini-button {
   min-height: 44px;
@@ -591,7 +603,7 @@ button:disabled {
 
 .mini-button:hover:not(:disabled) {
   border-color: var(--muted);
-  background: rgba(32, 29, 23, 0.04);
+  background: var(--ink-wash);
   color: var(--text);
 }
 
@@ -617,7 +629,7 @@ button:disabled {
 .auxiliary-actions > summary:hover,
 .output-settings > summary:hover {
   border-color: var(--muted);
-  background: rgba(32, 29, 23, 0.04);
+  background: var(--ink-wash);
   color: var(--text);
 }
 
@@ -644,7 +656,7 @@ button:disabled {
 }
 
 .menu-button:hover {
-  background: rgba(32, 29, 23, 0.04);
+  background: var(--ink-wash);
   color: var(--text);
 }
 
@@ -803,6 +815,11 @@ button:disabled {
   font-weight: 700;
 }
 
+.queue-panel > summary:hover {
+  background: var(--ink-wash);
+  color: var(--text);
+}
+
 .queue-panel > summary::after,
 .output-settings > summary::after {
   content: "+";
@@ -870,7 +887,7 @@ button:disabled {
 }
 
 .queue-item:hover {
-  background: rgba(32, 29, 23, 0.03);
+  background: var(--ink-wash);
 }
 
 .queue-item:focus-visible {
@@ -1121,10 +1138,6 @@ button:disabled {
   min-width: 150px;
 }
 
-.large-preview-field[hidden] {
-  display: none;
-}
-
 .large-preview-field {
   min-width: 132px;
 }
@@ -1217,7 +1230,6 @@ button:disabled {
   min-height: 0;
 }
 
-.viewer-card > .preview-frame[hidden],
 .viewer-card > .output-editor-panel[hidden],
 .viewer-card > .error-details-panel[hidden] {
   display: none !important;
@@ -1418,7 +1430,7 @@ button:disabled {
 }
 
 .preview-markdown code {
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 0.12em 0.36em;
   background: var(--surface-soft);
   border: 1px solid var(--border);
@@ -1732,7 +1744,18 @@ button:disabled {
   cursor: pointer;
   font-weight: 600;
   color: var(--text);
-  list-style: revert;
+}
+
+/* 展开标记与其他 details 统一的 +/- 语言（替代 UA 默认三角） */
+.verification-report > summary::after {
+  content: "+";
+  margin-left: 6px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.verification-report[open] > summary::after {
+  content: "-";
 }
 
 .verification-badge {
@@ -2030,7 +2053,7 @@ button:disabled {
   font-family: var(--mono);
   font-size: 0.82em;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--surface-soft);
 }
 
@@ -2044,13 +2067,7 @@ button:disabled {
   font-size: 0.82rem;
 }
 
-/* 模型缓存卡片 */
-.model-cache-card .security-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
+/* 模型缓存卡片（header 复用 .security-card-header，不再重复定义） */
 .model-cache-table {
   margin-top: 10px;
   border-radius: var(--radius);

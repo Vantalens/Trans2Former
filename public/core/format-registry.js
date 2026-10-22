@@ -710,13 +710,16 @@ export class ConverterRegistry {
   _requirePdfText(model, fromFormat) {
     if (fromFormat !== "pdf" || getPlainText(model).trim()) return;
     const encrypted = model?.metadata?.pdf?.encrypted === true;
+    const ocrUnavailable = (model?.metadata?.warnings || []).some((warning) => warning.code === "OCR_UNAVAILABLE");
     throw new ConversionError(
       encrypted
         ? "此 PDF 已加密，无法提取正文。请先解除密码后重试。"
+        : ocrUnavailable
+          ? "PDF 未提取到可编辑文字，且本地 OCR 引擎不可用。请检查 OCR 模型状态后重试。"
         : "未能从 PDF 提取可编辑正文。请检查原 PDF 预览，或启用可用的 OCR 后重试。",
       {
         category: "parse",
-        code: encrypted ? "PDF_ENCRYPTED" : "PDF_TEXT_UNAVAILABLE",
+        code: encrypted ? "PDF_ENCRYPTED" : ocrUnavailable ? "PDF_OCR_UNAVAILABLE" : "PDF_TEXT_UNAVAILABLE",
         format: "pdf",
         details: { extraction: model?.metadata?.pdf?.extraction || "unknown" },
       },
@@ -767,6 +770,12 @@ export class ConverterRegistry {
   async convertAsync({ content, from, to, title = "document", fileName = "", options = {} }) {
     const fromFormat = normalizeFormat(from);
     const toFormat = normalizeFormat(to);
+    const ocrMode = options?.ocr?.mode || "auto";
+    if (!["auto", "force"].includes(ocrMode) || (ocrMode === "force" && (fromFormat !== "pdf" || toFormat === "pdf"))) {
+      throw new ConversionError("OCR 重识别仅支持 PDF 转可编辑格式；模式须为 auto 或 force。", {
+        category: "validate", code: "PDF_OCR_MODE_INVALID", format: fromFormat,
+      });
+    }
     const signal = options?.signal;
     this._checkResourceBudget(content, fromFormat);
 
@@ -797,11 +806,13 @@ export class ConverterRegistry {
         to: toFormat,
         signal,
       });
-    } else if (options?.ocr?.enabled !== false && fromFormat === "pdf" && toFormat !== "pdf") {
+    } else if ((options?.ocr?.enabled !== false || ocrMode === "force") && fromFormat === "pdf" && toFormat !== "pdf") {
       if (signal?.aborted) throw new Error("转换已取消");
       const { isScannedPdf } = await import("./ocr/pdf-rasterizer.js");
-      const detection = await isScannedPdf(content, options?.ocr || {});
-      if (detection.scanned) {
+      const detection = ocrMode === "force"
+        ? { scanned: true, pageIndices: undefined }
+        : await isScannedPdf(content, options?.ocr || {});
+      if (detection.scanned || ocrMode === "force") {
         if (signal?.aborted) throw new Error("转换已取消");
         const stage = await import("./ocr/scan-pdf-stage.js");
         model = await stage.runScannedPdfOCRStage(model, {
@@ -810,7 +821,7 @@ export class ConverterRegistry {
           from: fromFormat,
           to: toFormat,
           signal,
-          pageIndices: detection.pageIndices,
+          pageIndices: ocrMode === "force" ? undefined : detection.pageIndices,
         });
       }
     }

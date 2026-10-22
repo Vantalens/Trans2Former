@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Trans2Former</title>
     <meta name="description" content="Trans2Former 本地优先多格式文档转换。" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/styles/landing.css" />
   </head>
@@ -153,6 +154,10 @@
                   <label class="toggle-label" title="自动修复建议降级到更安全格式时是否应用（默认仅推荐）">
                     <input id="applyFallbackCheckbox" type="checkbox" />
                     自动应用格式降级
+                  </label>
+                  <label class="toggle-label" id="forcePdfOcrField" hidden title="对 PDF 所有页面重新做本地 OCR；识别文本将替换原提取文本">
+                    <input id="forcePdfOcrCheckbox" type="checkbox" />
+                    使用 OCR 重识别 PDF 文字
                   </label>
                   <div class="output-settings-actions">
                     <button id="clearHistoryButton" class="mini-button" type="button">清除历史</button>

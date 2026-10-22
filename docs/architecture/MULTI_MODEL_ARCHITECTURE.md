@@ -219,10 +219,10 @@ S2 已落地为 `public/core/repair-engine.js`、`public/core/repair-actions.js`
 
 ### 扫描 PDF OCR 管线（P9-A.4 落地）
 
-- `isScannedPdf(content, options)` (`public/core/ocr/pdf-rasterizer.js`)：基于 `expandPdfContentForTextExtraction` 检测 PDFJS_PAYLOAD 标记是否存在 + 提取字符数 < 阈值（默认 300）双重启发式；不带 payload → 扫描；带 payload 但低于阈值 → 扫描；其余 → 文本 PDF。
+- `isScannedPdf(content, options)` (`public/core/ocr/pdf-rasterizer.js`)：只有整份无可信文本或存在无文字页时自动触发 OCR；稀疏但有文字的表单不会因字符数少而重复识别。
 - `PdfPageRasterizer` 抽象 + `defaultPdfPageRasterizer` 单例（Node 默认抛 `OCR_RASTERIZER_UNAVAILABLE`）+ `setPdfPageRasterizer(impl)` / `resetPdfPageRasterizer()` 让测试注入 stub；真实浏览器端 pdfjs canvas 渲染留给 P9-B。
-- `runScannedPdfOCRStage(model, ctx)` (`public/core/ocr/scan-pdf-stage.js`)：拿 rasterizer + engine → countPages → 循环 rasterize 每页 → engine.recognize → 把多页 paragraph blocks 追加到 model + `metadata.ocr.lines` 含 `pageIndex` / `blockId` + `metadata.modelReview.ocr` 总览。错误统一注入 `OCR_ENGINE_FAILED` warning 返回原 model。
-- `convertContentAsync({ from: "pdf", to: "..." })` 自动检测扫描 PDF 并接 OCR stage；文本 PDF 沿用 P8-B 路径。Repair Engine 的 `detectOCRLowConfidence` validator 自动复用扫描 PDF 输出。
+- `runScannedPdfOCRStage(model, ctx)` (`public/core/ocr/scan-pdf-stage.js`)：默认只将无文字页的 OCR 结果并入原模型；显式 `options.ocr.mode = "force"` 时识别全部页面并替换原文本块与对应 textRuns。强制模式在引擎不可用、识别失败或任一页无结果时抛出 `PDF_FORCED_OCR_UNAVAILABLE` / `PDF_FORCED_OCR_FAILED` / `PDF_FORCED_OCR_EMPTY`，不会返回伪成功。
+- `convertContentAsync({ from: "pdf", to: "...", options: { ocr: { mode: "auto" | "force" } } })` 默认 `auto`，可编辑输出允许 `force`；PDF→PDF 仍复制原件。Repair Engine 的 `detectOCRLowConfidence` validator 复用 OCR 输出。
 
 ### FixedLayoutModel 接入 + 浏览器 rasterize 真实化（P9-B 落地）
 

@@ -449,6 +449,12 @@ export function collapseCjkFakeSpaces(text) {
   return String(text).replace(run, (match) => match.replaceAll(" ", ""));
 }
 
+// PDF.js can put tracking spaces inside one item. Its item-wide bounding box no
+// longer tells us which of those spaces were word boundaries, so retain the text.
+function hasAmbiguousLatinSpacing(text) {
+  return /(?:\b[A-Za-z] ){3,}[A-Za-z]\b/.test(String(text || ""));
+}
+
 async function loadPdfJs() {
   if (typeof window !== "undefined") {
     const pdfjs = await import("/vendor/pdfjs/pdf.min.mjs");
@@ -508,7 +514,9 @@ async function extractTextWithPdfJs(content) {
         includeMarkedContent: false,
       });
       const items = (textContent.items || [])
-        .filter((item) => typeof item.str === "string" && item.str.length > 0)
+        // PDF.js may emit a synthetic whitespace item spanning a whole gutter.
+        // Its geometry is not document content and would hide real columns.
+        .filter((item) => typeof item.str === "string" && item.str.trim().length > 0)
         .map((item) => ({
           str: collapseCjkFakeSpaces(item.str),
           x: item.transform?.[4] ?? 0,
@@ -520,6 +528,7 @@ async function extractTextWithPdfJs(content) {
           fontName: String(item.fontName || ""),
           hasEOL: Boolean(item.hasEOL),
         }));
+      const ambiguousSpacing = items.some((item) => hasAmbiguousLatinSpacing(item.str));
       const pageBlocks = analyzePageLayout(items);
       const fallbackText = pageBlocks.length === 0
         ? joinPdfItems(items)
@@ -542,13 +551,13 @@ async function extractTextWithPdfJs(content) {
         rotation,
       };
       if (pageBlocks.length > 0) {
-        pages.push({ pageNumber, blocks: pageBlocks, layout: layoutPage });
+        pages.push({ pageNumber, blocks: pageBlocks, layout: layoutPage, ambiguousSpacing });
       } else if (fallbackText) {
-        pages.push({ pageNumber, text: fallbackText, layout: layoutPage });
+        pages.push({ pageNumber, text: fallbackText, layout: layoutPage, ambiguousSpacing });
       } else {
         // Keep textless pages in the payload. A mixed text/scan PDF must not
         // silently lose page numbers before the caller can report OCR gaps.
-        pages.push({ pageNumber, layout: layoutPage });
+        pages.push({ pageNumber, layout: layoutPage, ambiguousSpacing });
       }
       page.cleanup();
     }
@@ -602,6 +611,63 @@ function distinctLayoutLineCount(segments, tolerance) {
   return count;
 }
 
+function groupPageRows(items) {
+  const heights = items.map((item) => Number(item.height) || 12).sort((a, b) => a - b);
+  const medianHeight = heights[Math.floor(heights.length / 2)] || 12;
+  const rows = [];
+  for (const item of [...items].sort((a, b) => b.y - a.y || a.x - b.x)) {
+    const row = rows[rows.length - 1];
+    if (row && Math.abs(row.y - item.y) < medianHeight * 0.5) row.items.push(item);
+    else rows.push({ y: item.y, items: [item] });
+  }
+  return { rows, medianHeight };
+}
+
+function splitPageRegions(items) {
+  if (!items?.length) return [];
+  const { rows, medianHeight } = groupPageRows(items);
+  const regions = [];
+  let current = [];
+  let previousY = null;
+  for (const row of rows) {
+    if (previousY !== null && previousY - row.y > Math.max(30, medianHeight * 2.5)) {
+      regions.push(current);
+      current = [];
+    }
+    current.push(...row.items);
+    previousY = row.y;
+  }
+  if (current.length) regions.push(current);
+  return regions;
+}
+
+function pageFieldRows(items) {
+  const { rows, medianHeight } = groupPageRows(items);
+  if (rows.length < 3) return null;
+  const gapThreshold = Math.max(18, medianHeight * 1.5);
+  let paired = 0;
+  const normalized = rows.map((row) => {
+    const grouped = [];
+    for (const item of row.items.sort((a, b) => a.x - b.x)) {
+      const last = grouped[grouped.length - 1];
+      const itemEnd = item.x + (Number(item.width) || 0);
+      if (!last || item.x - last.end > gapThreshold) grouped.push({ items: [item], end: itemEnd });
+      else {
+        last.items.push(item);
+        last.end = Math.max(last.end, itemEnd);
+      }
+    }
+    const segments = grouped.map((segment) => segment.items);
+    const shortSegments = segments.every((segment) => joinPdfItems(segment).length <= 42);
+    const isPaired = (segments.length === 2 || segments.length === 4) && shortSegments;
+    if (isPaired) paired += 1;
+    return { segments, isPaired, height: Math.max(...row.items.map((item) => Number(item.height) || 12)) };
+  });
+  return paired >= 3 && paired >= Math.ceil(rows.length * 0.6)
+    ? { rows: normalized, medianHeight }
+    : null;
+}
+
 // Detect a persistent vertical gutter from line segments. Requiring at least three
 // aligned rows per side avoids treating a normal label/value pair as columns.
 function splitPageColumns(items) {
@@ -642,7 +708,13 @@ function splitPageColumns(items) {
   for (let index = 1; index < starts.length; index += 1) {
     const gap = starts[index] - starts[index - 1];
     if (gap <= gutterThreshold) continue;
-    const threshold = (starts[index] + starts[index - 1]) / 2;
+    const leftEnds = segments
+      .filter((segment) => segment.minX <= starts[index - 1] && segment.maxX < starts[index])
+      .map((segment) => segment.maxX);
+    if (!leftEnds.length) continue;
+    const leftEnd = Math.max(...leftEnds);
+    if (starts[index] - leftEnd <= gutterThreshold) continue;
+    const threshold = (leftEnd + starts[index]) / 2;
     const left = segments.filter((segment) => segment.maxX < threshold);
     const right = segments.filter((segment) => segment.minX > threshold);
     const spanning = segments.filter((segment) => segment.minX <= threshold && segment.maxX >= threshold);
@@ -668,16 +740,29 @@ function splitPageColumns(items) {
 // 把 PDF 文本 item 按 y 坐标聚成行，再按字号 / 间距 / 行首符号区分
 // 标题 / 列表 / 段落。坐标系 y 越大越靠上（PDF 原点在左下）。
 export function analyzePageLayout(items) {
-  const columns = splitPageColumns(items);
-  if (columns) {
-    return [
+  return splitPageRegions(items).flatMap((region) => {
+    const fieldRows = pageFieldRows(region);
+    if (fieldRows) return fieldRows.rows.map(({ segments, isPaired, height }) => {
+      const text = segments.map((segment) => joinPdfItems(segment)).join(" ");
+      const inlines = segments.flatMap((segment, index) => [
+        ...(index ? [{ type: "text", value: " " }] : []),
+        ...itemsToInlines(segment),
+      ]);
+      if (!isPaired && height > fieldRows.medianHeight * 1.15) {
+        return { type: "heading", level: computeHeadingLevel(height, fieldRows.medianHeight), text,
+          ...(inlines.length ? { inlines } : {}) };
+      }
+      return { type: "paragraph", text, ...(inlines.length ? { inlines } : {}) };
+    }).filter((block) => block.text);
+    const columns = splitPageColumns(region);
+    if (columns) return [
       ...analyzeSingleColumnLayout(columns.top),
       ...analyzeSingleColumnLayout(columns.left),
       ...analyzeSingleColumnLayout(columns.right),
       ...analyzeSingleColumnLayout(columns.bottom),
     ];
-  }
-  return analyzeSingleColumnLayout(items);
+    return analyzeSingleColumnLayout(region);
+  });
 }
 
 function analyzeSingleColumnLayout(items) {
@@ -1025,6 +1110,16 @@ export async function expandPdfContentForTextExtraction(content) {
 export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" }) {
   const source = coercePdfText(content);
   const pdfJsPayload = extractPdfJsPayload(source);
+  const ambiguousSpacingPages = (pdfJsPayload?.pages || [])
+    .filter((page) => page?.ambiguousSpacing === true)
+    .map((page) => page.pageNumber)
+    .filter((number) => Number.isSafeInteger(number) && number > 0);
+  const spacingWarnings = ambiguousSpacingPages.length ? [createWarning(
+    "lossy",
+    "PDF_TEXT_SPACING_AMBIGUOUS",
+    `第 ${ambiguousSpacingPages.join("、")} 页的英文文本项含逐字母空格，无法确认原始词边界；已保留提取文本，可按需使用本地 OCR 重识别。`,
+    { pages: ambiguousSpacingPages },
+  )] : [];
 
   // PDF.js + 版面分析路径：page.blocks 已经是结构化的 heading/list/paragraph
   if (pdfJsPayload && pdfJsPayload.pages?.some((page) => Array.isArray(page.blocks) && page.blocks.length > 0)) {
@@ -1078,7 +1173,7 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
         "lossy",
         "PDF_LAYOUT_HEURISTIC",
         "PDF text was reconstructed from PDF.js coordinates with heuristic layout analysis (font-size for headings, y-gap for paragraphs, line-prefix for lists). Visual fidelity is not preserved."
-      )];
+      ), ...spacingWarnings];
       if (pagesWithoutText.length > 0) {
         warnings.push(createWarning(
           "lossy",
@@ -1151,7 +1246,7 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
     "lossy",
     "PDF_TEXT_EXTRACTION_MVP",
     "PDF MVP extracts simple literal text operators only; layout, fonts, images, and scanned pages are not preserved."
-  )];
+  ), ...spacingWarnings];
   if (strings.length === 0) {
     if (encrypted) {
       warnings.push(createWarning(
@@ -1163,7 +1258,7 @@ export function readPdf({ content, title = "pdf", fileName = "", format = "pdf" 
       warnings.push(createWarning(
         "unsupported",
         "PDF_NO_TEXT_RUNS",
-        `PDF.js parsed ${payloadPageNumbers.length} page(s) but none contain extractable text runs; the document is likely scanned or image-only (or the pages are blank). Convert with OCR enabled to recover editable text.`,
+        `PDF.js parsed ${payloadPageNumbers.length} page(s) but extracted no text runs. The pages may be blank, scanned, or have unsupported text encoding; local OCR can be attempted.`,
         { pageCount: payloadPageNumbers.length, pagesWithoutText: payloadPageNumbers, ocrRecommended: true }
       ));
     } else {

@@ -1,4 +1,5 @@
 import { createParagraph } from "../document-model.js";
+import { ConversionError } from "../conversion-error.js";
 import { createWarning, withWarnings } from "../warnings.js";
 import { defaultOCRRegistry } from "./ocr-engine.js";
 import { createOCREngineFailedWarning, createOCRUnavailableWarning, createOCRLowConfidenceWarning, createOCRScanPagesTruncatedWarning } from "./ocr-warnings.js";
@@ -38,7 +39,7 @@ function paragraphsFromPageResult(result) {
   return paragraphs;
 }
 
-function mergeOCRPagesWithSourceLayout(sourceLayout, ocrLayout, successfulIndices) {
+function mergeOCRPagesWithSourceLayout(sourceLayout, ocrLayout, successfulIndices, replaceText = false) {
   if (!Array.isArray(sourceLayout?.pages) || sourceLayout.pages.length === 0) return ocrLayout;
   const pages = sourceLayout.pages.map((page) => ({ ...page, textRuns: [...(page.textRuns || [])] }));
   for (let index = 0; index < successfulIndices.length; index += 1) {
@@ -46,6 +47,7 @@ function mergeOCRPagesWithSourceLayout(sourceLayout, ocrLayout, successfulIndice
     const sourcePage = pages[pageIndex];
     const ocrPage = ocrLayout.pages[index];
     if (!sourcePage || !ocrPage) continue;
+    if (replaceText) sourcePage.textRuns = [];
     const sourceWidth = Number(sourcePage.size?.width);
     const sourceHeight = Number(sourcePage.size?.height);
     const ocrWidth = Number(ocrPage.size?.width);
@@ -69,7 +71,8 @@ function mergeOCRPagesWithSourceLayout(sourceLayout, ocrLayout, successfulIndice
         fontSize: h * scaleY,
       };
     });
-    sourcePage.textRuns.push(...textRuns);
+    if (replaceText) sourcePage.textRuns = textRuns;
+    else sourcePage.textRuns.push(...textRuns);
   }
   return createFixedLayoutModel({
     pages,
@@ -78,10 +81,18 @@ function mergeOCRPagesWithSourceLayout(sourceLayout, ocrLayout, successfulIndice
 }
 
 export async function runScannedPdfOCRStage(model, ctx = {}) {
-  if (ctx?.options?.ocr?.enabled === false) return model;
+  const force = ctx?.options?.ocr?.mode === "force";
+  const forceFailure = (message, code = "PDF_FORCED_OCR_FAILED") => new ConversionError(message, {
+    category: "convert", code, format: "pdf",
+  });
+  if (ctx?.options?.ocr?.enabled === false) {
+    if (force) throw forceFailure("已选择 OCR 重识别，但 OCR 被禁用。", "PDF_FORCED_OCR_UNAVAILABLE");
+    return model;
+  }
   const registry = ctx.ocrRegistry || defaultOCRRegistry;
   const engine = ctx.ocrEngine || registry.pickForTask("ocr-text");
   if (!engine || !engine.isAvailable()) {
+    if (force) throw forceFailure("本地 OCR 引擎不可用，无法执行重识别。", "PDF_FORCED_OCR_UNAVAILABLE");
     return {
       ...model,
       metadata: withWarnings(model.metadata || {}, [
@@ -112,6 +123,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
   try {
     pageCount = await rasterizer.countPages({ content: ctx.content });
   } catch (error) {
+    if (force) throw forceFailure(`无法读取 PDF 页数：${error?.message || error}`);
     return {
       ...model,
       metadata: withWarnings(model.metadata || {}, [
@@ -125,6 +137,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     };
   }
   if (!Number.isSafeInteger(pageCount) || pageCount < 0) {
+    if (force) throw forceFailure("无法确认 PDF 页数，未执行 OCR 重识别。");
     return {
       ...model,
       metadata: withWarnings(model.metadata || {}, [createOCREngineFailedWarning({
@@ -143,6 +156,9 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
       .sort((a, b) => a - b)
     : Array.from({ length: pageCount }, (_, index) => index);
   const pageIndices = requestedIndices.filter((index) => index < effectivePages);
+  if (force && (pageCount === 0 || pageIndices.length !== pageCount)) {
+    throw forceFailure("OCR 重识别必须覆盖全部 PDF 页面；请取消页数限制后重试。");
+  }
   if (pageIndices.length === 0 && requestedIndices.length === 0) return model;
 
   const enhanced = cloneModel(model);
@@ -178,6 +194,7 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
         const rendered = await rasterizer.rasterize({ content: ctx.content, pageIndex, dpi });
         pageResult = await engine.recognize({ image: rendered.dataUrl, options: { language: requestedLanguage } });
       } catch (error) {
+        if (force) throw forceFailure(`第 ${pageIndex + 1} 页 OCR 失败：${error?.message || error}`);
         enhanced.metadata = withWarnings(enhanced.metadata, [
           createOCREngineFailedWarning({
             engineId: engine.id,
@@ -187,6 +204,10 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
           }),
         ]);
         continue;
+      }
+      if (force && !pageResult?.pages?.some((page) =>
+        page?.lines?.some((line) => String(line?.text || "").trim()))) {
+        throw forceFailure(`第 ${pageIndex + 1} 页 OCR 未识别出文字；原提取文本未被替换。`, "PDF_FORCED_OCR_EMPTY");
       }
       pageResults.push(pageResult);
       successfulIndices.push(pageIndex);
@@ -222,7 +243,8 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
     : 0;
 
   const fixedLayout = mergeOCRResultsToFixedLayout(pageResults, { language, engine: engine.id, modelVersion });
-  enhanced.fixedLayout = mergeOCRPagesWithSourceLayout(model.fixedLayout, fixedLayout, successfulIndices);
+  enhanced.fixedLayout = mergeOCRPagesWithSourceLayout(model.fixedLayout, fixedLayout, successfulIndices, force);
+  if (force) enhanced.blocks = [];
 
   const appendedStart = enhanced.blocks.length;
   const ocrBlocks = [];
@@ -257,6 +279,12 @@ export async function runScannedPdfOCRStage(model, ctx = {}) {
       enhanced.blocks = orderedBlocks;
     } else {
       enhanced.blocks.push(...ocrBlocks);
+    }
+    if (force && enhanced.metadata.pdf) {
+      enhanced.metadata.pdf = {
+        ...enhanced.metadata.pdf,
+        pageBlockCounts: Array.from({ length: pageCount }, (_, index) => ocrBlocksByPage.get(index)?.length || 0),
+      };
     }
     enhanced.metadata = withWarnings(enhanced.metadata, [
       createWarning(

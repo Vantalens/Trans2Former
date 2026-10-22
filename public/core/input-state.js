@@ -9,12 +9,13 @@ export function createReadableInputDisplay({
   binaryFormats,
   toDocumentModel,
   getPlainText,
+  model: suppliedModel = null,
 }) {
   if (!isBinaryInputFormat(format, binaryFormats)) {
     return String(rawContent ?? "");
   }
   try {
-    const model = toDocumentModel(rawContent, format, fileName);
+    const model = suppliedModel || toDocumentModel(rawContent, format, fileName);
     const text = getPlainText(model).trim();
     if (text) {
       return text;

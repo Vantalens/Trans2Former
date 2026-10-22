@@ -51,7 +51,8 @@ assert.equal(collapseCjkFakeSpaces("加 字 距 版"), "加字距版");
 assert.equal(collapseCjkFakeSpaces("逐词 绘制"), "逐词 绘制");
 assert.equal(collapseCjkFakeSpaces("Normal spacing line"), "Normal spacing line");
 
-// A repeated two-column page is read down the left column, then down the right.
+// Short, aligned label/value rows must stay together instead of being read as
+// all labels followed by all values.
 const columnItems = [
   ["Account ID", "ACCT-102"],
   ["Customer name", "Jane Doe"],
@@ -65,9 +66,51 @@ const columnItems = [
 });
 const columnBlocks = analyzePageLayout(columnItems);
 assert.deepEqual(columnBlocks.map((block) => block.text), [
-  "Account ID", "Customer name", "Billing address",
-  "ACCT-102", "Jane Doe", "42 Cedar Road",
+  "Account ID ACCT-102", "Customer name Jane Doe", "Billing address 42 Cedar Road",
 ]);
+
+const fourSegmentFields = [0, 1, 2].flatMap((index) => {
+  const y = 700 - index * 20;
+  return [
+    { str: index === 1 ? "姓名 Name:" : `Name${index}:`, x: 50, y, width: 58, height: 12 },
+    { str: `Value${index}`, x: 145, y, width: 55, height: 12 },
+    { str: `Code${index}:`, x: 310, y, width: 55, height: 12 },
+    { str: `ID-${index}`, x: 445, y, width: 45, height: 12 },
+  ];
+});
+assert.deepEqual(analyzePageLayout(fourSegmentFields).map((block) => block.text), [
+  "Name0: Value0 Code0: ID-0",
+  "姓名 Name: Value1 Code1: ID-1",
+  "Name2: Value2 Code2: ID-2",
+]);
+
+// Long prose in two columns keeps column-major reading order.
+const proseColumns = [0, 1, 2].flatMap((index) => {
+  const y = 700 - index * 18;
+  return [
+    { str: `Left column paragraph sentence number ${index} continues here.`, x: 50, y, width: 210, height: 12 },
+    { str: `Right column paragraph sentence number ${index} continues here.`, x: 330, y, width: 210, height: 12 },
+  ];
+});
+const proseText = analyzePageLayout(proseColumns).map((block) => block.text).join(" ");
+assert.ok(proseText.indexOf("Left column paragraph sentence number 2") < proseText.indexOf("Right column paragraph sentence number 0"));
+
+// A spanning title, a separated form region, and a three-column table retain
+// row order within each region.
+const mixedRegions = [
+  { str: "Customer Information", x: 60, y: 742, width: 470, height: 18 },
+  ...columnItems,
+  ...[0, 1, 2].flatMap((index) => [
+    { str: `SKU-${index}`, x: 60, y: 580 - index * 18, width: 60, height: 11 },
+    { str: `Item ${index}`, x: 220, y: 580 - index * 18, width: 65, height: 11 },
+    { str: `${index + 1}`, x: 450, y: 580 - index * 18, width: 20, height: 11 },
+  ]),
+];
+const mixedBlocks = analyzePageLayout(mixedRegions);
+const mixedText = mixedBlocks.map((block) => block.text).join(" ");
+assert.equal(mixedBlocks[0].type, "heading");
+assert.ok(mixedText.indexOf("Account ID ACCT-102") < mixedText.indexOf("Customer name Jane Doe"));
+assert.ok(mixedText.indexOf("SKU-0") < mixedText.indexOf("SKU-1"));
 
 // DOCX round-trip retains page geometry, paragraph tabs/indents, and table merges.
 const docxModel = createDocumentModel({
