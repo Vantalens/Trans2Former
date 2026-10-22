@@ -107,7 +107,9 @@ function candidateEncodings({ declaredEncoding = "", fileName = "", mime = "" } 
   const textLikeMime = String(mime || "").toLowerCase();
   const candidates = [
     declaredEncoding,
-    ...(EXTENSION_ENCODING_HINTS.get(extension) || ["utf-8"]),
+    // 无扩展名提示时同样给出中文/繁体常见编码兜底——否则无文件名场景（API 直传
+    // 字节流）下 GBK 文本会被静默解码成带 U+FFFD 的 UTF-8 乱码。
+    ...(EXTENSION_ENCODING_HINTS.get(extension) || ["utf-8", "gb18030", "big5"]),
     ...(textLikeMime.startsWith("text/") || textLikeMime.includes("xml") || textLikeMime.includes("json") ? ["utf-16le", "utf-16be"] : []),
     "utf-8",
   ].map(normalizeEncoding).filter(Boolean);

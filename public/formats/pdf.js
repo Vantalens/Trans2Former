@@ -97,9 +97,14 @@ function coercePdfBytes(content) {
   if (typeof Buffer !== "undefined" && Buffer.isBuffer(content)) {
     return new Uint8Array(content);
   }
-  if (content instanceof Uint8Array) return content;
-  if (content instanceof ArrayBuffer) return new Uint8Array(content);
-  if (ArrayBuffer.isView(content)) return new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
+  // 同理，调用方传入的 Uint8Array/ArrayBuffer 也不能直接交给 PDF.js——transfer
+  // 会 detach 原 buffer，导致同一字节源二次转换时静默变空（误报 PDF_OCR_UNAVAILABLE）。
+  // 一律复制，保证调用方持有的字节在任何转换路径后仍然有效。
+  if (content instanceof Uint8Array) return new Uint8Array(content);
+  if (content instanceof ArrayBuffer) return new Uint8Array(content.slice(0));
+  if (ArrayBuffer.isView(content)) {
+    return new Uint8Array(content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength));
+  }
   const text = String(content ?? "");
   const dataUrlMatch = text.match(/^data:[^;]+;base64,([A-Za-z0-9+/=]+)/);
   if (dataUrlMatch) {

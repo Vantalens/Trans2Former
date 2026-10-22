@@ -1,0 +1,14 @@
+# 二进制文件禁止换行符转换与文本 diff——否则 autocrlf 会在
+# 提交/签出时改写字节，损坏测试夹具与用户文档。
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.epub binary
+*.odt binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary

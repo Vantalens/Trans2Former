@@ -34,6 +34,12 @@ desktop-dist/
 *.rar
 *.print.html
 
+# 回归测试夹具例外：realworld 真实二进制样本必须入库，
+# xlsx/docx realworld 测试与 audit-realworld 直接读取这些文件。
+!samples/realworld/*.pdf
+!samples/realworld/*.docx
+!samples/realworld/*.xlsx
+
 # Runtime / logs / temp
 *.log
 *.tmp

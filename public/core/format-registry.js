@@ -5,6 +5,48 @@ import { defaultRepairEngine } from "./repair-engine.js";
 import { runVerificationStage, runVerificationStageAsync } from "./verification/verification-stage.js";
 import { createWarning, withWarnings } from "./warnings.js";
 import { copyOriginalPdf } from "../formats/pdf.js";
+import { decodeTextBytes } from "./text-decoding.js";
+
+// 纯文本类格式：reader 期望字符串入参。当调用方（API / Worker / 测试）直接传入
+// Uint8Array / ArrayBuffer / data URL 时，必须先按编码探测解码为字符串——否则
+// String(uint8array) 会把字节流变成 "187,225,210,..." 这样的数字串乱码。
+const TEXT_CONTENT_FORMATS = new Set(["md", "html", "txt", "json", "csv", "xml", "yaml", "toml", "ipynb", "rtf", "latex", "svg"]);
+
+// 走图片 OCR stage 的输入格式：模型内含图片资产，convertAsync 在主线程触发识别。
+// svg 的 OCR 需要浏览器栅格化，ocr-stage 会在无栅格化能力时跳过并如实 warning。
+const IMAGE_OCR_INPUT_FORMATS = new Set(["png", "jpeg", "webp", "svg"]);
+
+function base64ToBytes(base64) {
+  if (typeof atob === "function") {
+    const binary = atob(base64);
+    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  }
+  if (typeof Buffer !== "undefined") {
+    return new Uint8Array(Buffer.from(base64, "base64"));
+  }
+  return new Uint8Array();
+}
+
+function coerceTextReaderContent(content, fileName, mime) {
+  if (typeof content === "string") {
+    const dataUrl = content.match(/^data:([^;,]*)(;base64)?,([\s\S]*)$/);
+    if (!dataUrl) return content;
+    const bytes = dataUrl[2]
+      ? base64ToBytes(dataUrl[3])
+      : new TextEncoder().encode(decodeURIComponent(dataUrl[3]));
+    return decodeTextBytes(bytes, { fileName, mime: dataUrl[1] || mime }).text;
+  }
+  if (content instanceof Uint8Array) {
+    return decodeTextBytes(content, { fileName, mime }).text;
+  }
+  if (content instanceof ArrayBuffer) {
+    return decodeTextBytes(new Uint8Array(content), { fileName, mime }).text;
+  }
+  if (ArrayBuffer.isView(content)) {
+    return decodeTextBytes(new Uint8Array(content.buffer, content.byteOffset, content.byteLength), { fileName, mime }).text;
+  }
+  return content;
+}
 
 const FORMAT_ALIASES = {
   markdown: "md",
@@ -367,7 +409,10 @@ export class ConverterRegistry {
         format: fromFormat,
       });
     }
-    const model = reader({ content, title, fileName, format: fromFormat });
+    const readerContent = TEXT_CONTENT_FORMATS.has(fromFormat)
+      ? coerceTextReaderContent(content, fileName, "")
+      : content;
+    const model = reader({ content: readerContent, title, fileName, format: fromFormat });
     return ensureDocumentAudit(model, {
       content,
       reader: fromFormat,

@@ -1,5 +1,15 @@
+function decodeCodePoint(code) {
+  return Number.isSafeInteger(code) && code >= 0 && code <= 0x10ffff
+    ? String.fromCodePoint(code)
+    : "";
+}
+
 export function decodeXml(value) {
   return String(value ?? "")
+    // 数字字符引用（&#26376; / &#x6708;，openpyxl 等生成器常用）必须先于命名实体解码：
+    // 若先解 &amp;，双重转义的 "&amp;#26376;" 会被错解成真实字符。
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => decodeCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => decodeCodePoint(Number(dec)))
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">")
     .replaceAll("&amp;", "&")
@@ -25,7 +35,10 @@ export function dirname(path) {
 export function resolvePartPath(basePath, target) {
   if (!target) return "";
   if (/^[a-z]+:/i.test(target)) return target;
-  const base = dirname(basePath);
+  // ECMA-376：Target 以 "/" 开头时是包根绝对路径（openpyxl 等生成器的习惯写法，
+  // 如 Target="/xl/worksheets/sheet1.xml"），不能再与 basePath 拼接，
+  // 否则会拼出 xl/xl/... 导致部件查找失败、整表被跳过。
+  const base = target.startsWith("/") ? "" : dirname(basePath);
   const parts = `${base}/${target}`.split("/");
   const resolved = [];
   for (const part of parts) {

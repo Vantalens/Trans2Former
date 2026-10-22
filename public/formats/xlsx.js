@@ -5,7 +5,7 @@ import { bytesToDataUrl } from "../core/binary-utils.js";
 import { readZipEntries } from "../core/zip-container.js";
 import { writeStoredZip } from "../core/zip-writer.js";
 import { getPlainText } from "../core/document-model.js";
-import { getAttr, parseRelationships, resolvePartPath, stripTags, extractTextTags } from "./ooxml-utils.js";
+import { getAttr, parseRelationships, resolvePartPath, stripTags, extractTextTags, decodeXml } from "./ooxml-utils.js";
 import { escapeXmlText, stripMarkdownInlineSyntax } from "./text-utils.js";
 
 // 富文本 si/is 单元格：直接拼接 <t>，不插分隔符、不 trim（尊重 xml:space="preserve"）；
@@ -76,17 +76,37 @@ function isDateStyle(styleFormats, styleIndex) {
   return styleFormats.dateNumFmtIds.has(styleFormats.numFmtIds[styleIndex] ?? 0);
 }
 
+// 单元格取值：按 ECMA-376 的 c@t 类型分发。
+// - t="inlineStr"：<is><t>…</t></is> 内联字符串（openpyxl 默认写法，常无 sharedStrings.xml）
+// - t="s"：共享字符串索引；无缓存 <v> 时 raw 为 ""，Number("")===0 会错取
+//   sharedStrings[0]，必须显式挡掉
+// - t="str"：公式字符串缓存，原文返回（含 XML 实体解码），不做日期转换
+// - t="b"：布尔 0/1 → FALSE/TRUE（Excel 显示语义）
+// - t="e"：错误值（#DIV/0! 等），原文返回，不做日期转换
+// - 默认（无 t 或 t="n"）：数字/日期，保持原有行为
+// 公式单元格有缓存值时给 "=expr => cached" 可读显示；无缓存值至少保留公式文本。
 function cellValue(cellXml, sharedStrings, styleFormats, counters) {
-  const type = getAttr(cellXml.match(/<c\b[^>]*>/)?.[0] || "", "t");
-  const styleIndex = Number(getAttr(cellXml.match(/<c\b[^>]*>/)?.[0] || "", "s")) || 0;
-  const raw = cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/)?.[1] || "";
+  const headTag = cellXml.match(/<c\b[^>]*>/)?.[0] || "";
+  const type = getAttr(headTag, "t");
+  const styleIndex = Number(getAttr(headTag, "s")) || 0;
+  const raw = decodeXml(cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/)?.[1] || "");
   const formula = stripTags(cellXml.match(/<f\b[\s\S]*?<\/f>/)?.[0] || "");
   if (formula) counters.formulaCellCount += 1;
-  if (type === "s") return sharedStrings[Number(raw)] || "";
+  let value;
   const inline = cellXml.match(/<is\b[\s\S]*?<\/is>/)?.[0];
-  if (inline) return extractCellText(inline);
-  const value = isDateStyle(styleFormats, styleIndex) ? excelSerialDateToIso(raw) : raw;
-  return formula ? `=${formula} => ${value}` : value;
+  if (inline) {
+    value = extractCellText(inline);
+  } else if (type === "s") {
+    value = raw !== "" ? sharedStrings[Number(raw)] || "" : "";
+  } else if (type === "b") {
+    value = raw === "1" ? "TRUE" : raw === "0" ? "FALSE" : raw;
+  } else if (type === "e" || type === "str") {
+    value = raw;
+  } else {
+    value = isDateStyle(styleFormats, styleIndex) && raw !== "" ? excelSerialDateToIso(raw) : raw;
+  }
+  if (!formula) return value;
+  return value !== "" ? `=${formula} => ${value}` : `=${formula}`;
 }
 
 function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
@@ -96,11 +116,13 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
   const rows = [];
   const cells = [];
   const formulas = [];
-  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #196, code review P2 #3）
-  const rowMatches = [...String(xml || "").matchAll(/<row\b[\s\S]*?<\/row>/g)];
+  // 性能优化：缓存 matchAll 结果，避免迭代器重复创建（issue #196, code review P2 #3）。
+  // 正则同时覆盖自闭合标签（<row r="5"/> / <c r="B1"/>）：旧模式 [\s\S]*?</row>
+  // 会把自闭合标签之后的内容吞进上一个匹配，导致单元格列错位。
+  const rowMatches = [...String(xml || "").matchAll(/<row\b[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g)];
   for (const rowMatch of rowMatches) {
     const row = [];
-    const cellMatches = [...rowMatch[0].matchAll(/<c\b[\s\S]*?<\/c>/g)];
+    const cellMatches = [...rowMatch[0].matchAll(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g)];
     for (const cellMatch of cellMatches) {
       const cellXml = cellMatch[0];
       const ref = getAttr(cellXml.match(/<c\b[^>]*>/)?.[0] || "", "r");
@@ -115,7 +137,8 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
         formulas.push({ ref, expression: formula, cachedValue });
       }
     }
-    rows.push(row.map((cell) => String(cell ?? "")));
+    // Array.from 会把稀疏槽位（缺失引用的列）规范化为 ""，避免 undefined 泄漏到下游。
+    rows.push(Array.from(row, (cell) => String(cell ?? "")));
   }
   const merges = [...String(xml || "").matchAll(/<mergeCell\b[^>]*ref="([^"]+)"[^>]*\/?>/g)]
     .map((match) => {
@@ -134,15 +157,19 @@ function parseSheet(xml, sharedStrings, styleFormats, counters, warnings) {
   };
 }
 
+// 与 cellValue 相同的类型分发，但只取"缓存值"（不拼公式显示文本），
+// 供 WorkbookModel 的 cells/formulas 使用。
 function extractCachedValue(cellXml, sharedStrings, styleFormats) {
   const headTag = cellXml.match(/<c\b[^>]*>/)?.[0] || "";
   const type = getAttr(headTag, "t");
   const styleIndex = Number(getAttr(headTag, "s")) || 0;
-  const raw = cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/)?.[1] || "";
-  if (type === "s") return sharedStrings[Number(raw)] || "";
+  const raw = decodeXml(cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/)?.[1] || "");
   const inline = cellXml.match(/<is\b[\s\S]*?<\/is>/)?.[0];
   if (inline) return extractCellText(inline);
-  return isDateStyle(styleFormats, styleIndex) ? excelSerialDateToIso(raw) : raw;
+  if (type === "s") return raw !== "" ? sharedStrings[Number(raw)] || "" : "";
+  if (type === "b") return raw === "1" ? "TRUE" : raw === "0" ? "FALSE" : raw;
+  if (type === "e" || type === "str") return raw;
+  return isDateStyle(styleFormats, styleIndex) && raw !== "" ? excelSerialDateToIso(raw) : raw;
 }
 
 export function readXlsx({ content, title = "workbook", fileName = "", format = "xlsx" }) {

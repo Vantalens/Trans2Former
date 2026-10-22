@@ -295,9 +295,76 @@ function parseHeadingStyleMap(xml) {
     if (m) {
       const level = Math.min(6, Math.max(1, Number(m[1])));
       map.set(styleId, level);
+      continue;
+    }
+    // Word 内置 Title/Subtitle（中文本地化名为 "标题"/"副标题"）：Title 语义上是
+    // 文档主标题 → level 1；Subtitle 映射为 level 2 标题而非加粗段落——标题节点能
+    // 保留层级语义（md 的 ##、html 的 h2、目录提取），加粗段落会彻底丢失结构。
+    if (/^title$/i.test(styleId) || name === "title" || name === "标题") {
+      map.set(styleId, 1);
+    } else if (/^subtitle$/i.test(styleId) || name === "subtitle" || name === "副标题") {
+      map.set(styleId, 2);
     }
   }
   return map;
+}
+
+// 从 styles.xml 解析段落样式的编号定义（style -> numPr）与 basedOn 继承链。
+// 真实世界 docx（python-docx 生成、Word 内置 List Number/List Bullet 样式）经常只在
+// 样式里挂 numPr，段落本身没有 <w:numPr>——编号需沿 styleId -> numId/ilvl 继承得到。
+function parseStyleNumberingMap(xml) {
+  const styles = new Map();
+  if (!xml) return styles;
+  for (const styleMatch of String(xml).matchAll(/<w:style\b[\s\S]*?<\/w:style>/g)) {
+    const styleBlock = styleMatch[0];
+    const open = styleBlock.match(/<w:style\b[^>]*>/)?.[0] || "";
+    if (!/w:type="paragraph"/.test(open)) continue;
+    const styleId = getAttr(open, "w:styleId");
+    if (!styleId) continue;
+    const numPr = styleBlock.match(/<w:numPr\b[\s\S]*?<\/w:numPr>/)?.[0] || "";
+    const numId = getAttr(numPr.match(/<w:numId\b[^>]*\/?\s*>/)?.[0] || "", "w:val");
+    const ilvl = Number(getAttr(numPr.match(/<w:ilvl\b[^>]*\/?\s*>/)?.[0] || "", "w:val")) || 0;
+    styles.set(styleId, {
+      basedOn: getAttr(styleBlock.match(/<w:basedOn\b[^>]*\/?\s*>/)?.[0] || "", "w:val"),
+      name: getAttr(styleBlock.match(/<w:name\b[^>]*\/?\s*>/)?.[0] || "", "w:val"),
+      // numId 缺省或为 0 按 ECMA-376 表示"无编号/移除编号"，不算样式级列表
+      // （例如 Word 的 Subtitle 样式带 <w:numPr><w:ilvl …/></w:numPr> 但没有 numId）。
+      numbering: numId && numId !== "0" ? { numId, depth: Math.max(0, ilvl) } : null,
+    });
+  }
+  return styles;
+}
+
+// 沿 basedOn 链解析样式级编号（带环保护，链上样式缺失时视为无编号）。
+function resolveStyleNumbering(styleId, styleNumbering) {
+  const seen = new Set();
+  let current = styleId;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const entry = styleNumbering?.get(current);
+    if (!entry) return null;
+    if (entry.numbering) return entry.numbering;
+    current = entry.basedOn;
+  }
+  return null;
+}
+
+// Word 内置列表样式的名字兜底：样式本身没有 numPr（或 styles.xml 缺失）时，按
+// styleId / w:name 识别 List Number / List Bullet / List Paragraph 及中文别名，
+// 空格、连字符、大小写差异先归一化（"List Number"/"listnumber"/"列表编号" 等价）。
+// 尾部数字（List Bullet 2/3、List Number 2/3）是 Word 的层级变体 → depth=N-1。
+// List Paragraph 本身不携带编号信息，但它是列表条目的通用载体样式，按无序条目兜底。
+function listHintFromStyleName(styleId, styleName) {
+  for (const raw of [styleId, styleName]) {
+    const normalized = String(raw || "").toLowerCase().replace(/[\s_\-]+/g, "");
+    if (!normalized) continue;
+    let m = /^(?:listnumber|列表编号|编号列表)(\d*)$/.exec(normalized);
+    if (m) return { ordered: true, depth: m[1] ? Math.max(0, Number(m[1]) - 1) : 0 };
+    m = /^(?:listbullet|列表项目符号|项目符号列表|项目符号)(\d*)$/.exec(normalized);
+    if (m) return { ordered: false, depth: m[1] ? Math.max(0, Number(m[1]) - 1) : 0 };
+    if (/^(?:listparagraph|列表段落)$/.test(normalized)) return { ordered: false, depth: 0 };
+  }
+  return null;
 }
 
 function parseNumbering(xml) {
@@ -417,16 +484,39 @@ function parseParagraph(xml, relationships, assetStore, zip, warnings, reference
   if (sectionPrXml && hasPartialSectionProps(sectionPrXml)) {
     warnings.push(createWarning("lossy", "DOCX_SECTION_PROPS_PARTIAL", "DOCX section properties such as columns, header/footer references, or non-default section types are not preserved; only page geometry is kept."));
   }
+  // 列表识别优先级：段落级 numPr（覆盖一切）→ 样式级 numPr（styles.xml 中该
+  // pStyle 的 numPr，含 basedOn 继承链）→ 内置样式名兜底（List Number 等）。
+  // 段落级 numId 缺省或为 0 表示显式移除编号（ECMA-376），不再回退到样式级。
   const numPr = xml.match(/<w:numPr\b[\s\S]*?<\/w:numPr>/)?.[0] || "";
-  const listMeta = numPr ? {
-    depth: Number(getAttr(numPr.match(/<w:ilvl\b[^>]*\/?>/)?.[0] || "", "w:val")) || 0,
-    numId: getAttr(numPr.match(/<w:numId\b[^>]*\/?>/)?.[0] || "", "w:val"),
-  } : null;
+  let listMeta = null;
+  if (numPr) {
+    const numId = getAttr(numPr.match(/<w:numId\b[^>]*\/?\s*>/)?.[0] || "", "w:val");
+    if (numId && numId !== "0") {
+      listMeta = {
+        depth: Number(getAttr(numPr.match(/<w:ilvl\b[^>]*\/?\s*>/)?.[0] || "", "w:val")) || 0,
+        numId,
+      };
+    }
+  } else if (style) {
+    const inherited = resolveStyleNumbering(style, references.styleNumbering);
+    if (inherited) {
+      listMeta = { depth: inherited.depth, numId: inherited.numId };
+    } else {
+      // 样式无 numPr：按内置样式名分类，有序性由名字直接决定（无 numId 可查
+      // numbering.xml），marker 带 styleId 以便相邻同名样式条目语义一致。
+      const hint = listHintFromStyleName(style, references.styleNumbering?.get(style)?.name);
+      if (hint) listMeta = { depth: hint.depth, numId: `style:${style}`, ordered: hint.ordered };
+    }
+  }
 
   const blocks = [];
   if (text.trim()) {
     if (listMeta) {
-      const list = createList([text], references.orderedNumIds?.has(listMeta.numId), [{
+      // ordered 优先用样式名兜底的显式分类，否则按 numbering.xml 的 numFmt 判断
+      const ordered = typeof listMeta.ordered === "boolean"
+        ? listMeta.ordered
+        : references.orderedNumIds?.has(listMeta.numId);
+      const list = createList([text], ordered, [{
         depth: listMeta.depth,
         marker: listMeta.numId,
       }]);
@@ -519,9 +609,11 @@ export function readDocx({ content, title = "document", fileName = "", format = 
   const blocks = [];
   const body = documentXml.match(/<w:body\b[\s\S]*<\/w:body>/)?.[0] || documentXml;
   const pageLayout = parsePageLayout(body);
+  const stylesXml = zip.getText("word/styles.xml");
   const references = {
     orderedNumIds: parseNumbering(zip.getText("word/numbering.xml")),
-    headingStyles: parseHeadingStyleMap(zip.getText("word/styles.xml")),
+    headingStyles: parseHeadingStyleMap(stylesXml),
+    styleNumbering: parseStyleNumberingMap(stylesXml),
     footnotes: parseIdTextMap(zip.getText("word/footnotes.xml"), "footnote"),
     comments: parseIdTextMap(zip.getText("word/comments.xml"), "comment"),
   };
