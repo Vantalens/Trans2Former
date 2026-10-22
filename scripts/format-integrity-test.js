@@ -84,6 +84,7 @@ const requiredZipEntries = {
   docx: ["word/document.xml", "word/styles.xml", "word/_rels/document.xml.rels", "docProps/core.xml"],
   xlsx: ["xl/workbook.xml", "xl/worksheets/sheet1.xml", "xl/sharedStrings.xml", "xl/styles.xml", "docProps/core.xml"],
   epub: ["mimetype", "META-INF/container.xml", "OEBPS/content.opf", "OEBPS/chapter.xhtml"],
+  odt: ["mimetype", "content.xml", "styles.xml", "meta.xml", "META-INF/manifest.xml"],
   pptx: [
     "ppt/presentation.xml",
     "ppt/slides/slide1.xml",

@@ -1,0 +1,10 @@
+server:
+  host: localhost
+  port: 8080
+  options:
+    timeout: 30
+    retries: 3
+features:
+  - 登录
+  - 导出
+  - 预览

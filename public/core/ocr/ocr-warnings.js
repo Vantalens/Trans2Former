@@ -5,6 +5,7 @@ export const OCR_LOW_CONFIDENCE = "OCR_LOW_CONFIDENCE";
 export const OCR_ENGINE_FAILED = "OCR_ENGINE_FAILED";
 export const OCR_DEGRADED_ROUTE = "OCR_DEGRADED_ROUTE";
 export const OCR_SCAN_PAGES_TRUNCATED = "OCR_SCAN_PAGES_TRUNCATED";
+export const SVG_RASTERIZE_UNSUPPORTED = "SVG_RASTERIZE_UNSUPPORTED";
 
 export const OCR_WARNING_CODES = Object.freeze([
   OCR_UNAVAILABLE,
@@ -12,6 +13,7 @@ export const OCR_WARNING_CODES = Object.freeze([
   OCR_ENGINE_FAILED,
   OCR_DEGRADED_ROUTE,
   OCR_SCAN_PAGES_TRUNCATED,
+  SVG_RASTERIZE_UNSUPPORTED,
 ]);
 
 export function createOCRUnavailableWarning(details = {}) {
@@ -63,6 +65,20 @@ export function createOCRDegradedRouteWarning(details = {}) {
       task: details.task || "ocr-text",
       manifestId: details.manifestId || "",
       reason: details.reason || "engine-not-enabled",
+    },
+  );
+}
+
+export function createSvgRasterizeUnsupportedWarning(details = {}) {
+  return createWarning(
+    "info",
+    SVG_RASTERIZE_UNSUPPORTED,
+    "SVG 需先栅格化为位图才能 OCR；当前环境未提供栅格化能力，已跳过识别，仅保留 SVG 文本元素与资产引用。",
+    {
+      engineId: details.engineId || "none",
+      manifestId: details.manifestId || "",
+      reason: details.reason || "svg-rasterize-unsupported",
+      task: details.task || "ocr-text",
     },
   );
 }

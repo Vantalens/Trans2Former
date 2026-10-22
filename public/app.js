@@ -116,7 +116,7 @@ const paperField = paperFormatSelect?.closest(".paper-field");
 
 const formatCapabilities = getFormatCapabilities();
 
-const BINARY_INPUT_FORMATS = new Set(["doc", "docx", "xlsx", "epub", "pptx", "pdf", "png", "ofd"]);
+const BINARY_INPUT_FORMATS = new Set(["doc", "docx", "xlsx", "epub", "pptx", "pdf", "png", "ofd", "odt", "jpeg", "webp", "svg"]);
 
 const sampleMarkdown = `# 示例文档
 
@@ -175,8 +175,8 @@ const LARGE_PREVIEW_SAMPLE_BYTES = 512 * 1024;
 const LARGE_PREVIEW_BLOCK_LIMIT = 80;
 const WORKER_TRANSFERABLE_THRESHOLD_BYTES = 1024 * 1024;
 const VIRTUAL_LIST_ITEM_LIMIT = 160;
-const EDITABLE_OUTPUT_FORMATS = new Set(["md", "html", "txt", "json", "csv", "xml"]);
-const BINARY_OUTPUT_FORMATS = new Set(["docx", "xlsx", "pptx", "epub", "pdf"]);
+const EDITABLE_OUTPUT_FORMATS = new Set(["md", "html", "txt", "json", "csv", "xml", "yaml", "toml", "ipynb", "latex"]);
+const BINARY_OUTPUT_FORMATS = new Set(["docx", "xlsx", "pptx", "epub", "pdf", "odt"]);
 const INPUT_EDITOR_MIN_HEIGHT = 144;
 const BINARY_INPUT_EDITOR_MIN_HEIGHT = 118;
 const HISTORY_PREFERENCE_KEY = "trans2former.history.optIn";
@@ -1707,7 +1707,7 @@ async function handleFile(file) {
 
   const detectedFormat = detectFormatFromName(file.name);
   if (!detectedFormat) {
-    setStatus("请选择 .md / .html / .txt / .json / .csv / .xml / .png / .doc / .docx / .xlsx / .epub / .pdf / .pptx / .ofd 文件", "error");
+    setStatus("请选择 .md / .html / .txt / .json / .csv / .xml / .png / .jpg / .jpeg / .webp / .svg / .doc / .docx / .xlsx / .epub / .pdf / .pptx / .ofd / .odt / .yaml / .yml / .toml / .ipynb / .rtf / .tex 文件", "error");
     return;
   }
 
@@ -1799,7 +1799,7 @@ function convertWithWorker(payload) {
   const toFmt = String(payload?.to || "").toLowerCase();
   // OCR/验证适用路径必须走主线程异步管线：OCR、SSIM 和 PDF 回读需要 canvas /
   // onnxruntime / rasterizer 能力，这些在转换 Web Worker 里不可用。
-  if (fromFmt === "png" || fromFmt === "pdf" || toFmt === "pdf") {
+  if (["png", "jpeg", "webp", "svg"].includes(fromFmt) || fromFmt === "pdf" || toFmt === "pdf") {
     // 先确保两个 OCR 引擎的状态就位（随包 PP-OCRv5 载入 + tesseract 缓存重建，均幂等），
     // 再跑异步转换/OCR——刷新后立刻转换也能命中重建。两者失败都不得阻塞转换。
     const abortController = new AbortController();

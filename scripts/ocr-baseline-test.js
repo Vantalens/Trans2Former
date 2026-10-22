@@ -112,7 +112,8 @@ function makeStubEngine(overrides = {}) {
   assert.equal(OCR_LANGUAGES.includes("auto"), true);
   assert.equal(OCR_WARNING_CODES.includes(OCR_UNAVAILABLE), true);
   assert.equal(OCR_WARNING_CODES.includes(OCR_SCAN_PAGES_TRUNCATED), true);
-  assert.equal(OCR_WARNING_CODES.length, 5);
+  assert.equal(OCR_WARNING_CODES.includes("SVG_RASTERIZE_UNSUPPORTED"), true);
+  assert.equal(OCR_WARNING_CODES.length, 6);
 }
 
 // 2. createOCRResult + validate happy path

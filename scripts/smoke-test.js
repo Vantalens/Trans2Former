@@ -25,8 +25,8 @@ import { parseInlineMarkdown } from "../public/formats/inline-tokens.js";
 import { writePdfBinary } from "../public/formats/pdf-output.js";
 
 const SAMPLE_ROOT = path.resolve("samples");
-const INPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "png", "docx", "doc", "xlsx", "epub", "pptx", "pdf", "ofd"];
-const OUTPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "epub", "pptx", "pdf"];
+const INPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "png", "docx", "doc", "xlsx", "epub", "pptx", "pdf", "ofd", "yaml", "toml", "ipynb", "rtf", "latex", "odt", "jpeg", "webp", "svg"];
+const OUTPUT_FORMATS = ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "epub", "pptx", "pdf", "yaml", "toml", "ipynb", "latex", "odt"];
 const TEXT_OUTPUT_FORMATS = ["md", "html", "txt", "json", "xml"];
 const EXPECTED_BLOCK_TYPES = ["heading", "paragraph", "list", "code", "table", "quote", "image", "asset", "raw"];
 
@@ -38,6 +38,15 @@ const SAMPLE_MATRIX = {
   csv: ["basic.csv", "quoted.csv", "unicode.csv"],
   xml: ["basic.xml", "attributes.xml", "namespace.xml"],
   png: ["tiny-red.data-url.txt", "tiny-green.data-url.txt", "tiny-blue.data-url.txt"],
+  yaml: ["basic.yaml", "nested.yaml", "unicode.yaml"],
+  toml: ["basic.toml", "sections.toml", "unicode.toml"],
+  ipynb: ["basic.ipynb", "markdown-code.ipynb", "unicode.ipynb"],
+  rtf: ["basic.rtf", "escapes.rtf", "unicode.rtf"],
+  latex: ["basic.tex", "sections.tex", "unicode.tex"],
+  odt: ["basic.data-url.txt", "heading-list.data-url.txt", "table.data-url.txt"],
+  jpeg: ["tiny-red.data-url.txt", "tiny-green.data-url.txt", "tiny-blue.data-url.txt"],
+  webp: ["tiny-red.data-url.txt", "tiny-green.data-url.txt", "tiny-blue.data-url.txt"],
+  svg: ["basic.svg", "text.svg", "unicode.svg"],
 };
 
 const tests = [];

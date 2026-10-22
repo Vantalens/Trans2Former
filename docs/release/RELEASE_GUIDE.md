@@ -100,8 +100,8 @@ Set-Location ..
 
 ## ✨ 核心特性
 
-- ✅ **14 种输入格式** - Markdown, HTML, TXT, JSON, CSV, XML, DOCX, XLSX, EPUB, PDF, PPTX, PNG, DOC, OFD
-- ✅ **11 种输出格式** - Markdown, HTML, TXT, JSON, CSV, XML, DOCX, XLSX, EPUB, PDF, PPTX
+- ✅ **23 种输入格式** - Markdown, HTML, TXT, JSON, CSV, XML, DOCX, XLSX, EPUB, PDF, PPTX, PNG, DOC, OFD, YAML, TOML, IPYNB, RTF, LaTeX, ODT, JPEG, WebP, SVG
+- ✅ **16 种输出格式** - Markdown, HTML, TXT, JSON, CSV, XML, DOCX, XLSX, EPUB, PDF, PPTX, YAML, TOML, IPYNB, LaTeX, ODT
 - ✅ **100+ 转换路径** - 智能路由，自动派生最佳转换路径
 - ✅ **本地优先** - 所有转换在本地完成，零上传
 - ✅ **核心本地能力** - PP-OCRv5, Tesseract.js, KaTeX, Repair Engine, 三层验证
@@ -190,7 +190,7 @@ npm start
 这是一个里程碑版本，完成了所有核心功能开发。
 
 主要特性:
-- 14 种输入格式，11 种输出格式
+- 23 种输入格式，16 种输出格式
 - 100+ 转换路径
 - 本地优先，零上传
 - 核心本地增强能力

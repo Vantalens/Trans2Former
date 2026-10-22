@@ -56,26 +56,39 @@ const FORMAT_ALIASES = {
   text: "txt",
   plain: "txt",
   plaintext: "txt",
+  yml: "yaml",
+  tex: "latex",
+  notebook: "ipynb",
+  jupyter: "ipynb",
 };
 
 // 产品矩阵：哪些路径在 UI 上推荐用户使用，按"语义合理"维度筛选。
 // RoutePlanner 为产品允许的路径计算温度和强制降级提示；技术可达性不自动
 // 扩大用户可选矩阵，避免展示质量尚未达到产品标准的输出。
 const PRODUCT_MATRIX_BY_INPUT = {
-  md: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"],
-  html: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"],
-  txt: ["md", "html", "txt", "json", "xml", "docx", "pdf", "epub"],
-  json: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"],
+  md: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx", "odt", "latex", "ipynb"],
+  html: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx", "odt", "latex", "ipynb"],
+  txt: ["md", "html", "txt", "json", "xml", "docx", "pdf", "epub", "odt", "latex", "ipynb"],
+  json: ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx", "odt", "yaml", "toml"],
   xml: ["md", "html", "txt", "json", "xml", "pdf"],
-  csv: ["md", "csv", "xlsx", "html", "txt", "json", "xml", "pdf"],
-  xlsx: ["md", "csv", "xlsx", "html", "txt", "json", "xml", "pdf"],
-  doc: ["md", "html", "txt", "json", "xml", "docx", "pdf"],
-  docx: ["md", "html", "txt", "json", "xml", "docx", "pdf"],
-  epub: ["md", "html", "txt", "json", "xml", "docx", "pdf", "epub"],
-  pdf: ["md", "html", "txt", "json", "xml", "docx", "pdf"],
+  csv: ["md", "csv", "xlsx", "html", "txt", "json", "xml", "pdf", "yaml", "toml"],
+  xlsx: ["md", "csv", "xlsx", "html", "txt", "json", "xml", "pdf", "yaml", "toml"],
+  doc: ["md", "html", "txt", "json", "xml", "docx", "pdf", "odt", "latex"],
+  docx: ["md", "html", "txt", "json", "xml", "docx", "pdf", "odt", "latex"],
+  epub: ["md", "html", "txt", "json", "xml", "docx", "pdf", "epub", "odt", "latex"],
+  pdf: ["md", "html", "txt", "json", "xml", "docx", "pdf", "odt", "latex"],
   pptx: ["md", "html", "txt", "json", "xml", "pdf", "pptx"],
   png: ["html", "txt", "json", "pdf"],
   ofd: ["md", "html", "txt", "json", "xml", "pdf"],
+  yaml: ["md", "html", "txt", "json", "xml", "yaml", "toml", "pdf"],
+  toml: ["md", "html", "txt", "json", "xml", "toml", "yaml", "pdf"],
+  ipynb: ["md", "html", "txt", "json", "xml", "ipynb", "pdf"],
+  rtf: ["md", "html", "txt", "json", "xml", "pdf"],
+  latex: ["md", "html", "txt", "json", "xml", "latex", "pdf"],
+  odt: ["md", "html", "txt", "json", "xml", "docx", "pdf", "odt", "latex"],
+  jpeg: ["html", "txt", "json", "pdf"],
+  webp: ["html", "txt", "json", "pdf"],
+  svg: ["html", "txt", "json", "pdf"],
 };
 
 const ROUTE_CLASS_OVERRIDES = {
@@ -775,7 +788,7 @@ export class ConverterRegistry {
 
     let model = this.prepareConversionModel({ content, from, to, title, fileName, options });
 
-    if (options?.ocr?.enabled !== false && fromFormat === "png") {
+    if (options?.ocr?.enabled !== false && IMAGE_OCR_INPUT_FORMATS.has(fromFormat)) {
       if (signal?.aborted) throw new Error("转换已取消");
       const stage = await import("./ocr/ocr-stage.js");
       model = await stage.runOCRStage(model, {

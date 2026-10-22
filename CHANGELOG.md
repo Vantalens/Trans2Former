@@ -4,7 +4,21 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **9 种格式落地，产品矩阵扩至 23 种输入 / 16 种输出**：YAML、TOML、IPYNB（nbformat 4.x）、LaTeX、ODT 读写，RTF、JPEG、WebP、SVG 只读输入。YAML/TOML 走确定性键值表语义（锚点、别名、多文档等高级特性降级并登记 warning）；IPYNB 的 markdown/code cell 映射为文档语义，写出合法 nbformat 4.5；LaTeX 基础级章节/列表/代码/数学环境映射，写出 article 骨架；ODT 复用 ZIP 容器基础设施零新增依赖，写出合法最小包（mimetype 不压缩且首位）；RTF 尽力提取纯文本与段落；JPEG/WebP 走 PNG 同款图片资产 + 核心 OCR 路线；SVG 提取 `<text>` 元素并保留原始资产，OCR 需浏览器栅格化，核心包跳过并披露 `SVG_RASTERIZE_UNSUPPORTED`。
+- **转换路径扩展**：新增 JSON/CSV/XLSX ↔ YAML/TOML、YAML ↔ TOML、Markdown/HTML/TXT/DOC/DOCX/EPUB/PDF/ODT → LaTeX、Markdown/HTML/TXT → IPYNB 等产品路径；CONVERSION_PATHS 升至 v0.3.0，FORMAT_ROADMAP 升至 v0.6.2。
+- **真实世界样本与离线审计**：`samples/realworld/` 收录 python-docx / openpyxl / reportlab 生成的真实文件与 GBK 编码文本；新增转换矩阵全路径、二进制输入、真实世界样本三个审计脚本与 XLSX/DOCX realworld 回归测试。
+
 ### 修复
+
+- **文本格式读入字节内容变数字串乱码（致命）**：reader 被直接传入 `Uint8Array` / `ArrayBuffer` / data URL 时经 `String()` 变成 "187,225,210,..." 字节数字串。format-registry 新增 `coerceTextReaderContent`，文本类格式统一按编码探测解码；`text-decoding` 在无扩展名提示时兜底 `utf-8 → gb18030 → big5`，无文件名直传 GBK 字节不再静默解码成 U+FFFD 乱码。
+- **真实 XLSX（openpyxl 等工具生成）读空/错列**：`ooxml-utils.resolvePartPath` 支持包根绝对路径 target（`Target="/xl/worksheets/sheet1.xml"`）；`decodeXml` 支持 `&#NNN;` / `&#xHHH;` 数字字符引用；xlsx reader 补齐 `inlineStr` / `str` / `b` / `e` 单元格类型与公式无缓存值处理，修复自闭合单元格正则吞相邻列与稀疏行未规范化导致的列错位。
+- **DOCX 样式继承编号丢失**：编号解析改为三级优先级（段落级 numPr → 样式级 numPr 含 basedOn 继承链 → 样式名兜底含中文别名），`numId="0"` 按 ECMA-376 视为移除编号；Word 内置 Title/Subtitle（含中文"标题/副标题"）映射为 h1/h2。
+- **PDF 同一字节源二次转换静默变空**：PDF.js transfer 会 detach 调用方持有的 buffer，`coercePdfBytes` 对 `Uint8Array` / `ArrayBuffer` / 视图一律复制，二次转换不再误报 `PDF_OCR_UNAVAILABLE`。
+- **LaTeX / YAML / TOML 写出泄漏 Markdown 标记**：writer 改走 inline token 序列化（`\textbf` / `\emph` / `\href` / `\texttt` / 数学 / 换行），键值桥接使用 `inlinesToPlainText`，加粗/斜体标记不再以 `**` / `*` 字面量泄漏到非 Markdown 输出。
+- **JSON → YAML/TOML 结构被拍平**：`kv-bridge.rebuildFromRows` 优先消费 `model.metadata.originalJson`，嵌套对象与对象数组按原结构重建（顶层数组包一层 `items`）。
+- **新格式输出在工作台静默卡死**：`EDITABLE_OUTPUT_FORMATS` 补 yaml/toml/ipynb/latex、`BINARY_OUTPUT_FORMATS` 补 odt，文本输出有编辑器与下载入口、ODT 二进制不再被当文本损坏；JPEG/WebP/SVG 输入改走主线程异步管线，OCR 可用。
 
 - **Issue #214 跨格式文本与字段偏移**：TXT 保留单换行、缩进和普通下划线字段名；PDF 只在实测坐标支持时补空格，并按重复双栏分离阅读顺序；DOCX 往返保留页面尺寸/页边距、段落对齐/缩进/制表位、表格列宽和 `gridSpan` / `vMerge`。PDF、HTML、DOCX writer 对尚未支持的版面特性发出降级 warning，QualityReport 增加 `layoutFidelity`。新增英文表单布局回归测试。
 - **Issue #216 PDF 提取链可靠性**：PDF.js 提取完成后改为销毁 loading task，清理失败不再丢弃已提取页面；Node 环境改用原生文件路径加载 CMap 与标准字体，修复 `file:` URL 导致提取为空；混合文档保留无文字页页号并发出 `PDF_PAGES_WITHOUT_TEXT`。

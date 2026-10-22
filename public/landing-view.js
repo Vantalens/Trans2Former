@@ -21,6 +21,15 @@ const FORMAT_LABELS = {
   pptx: "PPTX",
   png: "PNG",
   ofd: "OFD",
+  yaml: "YAML",
+  toml: "TOML",
+  ipynb: "IPYNB",
+  rtf: "RTF",
+  latex: "LaTeX",
+  odt: "ODT",
+  jpeg: "JPEG",
+  webp: "WebP",
+  svg: "SVG",
 };
 
 const ROUTE_CLASS_BADGES = {
@@ -68,7 +77,7 @@ const WORKFLOW_STEPS = [
 ];
 
 // 扫描带里循环滚动的格式文档图标（两份副本实现无缝 marquee）
-const SCAN_STRIP_FORMATS = ["md", "html", "txt", "json", "xml", "csv", "docx", "xlsx", "epub", "pdf", "pptx", "png"];
+const SCAN_STRIP_FORMATS = ["md", "html", "txt", "json", "xml", "csv", "docx", "xlsx", "epub", "pdf", "pptx", "png", "yaml", "toml", "ipynb", "rtf", "latex", "jpeg", "svg", "odt"];
 
 function formatNameOf(format) {
   return FORMAT_LABELS[format] || String(format || "").toUpperCase();

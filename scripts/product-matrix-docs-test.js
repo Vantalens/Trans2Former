@@ -26,6 +26,15 @@ const inputNameToFormats = new Map([
   ["PPTX", ["pptx"]],
   ["PNG", ["png"]],
   ["OFD", ["ofd"]],
+  ["YAML", ["yaml"]],
+  ["TOML", ["toml"]],
+  ["IPYNB", ["ipynb"]],
+  ["RTF", ["rtf"]],
+  ["LaTeX", ["latex"]],
+  ["ODT", ["odt"]],
+  ["JPEG", ["jpeg"]],
+  ["WebP", ["webp"]],
+  ["SVG", ["svg"]],
 ]);
 
 const outputNameToFormat = new Map([
@@ -40,6 +49,11 @@ const outputNameToFormat = new Map([
   ["PDF", "pdf"],
   ["EPUB", "epub"],
   ["PPTX", "pptx"],
+  ["YAML", "yaml"],
+  ["TOML", "toml"],
+  ["IPYNB", "ipynb"],
+  ["LaTeX", "latex"],
+  ["ODT", "odt"],
 ]);
 
 const knownInputFormats = new Set(getKnownInputFormats().map(normalizeFormat));
@@ -119,7 +133,9 @@ for (const format of documentedRows.keys()) {
 }
 
 for (const [name, markdown] of [["README.md", readme], ["RELEASE_GUIDE.md", releaseGuide]]) {
-  assert.equal(markdown.includes("14 种输入格式"), true, `${name} must document the current 14 input formats.`);
+  assert.equal(markdown.includes("23 种输入格式"), true, `${name} must document the current 23 input formats.`);
+  assert.equal(markdown.includes("19 种输入格式"), false, `${name} must not retain the old 19 input format count.`);
+  assert.equal(markdown.includes("14 种输入格式"), false, `${name} must not retain the old 14 input format count.`);
   assert.equal(markdown.includes("12 种输入格式"), false, `${name} must not retain the old 12 input format count.`);
 }
 

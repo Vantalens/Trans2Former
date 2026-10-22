@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="90" viewBox="0 0 200 90">
+  <title>Text Elements</title>
+  <text x="10" y="24" font-size="14">First line</text>
+  <text x="10" y="48" font-size="14"><tspan>Second</tspan><tspan dx="4">line</tspan></text>
+  <text x="10" y="72" font-size="14">Third line</text>
+</svg>

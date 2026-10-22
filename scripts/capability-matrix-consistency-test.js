@@ -44,8 +44,8 @@ console.log("输入格式:", Object.keys(codeMatrix).map(k => k.toUpperCase()).j
 console.log("总计:", Object.keys(codeMatrix).length, "种输入格式\n");
 
 // 实现的 readers 和 writers（从 formats 目录检查）
-const implementedReaders = ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx", "png", "doc", "ofd"];
-const implementedWriters = ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx"];
+const implementedReaders = ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx", "png", "doc", "ofd", "yaml", "toml", "ipynb", "rtf", "latex", "odt", "jpeg", "webp", "svg"];
+const implementedWriters = ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "pdf", "epub", "pptx", "yaml", "toml", "ipynb", "latex", "odt"];
 
 console.log("✅ 实现的格式能力:");
 console.log("输入格式 (readers):", implementedReaders.map(f => f.toUpperCase()).join(", "));
@@ -99,6 +99,15 @@ for (const line of pathsLines) {
     else if (normalizedInput === "pptx") normalizedInput = "pptx";
     else if (normalizedInput === "png") normalizedInput = "png";
     else if (normalizedInput === "ofd") normalizedInput = "ofd";
+    else if (normalizedInput === "yaml") normalizedInput = "yaml";
+    else if (normalizedInput === "toml") normalizedInput = "toml";
+    else if (normalizedInput === "ipynb") normalizedInput = "ipynb";
+    else if (normalizedInput === "rtf") normalizedInput = "rtf";
+    else if (normalizedInput === "latex") normalizedInput = "latex";
+    else if (normalizedInput === "odt") normalizedInput = "odt";
+    else if (normalizedInput === "jpeg") normalizedInput = "jpeg";
+    else if (normalizedInput === "webp") normalizedInput = "webp";
+    else if (normalizedInput === "svg") normalizedInput = "svg";
 
     if (normalizedInput && outputs) {
       pathsMatrix[normalizedInput] = outputs;
@@ -185,6 +194,11 @@ for (const input of Object.keys(codeMatrix).sort()) {
     else if (normalized === "pdf") pathsOutputs.push("pdf");
     else if (normalized === "epub") pathsOutputs.push("epub");
     else if (normalized === "pptx") pathsOutputs.push("pptx");
+    else if (normalized === "yaml") pathsOutputs.push("yaml");
+    else if (normalized === "toml") pathsOutputs.push("toml");
+    else if (normalized === "ipynb") pathsOutputs.push("ipynb");
+    else if (normalized === "latex") pathsOutputs.push("latex");
+    else if (normalized === "odt") pathsOutputs.push("odt");
   }
 
   const pathsOutputsUnique = [...new Set(pathsOutputs)].sort();

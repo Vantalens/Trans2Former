@@ -1,0 +1,11 @@
+title = "服务配置"
+
+[server]
+host = "localhost"
+port = 8080
+
+[server.tls]
+enabled = false
+
+[deps]
+versions = [1, 2, 3]

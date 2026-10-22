@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60" viewBox="0 0 200 60">
+  <title>中文标题</title>
+  <circle cx="30" cy="30" r="20" fill="#dc2626"/>
+  <text x="60" y="36" font-size="16">中文文本元素</text>
+</svg>

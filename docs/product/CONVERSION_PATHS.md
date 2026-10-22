@@ -1,7 +1,10 @@
 # Conversion Paths
 
-版本：v0.1.0  
+版本：v0.3.0  
 状态：生效
+
+变更：v0.2.0 新增 YAML、TOML、IPYNB、RTF（只读）、LaTeX 五种输入格式的产品路径；随后新增 ODT（读写）与 JPEG、WebP、SVG（只读图片输入）路径。
+v0.3.0 开放常用交叉路径：数据格式互转（JSON/CSV/XLSX ↔ YAML/TOML，YAML ↔ TOML），文档源（Markdown/HTML/TXT/DOC/DOCX/EPUB/PDF/ODT）→ LaTeX，轻量文档源（Markdown/HTML/TXT）→ IPYNB。
 
 ## 原则
 
@@ -16,20 +19,29 @@ Trans2Former 区分两件事：
 
 | 输入 | 可选输出 | 说明 |
 | --- | --- | --- |
-| Markdown | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX | 作为结构化轻量源，可导出文档、网页、表格和演示；文档到图片输出等待真实视觉渲染器。 |
-| HTML | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX | 作为结构化轻量源，可转为常见发布和办公格式。 |
-| TXT | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、EPUB | 纯文本不直接导出表格或演示，XML 输出仅表达可读文本结构，避免误导为复杂标记恢复。 |
-| JSON | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX | 仅当 JSON 可进入 DocumentModel 时适合多目标导出。 |
+| Markdown | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX、ODT、LaTeX、IPYNB | 作为结构化轻量源，可导出文档、网页、表格和演示；文档到图片输出等待真实视觉渲染器。 |
+| HTML | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX、ODT、LaTeX、IPYNB | 作为结构化轻量源，可转为常见发布和办公格式。 |
+| TXT | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、EPUB、ODT、LaTeX、IPYNB | 纯文本不直接导出表格或演示，XML 输出仅表达可读文本结构，避免误导为复杂标记恢复。 |
+| JSON | Markdown、HTML、TXT、JSON、CSV、XML、DOCX、XLSX、PDF、EPUB、PPTX、ODT、YAML、TOML | 仅当 JSON 可进入 DocumentModel 时适合多目标导出。 |
 | XML | Markdown、HTML、TXT、JSON、XML、PDF | XML 源保留可读结构、原始结构化表达和基础发布路径，不自动推断办公专属模型。 |
-| CSV | Markdown、CSV、XLSX、HTML、TXT、JSON、XML、PDF | 表格源只提供表格、网页、文本、XML 和 PDF 路径。 |
-| XLSX | Markdown、CSV、XLSX、HTML、TXT、JSON、XML、PDF | 表格源不提供 PPTX/DOCX 等不可靠跨类型输出。 |
-| DOC | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 旧版 Word 文档（仅文本提取），不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
-| DOCX | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 文档源不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
-| EPUB | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、EPUB | 电子书源保留文档和发布路径。 |
-| PDF | Markdown、HTML、TXT、JSON、XML、DOCX、PDF | 当前主要是文本型 PDF 抽取，不提供表格/演示高保真输出。 |
+| CSV | Markdown、CSV、XLSX、HTML、TXT、JSON、XML、PDF、YAML、TOML | 表格源只提供表格、网页、文本、XML 和 PDF 路径。 |
+| XLSX | Markdown、CSV、XLSX、HTML、TXT、JSON、XML、PDF、YAML、TOML | 表格源不提供 PPTX/DOCX 等不可靠跨类型输出。 |
+| DOC | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、ODT、LaTeX | 旧版 Word 文档（仅文本提取），不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
+| DOCX | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、ODT、LaTeX | 文档源不直接转 PPTX，避免把正文文档错误包装成演示稿。 |
+| EPUB | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、EPUB、ODT、LaTeX | 电子书源保留文档和发布路径。 |
+| PDF | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、ODT、LaTeX | 当前主要是文本型 PDF 抽取，不提供表格/演示高保真输出。 |
 | PPTX | Markdown、HTML、TXT、JSON、XML、PDF、PPTX | 演示源可抽取为文档；PPTX 写出仅为重新生成的基础演示，不是原稿保真写回。 |
 | PNG | HTML、TXT、JSON、PDF | 图片源进入资产/预览路径，OCR 和图片重渲染进入核心本地增强路线。 |
 | OFD | Markdown、HTML、TXT、JSON、XML、PDF | 核心包提供 L0 级本地解析路径，高保真继续并入核心本地增强。 |
+| YAML | Markdown、HTML、TXT、JSON、XML、YAML、TOML、PDF | 键值/嵌套配置按点分路径进入表格语义；锚点、别名、标签、多文档降级并披露。 |
+| TOML | Markdown、HTML、TXT、JSON、XML、TOML、YAML、PDF | 段/键值/数组进入表格语义；null 与多行字符串等边界如实降级。 |
+| IPYNB | Markdown、HTML、TXT、JSON、XML、IPYNB、PDF | Notebook 的 markdown/code cell 进入文档语义，文本输出附带；写出为合法 nbformat 4.5。 |
+| RTF | Markdown、HTML、TXT、JSON、XML、PDF | RTF 只读：尽力纯文本与段落提取，样式与图片不保留，不提供 RTF 输出。 |
+| LaTeX | Markdown、HTML、TXT、JSON、XML、LaTeX、PDF | 基础级章节/列表/代码环境映射，数学环境原样保留；写出为 article 骨架，非排版级保真。 |
+| ODT | Markdown、HTML、TXT、JSON、XML、DOCX、PDF、ODT、LaTeX | 基础级 ODT：content.xml 结构读取，styles.xml 与图片不导入；写出为合法最小骨架。 |
+| JPEG | HTML、TXT、JSON、PDF | 图片源进入资产/预览路径，OCR 和图片重渲染进入核心本地增强路线。 |
+| WebP | HTML、TXT、JSON、PDF | 图片源进入资产/预览路径，OCR 和图片重渲染进入核心本地增强路线。 |
+| SVG | HTML、TXT、JSON、PDF | SVG 提取 `<text>` 文本元素并保留原始资产；OCR 需浏览器栅格化，核心包跳过并披露。 |
 
 ## 路径分级
 

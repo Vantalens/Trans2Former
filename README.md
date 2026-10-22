@@ -21,7 +21,7 @@
 
 ---
 
-**Trans2Former** 是一款桌面级文档转换工具：**14 种输入格式、11 种输出格式**，全部转换在本机完成。不上传文件、不依赖 Office / LibreOffice / Pandoc，并对每次转换生成可解释的质量检验报告。
+**Trans2Former** 是一款桌面级文档转换工具：**23 种输入格式、16 种输出格式**，全部转换在本机完成。不上传文件、不依赖 Office / LibreOffice / Pandoc，并对每次转换生成可解释的质量检验报告。
 
 ## ✨ 特性
 
@@ -42,12 +42,12 @@
 
 ## 📄 支持的格式
 
-| 类别 | 输入（14 种） | 输出（11 种） |
+| 类别 | 输入（23 种） | 输出（16 种） |
 | --- | --- | --- |
-| 文档 | Markdown、HTML、TXT、DOCX、PDF、EPUB | Markdown、HTML、TXT、DOCX、PDF、EPUB |
-| 数据 | JSON、CSV、XML、XLSX | JSON、CSV、XML、XLSX |
+| 文档 | Markdown、HTML、TXT、DOCX、PDF、EPUB、LaTeX、RTF（只读）、ODT | Markdown、HTML、TXT、DOCX、PDF、EPUB、LaTeX、ODT |
+| 数据 | JSON、CSV、XML、XLSX、YAML、TOML、IPYNB | JSON、CSV、XML、XLSX、YAML、TOML、IPYNB |
 | 演示 | PPTX | PPTX |
-| 图片 | PNG（OCR 识别） | （PNG → HTML、TXT、JSON、PDF 通过 OCR 识别后转换） |
+| 图片 | PNG、JPEG、WebP、SVG（OCR 识别；SVG 提取文本元素） | （图片 → HTML、TXT、JSON、PDF 通过 OCR 识别后转换） |
 | 实验性 | DOC（仅文本提取）、OFD（L0 级：容器解析，战略攻坚格式） | — |
 
 常用路径：Markdown ↔ HTML · DOCX → Markdown · PDF → Markdown · XLSX ↔ CSV · HTML → PDF

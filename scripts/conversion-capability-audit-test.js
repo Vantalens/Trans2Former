@@ -35,8 +35,8 @@ const utf16le = Uint8Array.from([0x2d, 0x4e, 0x87, 0x65]);
 assert.equal(decodeTextBytes(utf16le, { fileName: "sample.txt", mime: "text/plain" }).text, "中文");
 
 const writableFormats = listFormats().output;
-assert.deepEqual(writableFormats, ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "epub", "pptx", "pdf"]);
-const binaryInputFormats = new Set(["doc", "docx", "xlsx", "epub", "pptx", "pdf", "png", "ofd"]);
+assert.deepEqual(writableFormats, ["md", "html", "txt", "json", "csv", "xml", "docx", "xlsx", "epub", "pptx", "pdf", "yaml", "toml", "ipynb", "latex", "odt"]);
+const binaryInputFormats = new Set(["doc", "docx", "xlsx", "epub", "pptx", "pdf", "png", "ofd", "odt", "jpeg", "webp", "svg"]);
 
 function createLegacyDocFixture() {
   const encoder = new TextEncoder();
