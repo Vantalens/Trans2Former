@@ -135,7 +135,7 @@ npm start
 ## 📚 文档
 
 - [README.md](README.md) - 项目介绍
-- [INSTALL.md](INSTALL.md) - 安装指南
+- [INSTALL.md](docs/development/INSTALL.md) - 安装指南
 - [CHANGELOG.md](CHANGELOG.md) - 更新日志
 - 完整 Release Notes
 
@@ -173,6 +173,22 @@ npm start
 ### 3. 更新文档
 - [ ] 更新 README.md 中的版本号
 - [ ] 更新安装指南链接
+
+---
+
+## ✅ 发布验证记录
+
+### v2.5.0 — 2026-10-23（commit `0ec31f4`，CI + Enhanced CI 双绿）
+
+本次发布端到端跑通并修复了以下腐烂点，后续发布前请逐项复查：
+
+1. **`npm run release:prepare` 必须提前跑通**。`prepare-release.js` 的 `INCLUDE_PATHS` 按根路径硬编码文档文件；文档搬入 `docs/` 子目录后会 ENOENT 崩溃（本次修复见 `b43d34a`）。文档目录再调整时同步更新该清单。
+2. **vendor 同步会产生真实提交**。`release:prepare` 开头的 sync 脚本会把 `public/vendor/pdfjs` 等对齐到 lockfile 解析版本（本次 6.3.289 → 6.4.299）。若 `git status` 出现 vendor 改动：先对浏览器链路复测（pdf-reader / browser-smoke / ui-conversion-e2e / release-user-path-e2e），再单独提交，不要混入功能 commit。
+3. **CI 覆盖率门禁会被「断言断链」放大**。`npm test` 是 `&&` 链，任何一个测试失败会导致后续测试不运行、覆盖率暴跌触发门禁。看到覆盖率 ERROR 时先查链中是否有测试失败，不要直接调阈值。浏览器 e2e 对控制台 404 的过滤是既定约定：CI 全新克隆不含本地 OCR vendor 资产，`det.onnx` 探测 404 属预期噪音。
+4. **Windows 控制台执行 curl 中文载荷会乱码**（GBK 代码页破坏 UTF-8，`Problems parsing JSON`）。凡含中文的 API body 一律先写 UTF-8 文件再 `--data @file`。
+5. **重建已发布 Release 的流程**（tag 需要指向更新提交时）：DELETE release → DELETE `git/refs/tags/<tag>` → 以相同标题/正文 POST 重建 → 重新上传 assets。发布后尽早完成，避免外部下载后内容漂移。
+6. **版本号五处对齐**：`package.json`、`package-lock.json`（`npm version <v> --no-git-tag-version` 一并处理）、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`（本包 `trans2former` 条目）、`src-tauri/tauri.conf.json`；CHANGELOG 的 `[Unreleased]` 定版为 `[<v>] - <日期>`。完成后跑 `p7-release-productization` 与 `release-readiness` 验证。
+7. 本次 Release 资产：`trans2former-2.5.0.zip`（42 MB）+ `.zip.sha256`，压缩与校验和按步骤 3 的 PowerShell 命令生成。
 
 ---
 
@@ -224,6 +240,6 @@ npm start
 
 ---
 
-**发布日期**: 2026-05-12
-**版本**: 2.0.0
+**发布日期**: 2026-10-23
+**版本**: 2.5.0（指南最近验证版本；历史模板示例仍沿用 v2.0.0 文案）
 **状态**: ✅ 准备发布
