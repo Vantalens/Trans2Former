@@ -10,11 +10,10 @@ const relativeReleaseDir = `release/${releaseName}`;
 
 const INCLUDE_PATHS = [
   "README.md",
-  "INSTALL.md",
   "CONTRIBUTING.md",
   "CHANGELOG.md",
-  "COMMIT_CHECKLIST.md",
-  "DEVELOPMENT_TASKS.md",
+  // INSTALL.md / COMMIT_CHECKLIST.md / DEVELOPMENT_TASKS.md 已移入 docs/
+  // （d38065e 文档结构整理），随下面的 "docs" 条目整体入包，不再按根路径引用。
   "LICENSE",
   "package.json",
   "package-lock.json",
