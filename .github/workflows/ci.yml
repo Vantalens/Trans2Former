@@ -62,3 +62,25 @@ jobs:
           name: coverage-report-node-${{ matrix.node }}
           path: coverage/
           retention-days: 7
+
+  # 打包链防腐烂：v2.5.0 前 prepare-release 因 INCLUDE_PATHS 根路径失效崩溃数月无人发现。
+  # dry-run 只跑 prepare-release.js（纯文件复制 + manifest），跳过 vendor sync——
+  # paddleocr 模型在全新克隆需联网下载，会让 CI 变慢且引入网络抖动；
+  # vendor 同步的正确性由 release 前的本地完整 release:prepare 保证。
+  release-dry-run:
+    name: Release package dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build release package (no vendor sync, no upload)
+        run: npm run release:dry-run
+
+      - name: Verify manifest and package hygiene
+        run: |
+          node -e "const fs=require('fs');const pkg=require('./package.json');const dir='release/trans2former-'+pkg.version;const m=JSON.parse(fs.readFileSync(dir+'/RELEASE_MANIFEST.json','utf8'));if(m.version!==pkg.version)throw new Error('manifest version mismatch');for(const bad of ['node_modules','.git','.local']){if(fs.existsSync(dir+'/'+bad))throw new Error('package must not contain '+bad)}console.log('dry-run OK:',dir,'version',m.version)"
